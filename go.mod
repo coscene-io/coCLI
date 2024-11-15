@@ -1,11 +1,11 @@
 module github.com/coscene-io/cocli
 
-go 1.22.5
+go 1.23.2
 
 require (
-	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.16.2-20240717055603-ba6d97632160.1
-	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.34.2-20240717055603-ba6d97632160.2
-	connectrpc.com/connect v1.16.2
+	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.17.0-20241115081542-0f333b5b6090.1
+	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.34.2-20241115081542-0f333b5b6090.2
+	connectrpc.com/connect v1.17.0
 	dario.cat/mergo v1.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/charmbracelet/bubbletea v0.25.0
@@ -29,9 +29,9 @@ require (
 	github.com/spf13/cobra v1.8.1
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
-	golang.org/x/net v0.25.0
-	google.golang.org/genproto v0.0.0-20240528184218-531527333157
-	google.golang.org/protobuf v1.34.2
+	golang.org/x/net v0.29.0
+	google.golang.org/genproto v0.0.0-20241021214115-324edc3d5d38
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
@@ -63,12 +63,12 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.21.0 // indirect
-	golang.org/x/term v0.20.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/term v0.24.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20241021214115-324edc3d5d38 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

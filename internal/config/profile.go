@@ -50,6 +50,8 @@ type Profile struct {
 	filecli          api.FileInterface
 	actioncli        api.ActionInterface
 	securitytokencli api.SecurityTokenInterface
+	eventcli         api.EventInterface
+	taskcli          api.TaskInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
@@ -196,6 +198,18 @@ func (p *Profile) SecurityTokenCli() api.SecurityTokenInterface {
 	return p.securitytokencli
 }
 
+// EventCli return event api interface used profile.
+func (p *Profile) EventCli() api.EventInterface {
+	p.initCli()
+	return p.eventcli
+}
+
+// TaskCli return task api interface used profile.
+func (p *Profile) TaskCli() api.TaskInterface {
+	p.initCli()
+	return p.taskcli
+}
+
 // initCli initializes the api clients for the profile.
 // This function is ensured to be called only once.
 func (p *Profile) initCli() {
@@ -208,11 +222,13 @@ func (p *Profile) initCli() {
 		var (
 			actionServiceClient        = openv1alpha1connect.NewActionServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			actionRunServiceClient     = openv1alpha1connect.NewActionRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			eventServiceClient         = openv1alpha1connect.NewEventServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			organizationServiceClient  = openv1alpha1connect.NewOrganizationServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			projectServiceClient       = openv1alpha1connect.NewProjectServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			recordServiceClient        = openv1alpha1connect.NewRecordServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			fileServiceClient          = openv1alpha1connect.NewFileServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			labelServiceClient         = openv1alpha1connect.NewLabelServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			taskServiceClient          = openv1alpha1connect.NewTaskServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			userServiceClient          = openv1alpha1connect.NewUserServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			securityTokenServiceClient = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 		)
@@ -225,5 +241,7 @@ func (p *Profile) initCli() {
 		p.filecli = api.NewFileClient(fileServiceClient)
 		p.actioncli = api.NewActionClient(actionServiceClient, actionRunServiceClient)
 		p.securitytokencli = api.NewSecurityTokenClient(securityTokenServiceClient)
+		p.eventcli = api.NewEventClient(eventServiceClient)
+		p.taskcli = api.NewTaskClient(taskServiceClient)
 	})
 }
