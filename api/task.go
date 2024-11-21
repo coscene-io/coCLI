@@ -25,7 +25,7 @@ import (
 )
 
 type TaskInterface interface {
-	UpsertTask(ctx context.Context, parent string, task *openv1alpha1resource.Task, event *openv1alpha1resource.Event) (*openv1alpha1resource.Task, error)
+	UpsertTask(ctx context.Context, parent string, task *openv1alpha1resource.Task) (*openv1alpha1resource.Task, error)
 	SyncTask(ctx context.Context, taskName string) (*openv1alpha1resource.Task, error)
 }
 
@@ -39,15 +39,14 @@ func NewTaskClient(taskServiceClient openv1alpha1connect.TaskServiceClient) Task
 	}
 }
 
-func (c *taskClient) UpsertTask(ctx context.Context, parent string, task *openv1alpha1resource.Task, event *openv1alpha1resource.Event) (*openv1alpha1resource.Task, error) {
+func (c *taskClient) UpsertTask(ctx context.Context, parent string, task *openv1alpha1resource.Task) (*openv1alpha1resource.Task, error) {
 	upsertTaskReq := connect.NewRequest(&openv1alpha1service.UpsertTaskRequest{
 		Parent: parent,
 		Task:   task,
-		Event:  event,
 	})
 	createEventRes, err := c.taskClient.UpsertTask(ctx, upsertTaskReq)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to obtain event %s", event.DisplayName)
+		return nil, errors.Wrapf(err, "failed to upsert task %s", task.GetTitle())
 	}
 
 	return createEventRes.Msg, nil

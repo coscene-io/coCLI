@@ -113,6 +113,15 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 									"type":    "text",
 									"version": 1,
 								},
+							},
+							"indent":    0,
+							"direction": "ltr",
+							"format":    "",
+							"type":      "paragraph",
+							"version":   1,
+						},
+						{
+							"children": []map[string]interface{}{
 								{
 									"sourceName": obtainEventRes.GetEvent().GetName(),
 									"sourceType": "moment",
@@ -120,12 +129,16 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 									"version":    1,
 								},
 							},
-							"direction": "ltr",
+							"direction": nil,
+							"format":    "",
+							"indent":    0,
 							"type":      "paragraph",
 							"version":   1,
 						},
 					},
-					"direction": "ltr",
+					"direction": nil,
+					"indent":    0,
+					"format":    "",
 					"type":      "root",
 					"version":   1,
 				},
@@ -143,17 +156,18 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 					Category:    openv1alpha1enum.TaskCategoryEnum_COMMON,
 					State:       openv1alpha1enum.TaskStateEnum_PROCESSING,
 					Detail: &openv1alpha1resource.Task_CommonTaskDetail{CommonTaskDetail: &openv1alpha1resource.CommonTaskDetail{
-						Related: &openv1alpha1resource.CommonTaskDetail_Record{
-							Record: recordName.String(),
+						Related: &openv1alpha1resource.CommonTaskDetail_Event{
+							Event: obtainEventRes.GetEvent().GetName(),
 						},
 					}},
 					Tags: map[string]string{"recordName": recordName.String()},
 				},
-				obtainEventRes.GetEvent(),
 			)
 			if err != nil {
-				log.Fatalf("failed to create task: %v", err)
+				log.Fatalf("failed to upsert task: %v", err)
 			}
+
+			log.Infof("upserted task: %s", upsertTaskRes.Name)
 
 			if syncTask {
 				syncTaskRes, err := pm.TaskCli().SyncTask(context.Background(), upsertTaskRes.Name)
