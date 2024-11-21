@@ -39,11 +39,10 @@ func NewEventClient(eventServiceClient openv1alpha1connect.EventServiceClient) E
 	}
 }
 
-
 func (c *eventClient) ObtainEvent(ctx context.Context, parent string, event *openv1alpha1resource.Event) (*openv1alpha1service.ObtainEventResponse, error) {
 	createEventReq := connect.NewRequest(&openv1alpha1service.ObtainEventRequest{
 		Parent: parent,
-		Event: event,
+		Event:  event,
 	})
 	createEventRes, err := c.eventClient.ObtainEvent(ctx, createEventReq)
 	if err != nil {
