@@ -191,5 +191,11 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 
 	cmd.Flags().BoolVarP(&skipCreateTask, "skip-create-task", "s", false, "Create task or not.")
 	cmd.Flags().BoolVarP(&syncTask, "sync-task", "S", false, "Sync task or not.")
+
+	_ = cmd.MarkFlagRequired("display-name")
+	_ = cmd.MarkFlagRequired("duration")
+	_ = cmd.MarkFlagRequired("description")
+	_ = cmd.MarkFlagRequired("customized-fields")
+	_ = cmd.MarkFlagRequired("trigger-time")
 	return cmd
 }
