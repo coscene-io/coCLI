@@ -160,7 +160,6 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 							Event: obtainEventRes.GetEvent().GetName(),
 						},
 					}},
-					Tags: map[string]string{"recordName": recordName.String()},
 				},
 			)
 			if err != nil {
