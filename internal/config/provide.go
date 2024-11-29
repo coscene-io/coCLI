@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"dario.cat/mergo"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -50,6 +51,7 @@ func Provide(path string) Provider {
 // COS_TOKEN,
 // COS_PROJECT
 // Note that loading profile from env will change the config file
+// Also if COS_PROJECTID is set in the
 func (cfg *globalConfig) GetProfileManager() (*ProfileManager, error) {
 	if err := cfg.loadYaml("current-profile", &cfg.CurrentProfile); err != nil {
 		return nil, errors.Wrapf(err, "unable to load current-profile from %s", cfg.path)
@@ -73,6 +75,11 @@ func (cfg *globalConfig) GetProfileManager() (*ProfileManager, error) {
 	if err := cfg.loadEnv("", envLoadedProfile); err != nil {
 		return nil, errors.Wrapf(err, "unable to load profile from env")
 	}
+	// Hack to prioritize filling project name with project id
+	if projectID := os.Getenv("COS_PROJECTID"); projectID != "" {
+		envLoadedProfile.ProjectName = name.Project{ProjectID: projectID}.String()
+	}
+
 	if envLoadedProfile.EndPoint == "" || envLoadedProfile.Token == "" || envLoadedProfile.ProjectSlug == "" {
 		return pm, nil
 	}

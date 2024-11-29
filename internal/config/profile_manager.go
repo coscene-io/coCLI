@@ -135,6 +135,16 @@ func (pm *ProfileManager) SecurityTokenCli() api.SecurityTokenInterface {
 	return pm.GetCurrentProfile().SecurityTokenCli()
 }
 
+// EventCli return event client of current profile.
+func (pm *ProfileManager) EventCli() api.EventInterface {
+	return pm.GetCurrentProfile().EventCli()
+}
+
+// TaskCli return task client of current profile.
+func (pm *ProfileManager) TaskCli() api.TaskInterface {
+	return pm.GetCurrentProfile().TaskCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {
