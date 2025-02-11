@@ -44,6 +44,7 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 		assignee                              = ""
 		skipCreateTask                        = false
 		syncTask                              = false
+		ruleName                              = ""
 	)
 
 	cmd := &cobra.Command{
@@ -85,6 +86,12 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 				Description:      description,
 				CustomizedFields: customizedFields,
 				Record:           recordName.String(),
+			}
+
+			if ruleName != "" {
+				eventToCreate.Rule = &openv1alpha1resource.DiagnosisRule{
+					Name: ruleName,
+				}
 			}
 
 			obtainEventRes, err := pm.EventCli().ObtainEvent(context.Background(), recordName.Project().String(), eventToCreate)
@@ -188,6 +195,7 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 	cmd.Flags().Float64VarP(&durationRaw, "duration", "D", 1, "The duration of the moment in seconds.")
 	cmd.Flags().StringVarP(&assigner, "assigner", "a", "", "The assigner of task.")
 	cmd.Flags().StringVarP(&assignee, "assignee", "e", "", "The assignee of task.")
+	cmd.Flags().StringVarP(&ruleName, "rule-name", "R", "", "The name of the rule to create moment.")
 
 	cmd.Flags().BoolVarP(&skipCreateTask, "skip-create-task", "s", false, "Create task or not.")
 	cmd.Flags().BoolVarP(&syncTask, "sync-task", "S", false, "Sync task or not.")
