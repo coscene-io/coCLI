@@ -30,7 +30,7 @@ import (
 func NewUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "update",
-		Short:                 "Update coscli version",
+		Short:                 "Update cocli version",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {

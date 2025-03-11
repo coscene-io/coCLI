@@ -11,6 +11,10 @@
 ```shell
 # 通过 curl 安装
 curl -fL https://download.coscene.cn/cocli/install.sh | sh
+
+# 安装具体版本
+curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y
+curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y-rc6
 ```
 
 ## 本地安装
@@ -20,12 +24,16 @@ curl -fL https://download.coscene.cn/cocli/install.sh | sh
 ```shell
 git clone https://github.com/coscene-io/cocli.git
 ```
+
+### 本地快速测试
+
+```shell
+go run cmd/cocli/main.go [具体命令]
+```
+
 ### 本地构建可执行文件
 
 ```shell
-# 进入项目目录
-cd cocli
-
 # 构建可执行文件, 生成的可执行文件在 `./bin` 目录下
 make build-binary
 
