@@ -26,7 +26,7 @@ import (
 func NewCompletionCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "completion <shell>",
-		Short:                 "Generate the autocompletion script for coscli for the specified shell. Supporting Zsh and Bash.",
+		Short:                 "Generate the autocompletion script for cocli for the specified shell. Supporting Zsh and Bash.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {

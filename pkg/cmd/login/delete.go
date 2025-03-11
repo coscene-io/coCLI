@@ -33,7 +33,7 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 			pm, _ := cfg.GetProfileManager()
 
 			if len(pm.Profiles) == 1 {
-				log.Fatalf("Cannot delete the last profile. Use 'coscli login set' to change the current profile.")
+				log.Fatalf("Cannot delete the last profile. Use 'cocli login set' to change the current profile.")
 			}
 
 			if err := pm.DeleteProfile(args[0]); err != nil {
