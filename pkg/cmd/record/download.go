@@ -16,12 +16,14 @@ package record
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
 	"github.com/coscene-io/cocli/internal/name"
@@ -33,12 +35,13 @@ import (
 
 func NewDownloadCommand(cfgPath *string) *cobra.Command {
 	var (
-		projectSlug = ""
-		maxRetries  = 0
+		projectSlug    = ""
+		maxRetries     = 0
+		includeMoments = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "download <record-resource-name/id> <dst-dir> [-p <working-project-slug]",
+		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>",
 		Short:                 "Download files from record to directory.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -85,6 +88,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 			fmt.Printf("Saving to %s\n", dstDir)
 
+			totalFiles := len(files)
 			successCount := 0
 			for fIdx, f := range files {
 				fileName, _ := name.NewFile(f.Name)
@@ -104,6 +108,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 						continue
 					}
 					if checksum == f.Sha256 && size == f.Size {
+						successCount++
 						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
@@ -125,12 +130,44 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				successCount++
 			}
 
-			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, len(files), dstDir)
+			if includeMoments {
+				if moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName); err != nil {
+					log.Errorf("unable to list moments: %v", err)
+				} else {
+					totalFiles++
+					momentPath := filepath.Join(dstDir, "moments.json")
+					// Create the file to write the moments to
+					momentFile, err := os.Create(momentPath)
+					if err != nil {
+						log.Fatalf("unable to create moments file %s: %v", momentPath, err)
+					} else {
+						defer momentFile.Close() // Ensure the file is closed
+
+						type Moments struct {
+							Moments []*api.Moment `json:"moments"`
+						}
+
+						if jsonData, err := json.MarshalIndent(Moments{Moments: moments}, "", "  "); err != nil {
+							log.Fatalf("unable to marshal moments to JSON: %v", err)
+						} else {
+							if _, err = momentFile.Write(jsonData); err != nil {
+								log.Fatalf("unable to write moments to file %s: %v", momentPath, err)
+							} else {
+								successCount++
+								fmt.Printf("Moments saved to %s\n", momentPath)
+							}
+						}
+					}
+				}
+			}
+
+			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
 		},
 	}
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().IntVarP(&maxRetries, "max-retries", "r", 3, "maximum number of retries for downloading a file")
+	cmd.Flags().BoolVarP(&includeMoments, "include-moments", "m", false, "include moments in the download")
 
 	return cmd
 }
