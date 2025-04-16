@@ -108,6 +108,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 						continue
 					}
 					if checksum == f.Sha256 && size == f.Size {
+						successCount++
 						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
