@@ -246,38 +246,20 @@ func (c *recordClient) ListAllEvents(ctx context.Context, recordName *name.Recor
 }
 
 func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error) {
-	var (
-		skip = 0
-		ret  []*Moment
-	)
-
-	for {
-		req := connect.NewRequest(&openv1alpha1service.ListRecordEventsRequest{
-			Parent:   recordName.String(),
-			PageSize: constants.MaxPageSize,
-			Skip:     int32(skip),
-			Filter:   "",
-		})
-		res, err := c.recordServiceClient.ListRecordEvents(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list moments at skip %d: %w", skip, err)
-		}
-		if len(res.Msg.Events) == 0 {
-			break
-		}
-		ret = append(ret, lo.Map(res.Msg.Events, func(event *openv1alpha1resource.Event, _ int) *Moment {
-			return &Moment{
-				Name:        event.DisplayName,
-				Description: event.Description,
-				Attribute:   event.CustomizedFields,
-				TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
-				Duration:    event.Duration.AsDuration().String(),
-			}
-		})...)
-		skip += constants.MaxPageSize
+	events, err := c.ListAllEvents(ctx, recordName)
+	if err != nil {
+		return nil, err
 	}
 
-	return ret, nil
+	return lo.Map(events, func(event *openv1alpha1resource.Event, _ int) *Moment {
+		return &Moment{
+			Name:        event.DisplayName,
+			Description: event.Description,
+			Attribute:   event.CustomizedFields,
+			TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
+			Duration:    event.Duration.AsDuration().String(),
+		}
+	}), nil
 }
 
 func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error) {
