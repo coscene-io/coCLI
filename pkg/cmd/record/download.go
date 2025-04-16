@@ -22,14 +22,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
-	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -131,7 +130,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if includeMoments {
-				if moments, err := pm.RecordCli().ListAllEvents(cmd.Context(), recordName); err != nil {
+				if moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName); err != nil {
 					log.Errorf("unable to list moments: %v", err)
 				} else {
 					totalFiles++
@@ -143,34 +142,11 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 					} else {
 						defer momentFile.Close() // Ensure the file is closed
 
-						// Define local structs for JSON output
-						type Moment struct {
-							Name        string            `json:"name"`
-							Description string            `json:"description"`
-							Attribute   map[string]string `json:"attribute"`
-							TriggerTime string            `json:"triggerTime"`
-							Duration    string            `json:"duration"`
-						}
-
 						type Moments struct {
-							Moments []Moment `json:"moments"`
+							Moments []*api.Moment `json:"moments"`
 						}
 
-						outputMoments := lo.Map(moments, func(event *openv1alpha1resource.Event, _ int) Moment {
-							attribute := map[string]string{}
-							if event.CustomizedFields != nil {
-								attribute = event.CustomizedFields
-							}
-							return Moment{
-								Name:        event.DisplayName,
-								Description: event.Description,
-								Attribute:   attribute,
-								TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
-								Duration:    event.Duration.AsDuration().String(),
-							}
-						})
-
-						if jsonData, err := json.MarshalIndent(Moments{Moments: outputMoments}, "", "  "); err != nil {
+						if jsonData, err := json.MarshalIndent(Moments{Moments: moments}, "", "  "); err != nil {
 							log.Fatalf("unable to marshal moments to JSON: %v", err)
 						} else {
 							if _, err = momentFile.Write(jsonData); err != nil {

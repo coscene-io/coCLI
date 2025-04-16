@@ -55,6 +55,9 @@ type RecordInterface interface {
 	//ListAllEvents lists all events in a record.
 	ListAllEvents(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.Event, error)
 
+	// ListAllMoments lists all moments in a record.
+	ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error)
+
 	// ListAll lists all records in a project.
 	ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error)
 
@@ -74,6 +77,14 @@ type ListRecordsOptions struct {
 type recordClient struct {
 	recordServiceClient openv1alpha1connect.RecordServiceClient
 	fileServiceClient   openv1alpha1connect.FileServiceClient
+}
+
+type Moment struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Attribute   map[string]string `json:"attribute"`
+	TriggerTime string            `json:"triggerTime"`
+	Duration    string            `json:"duration"`
 }
 
 func NewRecordClient(recordServiceClient openv1alpha1connect.RecordServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient) RecordInterface {
@@ -228,6 +239,41 @@ func (c *recordClient) ListAllEvents(ctx context.Context, recordName *name.Recor
 			break
 		}
 		ret = append(ret, res.Msg.Events...)
+		skip += constants.MaxPageSize
+	}
+
+	return ret, nil
+}
+
+func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error) {
+	var (
+		skip = 0
+		ret  []*Moment
+	)
+
+	for {
+		req := connect.NewRequest(&openv1alpha1service.ListRecordEventsRequest{
+			Parent:   recordName.String(),
+			PageSize: constants.MaxPageSize,
+			Skip:     int32(skip),
+			Filter:   "",
+		})
+		res, err := c.recordServiceClient.ListRecordEvents(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list moments at skip %d: %w", skip, err)
+		}
+		if len(res.Msg.Events) == 0 {
+			break
+		}
+		ret = append(ret, lo.Map(res.Msg.Events, func(event *openv1alpha1resource.Event, _ int) *Moment {
+			return &Moment{
+				Name:        event.DisplayName,
+				Description: event.Description,
+				Attribute:   event.CustomizedFields,
+				TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
+				Duration:    event.Duration.AsDuration().String(),
+			}
+		})...)
 		skip += constants.MaxPageSize
 	}
 
