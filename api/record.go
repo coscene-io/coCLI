@@ -252,10 +252,14 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 	}
 
 	return lo.Map(events, func(event *openv1alpha1resource.Event, _ int) *Moment {
+		attribute := map[string]string{}
+		if event.CustomizedFields != nil {
+			attribute = event.CustomizedFields
+		}
 		return &Moment{
 			Name:        event.DisplayName,
 			Description: event.Description,
-			Attribute:   event.CustomizedFields,
+			Attribute:   attribute,
 			TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
 			Duration:    event.Duration.AsDuration().String(),
 		}
