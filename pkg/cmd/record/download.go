@@ -16,14 +16,12 @@ package record
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
 	"github.com/coscene-io/cocli/internal/name"
@@ -135,28 +133,11 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 					log.Errorf("unable to list moments: %v", err)
 				} else {
 					totalFiles++
-					momentPath := filepath.Join(dstDir, "moments.json")
-					// Create the file to write the moments to
-					momentFile, err := os.Create(momentPath)
+					err := cmd_utils.SaveMomentsJson(moments, dstDir)
 					if err != nil {
-						log.Fatalf("unable to create moments file %s: %v", momentPath, err)
+						log.Fatalf("unable to save moments: %v", err)
 					} else {
-						defer momentFile.Close() // Ensure the file is closed
-
-						type Moments struct {
-							Moments []*api.Moment `json:"moments"`
-						}
-
-						if jsonData, err := json.MarshalIndent(Moments{Moments: moments}, "", "  "); err != nil {
-							log.Fatalf("unable to marshal moments to JSON: %v", err)
-						} else {
-							if _, err = momentFile.Write(jsonData); err != nil {
-								log.Fatalf("unable to write moments to file %s: %v", momentPath, err)
-							} else {
-								successCount++
-								fmt.Printf("Moments saved to %s\n", momentPath)
-							}
-						}
+						successCount++
 					}
 				}
 			}

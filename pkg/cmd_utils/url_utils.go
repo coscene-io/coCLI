@@ -15,6 +15,7 @@
 package cmd_utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/coscene-io/cocli/api"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -137,5 +139,37 @@ func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) 
 		return errors.Wrapf(err, "unable to write file %v", fileWriter.Name())
 	}
 
+	return nil
+}
+
+func SaveMomentsJson(moments []*api.Moment, dir string) error {
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		log.Errorf("unable to create directories for file %v", dir)
+		return err
+	}
+	momentPath := filepath.Join(dir, "moments.json")
+	// Create the file to write the moments to
+	momentFile, err := os.Create(momentPath)
+	if err != nil {
+		log.Fatalf("unable to create moments file %s: %v", momentPath, err)
+		return err
+	}
+	defer momentFile.Close() // Ensure the file is closed
+
+	type Moments struct {
+		Moments []*api.Moment `json:"moments"`
+	}
+
+	jsonData, err := json.MarshalIndent(Moments{Moments: moments}, "", "  ")
+	if err != nil {
+		log.Fatalf("unable to marshal moments to JSON: %v", err)
+		return err
+	}
+	if _, err = momentFile.Write(jsonData); err != nil {
+		log.Fatalf("unable to write moments to file %s: %v", momentPath, err)
+		return err
+	}
+	fmt.Printf("Moments saved to %s\n", momentPath)
 	return nil
 }
