@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
 	"github.com/coscene-io/cocli/internal/name"
@@ -131,6 +132,8 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			if includeMoments {
 				moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName)
 				if err != nil {
+					// ignore the error and return empty list
+					moments = []*api.Moment{}
 					log.Errorf("unable to list moments: %v", err)
 				}
 				totalFiles++
