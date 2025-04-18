@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/printer"
@@ -61,7 +62,9 @@ func NewListMomentsCommand(cfgPath *string) *cobra.Command {
 			// List moments in record.
 			moments, err := pm.RecordCli().ListAllEvents(cmd.Context(), recordName)
 			if err != nil {
-				log.Fatalf("unable to list moments: %v", err)
+				// ignore the error and return empty list
+				moments = []*openv1alpha1resource.Event{}
+				log.Errorf("unable to list moments: %v", err)
 			}
 
 			if err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
