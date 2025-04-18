@@ -233,7 +233,8 @@ func (c *recordClient) ListAllEvents(ctx context.Context, recordName *name.Recor
 		})
 		res, err := c.recordServiceClient.ListRecordEvents(ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list events at skip %d: %w", skip, err)
+			// return empty list if error
+			return []*openv1alpha1resource.Event{}, fmt.Errorf("failed to list events at skip %d: %w", skip, err)
 		}
 		if len(res.Msg.Events) == 0 {
 			break
@@ -248,7 +249,8 @@ func (c *recordClient) ListAllEvents(ctx context.Context, recordName *name.Recor
 func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error) {
 	events, err := c.ListAllEvents(ctx, recordName)
 	if err != nil {
-		return nil, err
+		// ignore the error and return empty list
+		return []*Moment{}, nil
 	}
 
 	return lo.Map(events, func(event *openv1alpha1resource.Event, _ int) *Moment {

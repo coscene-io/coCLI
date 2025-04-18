@@ -129,16 +129,15 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if includeMoments {
-				if moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName); err != nil {
+				moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName)
+				if err != nil {
 					log.Errorf("unable to list moments: %v", err)
+				}
+				totalFiles++
+				if err = cmd_utils.SaveMomentsJson(moments, dstDir); err != nil {
+					log.Fatalf("unable to save moments: %v", err)
 				} else {
-					totalFiles++
-					err := cmd_utils.SaveMomentsJson(moments, dstDir)
-					if err != nil {
-						log.Fatalf("unable to save moments: %v", err)
-					} else {
-						successCount++
-					}
+					successCount++
 				}
 			}
 

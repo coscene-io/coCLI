@@ -61,7 +61,8 @@ func NewListMomentsCommand(cfgPath *string) *cobra.Command {
 			// List moments in record.
 			moments, err := pm.RecordCli().ListAllEvents(cmd.Context(), recordName)
 			if err != nil {
-				log.Fatalf("unable to list moments: %v", err)
+				// ignore the error and return empty list
+				log.Errorf("unable to list moments: %v", err)
 			}
 
 			if err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
