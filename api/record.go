@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -77,20 +78,23 @@ type ListRecordsOptions struct {
 type recordClient struct {
 	recordServiceClient openv1alpha1connect.RecordServiceClient
 	fileServiceClient   openv1alpha1connect.FileServiceClient
+	userServiceClient   openv1alpha1connect.UserServiceClient
 }
 
 type Moment struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Attribute   map[string]string `json:"attribute"`
-	TriggerTime string            `json:"triggerTime"`
-	Duration    string            `json:"duration"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	TriggerTime       string            `json:"triggerTime"`
+	Duration          string            `json:"duration"`
+	Attribute         map[string]string `json:"attribute"`
+	CustomFieldValues []map[string]any  `json:"customFieldValues"`
 }
 
-func NewRecordClient(recordServiceClient openv1alpha1connect.RecordServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient) RecordInterface {
+func NewRecordClient(recordServiceClient openv1alpha1connect.RecordServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient, userServiceClient openv1alpha1connect.UserServiceClient) RecordInterface {
 	return &recordClient{
 		recordServiceClient: recordServiceClient,
 		fileServiceClient:   fileServiceClient,
+		userServiceClient:   userServiceClient,
 	}
 }
 
@@ -251,17 +255,58 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 		return nil, err
 	}
 
-	return lo.Map(events, func(event *openv1alpha1resource.Event, _ int) *Moment {
-		attribute := map[string]string{}
-		if event.CustomizedFields != nil {
-			attribute = event.CustomizedFields
+	users := []string{}
+	var name2User map[string]*openv1alpha1resource.User
+	lo.ForEach(events, func(event *openv1alpha1resource.Event, _ int) {
+		lo.ForEach(event.CustomFieldValues, func(value *commons.CustomFieldValue, _ int) {
+			if _, ok := value.GetProperty().GetType().(*commons.Property_User); ok {
+				users = append(users, lo.Map(value.GetUser().GetIds(), func(id string, _ int) string { return name.User{UserID: id}.String() })...)
+			}
+		})
+	})
+	if len(users) > 0 {
+		res, err := c.userServiceClient.BatchGetUsers(ctx, connect.NewRequest(&openv1alpha1service.BatchGetUsersRequest{Names: users}))
+		if err != nil {
+			return nil, err
 		}
+		name2User = lo.SliceToMap(res.Msg.Users, func(user *openv1alpha1resource.User) (string, *openv1alpha1resource.User) {
+			return user.Name, user
+		})
+	}
+
+	return lo.Map(events, func(event *openv1alpha1resource.Event, _ int) *Moment {
+		customFields := make([]map[string]any, 0, len(event.CustomFieldValues))
+		lo.ForEach(event.CustomFieldValues, func(value *commons.CustomFieldValue, _ int) {
+			switch value.GetProperty().GetType().(type) {
+			case *commons.Property_Text:
+				customFields = append(customFields, map[string]any{
+					value.GetProperty().GetName(): value.GetText().GetValue(),
+				})
+			case *commons.Property_Number:
+				customFields = append(customFields, map[string]any{
+					value.GetProperty().GetName(): value.GetNumber().GetValue(),
+				})
+			case *commons.Property_Enums:
+				customFields = append(customFields, map[string]any{
+					value.GetProperty().GetName(): value.GetProperty().GetType().(*commons.Property_Enums).Enums.GetValues()[value.GetEnums().GetId()],
+				})
+			case *commons.Property_Time:
+				customFields = append(customFields, map[string]any{
+					value.GetProperty().GetName(): value.GetTime().GetValue().AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
+				})
+			case *commons.Property_User:
+				customFields = append(customFields, map[string]any{
+					value.GetProperty().GetName(): lo.Map(value.GetUser().GetIds(), func(id string, _ int) string { return *name2User[name.User{UserID: id}.String()].Nickname }),
+				})
+			}
+		})
 		return &Moment{
-			Name:        event.DisplayName,
-			Description: event.Description,
-			Attribute:   attribute,
-			TriggerTime: event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
-			Duration:    event.Duration.AsDuration().String(),
+			Name:              event.DisplayName,
+			Description:       event.Description,
+			TriggerTime:       event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
+			Duration:          event.Duration.AsDuration().String(),
+			Attribute:         lo.If(event.CustomizedFields != nil, event.CustomizedFields).Else(map[string]string{}),
+			CustomFieldValues: customFields,
 		}
 	}), nil
 }

@@ -235,7 +235,7 @@ func (p *Profile) initCli() {
 
 		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
 		p.projcli = api.NewProjectClient(projectServiceClient)
-		p.rcdcli = api.NewRecordClient(recordServiceClient, fileServiceClient)
+		p.rcdcli = api.NewRecordClient(recordServiceClient, fileServiceClient, userServiceClient)
 		p.lblcli = api.NewLabelClient(labelServiceClient)
 		p.usercli = api.NewUserClient(userServiceClient)
 		p.filecli = api.NewFileClient(fileServiceClient)
