@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
@@ -292,7 +293,7 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 				})
 			case *commons.Property_Time:
 				customFields = append(customFields, map[string]any{
-					value.GetProperty().GetName(): value.GetTime().GetValue().AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
+					value.GetProperty().GetName(): value.GetTime().GetValue().AsTime().In(time.Local).Format(time.RFC3339Nano),
 				})
 			case *commons.Property_User:
 				customFields = append(customFields, map[string]any{
@@ -303,8 +304,8 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 		return &Moment{
 			Name:              event.DisplayName,
 			Description:       event.Description,
-			TriggerTime:       event.TriggerTime.AsTime().Format("2006-01-02T15:04:05.000Z07:00"),
-			Duration:          event.Duration.AsDuration().String(),
+			TriggerTime:       event.TriggerTime.AsTime().In(time.Local).Format(time.RFC3339Nano),
+			Duration:          fmt.Sprintf("%.9fs", event.Duration.AsDuration().Seconds()),
 			Attribute:         lo.If(event.CustomizedFields != nil, event.CustomizedFields).Else(map[string]string{}),
 			CustomFieldValues: customFields,
 		}
