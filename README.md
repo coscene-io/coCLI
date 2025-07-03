@@ -17,6 +17,18 @@ curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y
 curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y-rc6
 ```
 
+## 环境变量配置
+
+当没有配置文件或配置文件为空时，`cocli` 可以通过环境变量进行配置。这对于 Docker 容器、CI/CD 环境或自动化部署场景特别有用。
+
+### 支持的环境变量
+
+| 环境变量       | 描述                 | 必需 | 示例                         |
+| -------------- | -------------------- | ---- | ---------------------------- |
+| `COS_ENDPOINT` | coScene API 端点地址 | ✅   | `https://openapi.coscene.cn` |
+| `COS_TOKEN`    | API 认证令牌         | ✅   | `your-api-token`             |
+| `COS_PROJECT`  | 默认项目 slug        | ✅   | `your-project-slug`          |
+
 ## 本地安装
 
 ### 克隆代码

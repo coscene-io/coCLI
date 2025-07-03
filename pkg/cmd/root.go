@@ -58,7 +58,7 @@ func NewCommand() *cobra.Command {
 					log.Fatalf("Config file does not exist at %s, aborting.", cfgPath)
 				}
 
-				fmt.Println("Initializing config file at", cfgPath)
+				fmt.Fprintf(os.Stderr, "Initializing config file at %s\n", cfgPath)
 
 				err = os.MkdirAll(filepath.Dir(cfgPath), 0755)
 				if err != nil {
@@ -83,7 +83,7 @@ func NewCommand() *cobra.Command {
 			// Auth Check
 			if cmd_utils.IsAuthCheckEnabled(cmd) {
 				if pm.IsEmpty() {
-					fmt.Println("Config file is empty, please run `cocli login set` to initialize your login profile.")
+					fmt.Fprintf(os.Stderr, "Config file is empty, please run `cocli login set` to initialize your login profile.\n")
 					os.Exit(0)
 				}
 				if !pm.CheckAuth() {
