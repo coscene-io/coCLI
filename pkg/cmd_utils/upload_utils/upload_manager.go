@@ -182,7 +182,13 @@ func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOp
 		progressCh: make(chan IncUploadedMsg, 5000), // buffer the channel to avoid blocking
 		errs:       make(map[string]error),
 	}
-	um.monitor = tea.NewProgram(um)
+
+	programOpts := []tea.ProgramOption{}
+	if os.Getenv("CI") == "true" || os.Getenv("TERM") == "dumb" {
+		programOpts = append(programOpts, tea.WithoutRenderer(), tea.WithoutSignals())
+	}
+
+	um.monitor = tea.NewProgram(um, programOpts...)
 
 	return um, nil
 }
