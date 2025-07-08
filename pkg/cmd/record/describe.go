@@ -16,27 +16,20 @@ package record
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/name"
+	"github.com/coscene-io/cocli/internal/printer"
+	"github.com/coscene-io/cocli/internal/printer/printable"
+	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
-
-// RecordWithMetadata wraps the API record response with additional computed fields
-type RecordWithMetadata struct {
-	*openv1alpha1resource.Record `yaml:",inline"`
-	URL                          string `json:"url" yaml:"url"`
-}
 
 func NewDescribeCommand(cfgPath *string) *cobra.Command {
 	var (
@@ -72,32 +65,8 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get record: %v", err)
 			}
 
-			// Get record URL.
-			recordUrl, err := pm.GetRecordUrl(recordName)
-			if err != nil {
-				log.Warnf("unable to get record url: %v", err)
-				recordUrl = ""
-			}
-
-			// Create wrapped record with metadata.
-			recordWithMeta := &RecordWithMetadata{
-				Record: record,
-				URL:    recordUrl,
-			}
-
-			// Output based on format.
-			switch outputFormat {
-			case "json":
-				if err := outputJSON(recordWithMeta); err != nil {
-					log.Fatalf("unable to output JSON: %v", err)
-				}
-			case "yaml":
-				if err := outputYAML(recordWithMeta); err != nil {
-					log.Fatalf("unable to output YAML: %v", err)
-				}
-			default:
-				outputTable(recordWithMeta)
-			}
+			// Display record in the requested format
+			DisplayRecordWithFormat(record, pm, outputFormat, false)
 		},
 	}
 
@@ -109,171 +78,49 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 
 // DisplayRecord displays record details with URL, handling URL fetching internally
 func DisplayRecord(record *openv1alpha1resource.Record, pm *config.ProfileManager) {
+	DisplayRecordWithFormat(record, pm, "table", false)
+}
+
+// DisplayRecordWithFormat displays record details in the specified format
+func DisplayRecordWithFormat(record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool) {
 	// Parse record name
 	recordName, err := name.NewRecord(record.Name)
 	if err != nil {
 		log.Warnf("unable to parse record name: %v", err)
-		DisplayRecordDetails(record, "")
-		return
+		recordName = nil
 	}
 
 	// Get record URL
-	recordUrl, err := pm.GetRecordUrl(recordName)
-	if err != nil {
-		log.Warnf("unable to get record url: %v", err)
-		recordUrl = ""
-	}
-
-	// Display record details
-	DisplayRecordDetails(record, recordUrl)
-}
-
-// DisplayRecordDetails prints record details in table format with a provided URL
-func DisplayRecordDetails(record *openv1alpha1resource.Record, recordUrl string) {
-	// Convert record to a map for easier handling
-	data, err := convertToMap(record)
-	if err != nil {
-		log.Fatalf("unable to convert record: %v", err)
-	}
-
-	// Extract record name parts
-	recordName, _ := name.NewRecord(getString(data, "name"))
-
-	// Print formatted output
-	fmt.Printf("%-20s %s\n", "ID:", recordName.RecordID)
-	fmt.Printf("%-20s %s\n", "Name:", getString(data, "name"))
-	fmt.Printf("%-20s %s\n", "Title:", getString(data, "title"))
-	fmt.Printf("%-20s %s\n", "Description:", getString(data, "description"))
-
-	// Device
-	if device := getMap(data, "device"); device != nil {
-		fmt.Printf("%-20s %s\n", "Device:", getString(device, "name"))
-	}
-
-	// Labels
-	if labels := getSlice(data, "labels"); len(labels) > 0 {
-		labelNames := []string{}
-		for _, label := range labels {
-			if labelMap, ok := label.(map[string]interface{}); ok {
-				labelNames = append(labelNames, getString(labelMap, "display_name"))
-			}
-		}
-		fmt.Printf("%-20s %s\n", "Labels:", strings.Join(labelNames, ", "))
-	}
-
-	// Times
-	fmt.Printf("%-20s %s\n", "Create Time:", formatTimeFromMap(getMap(data, "create_time")))
-	fmt.Printf("%-20s %s\n", "Update Time:", formatTimeFromMap(getMap(data, "update_time")))
-
-	// Duration
-	if duration := getString(data, "duration"); duration != "" {
-		fmt.Printf("%-20s %s\n", "Duration:", duration)
-	}
-
-	// Archived status
-	fmt.Printf("%-20s %v\n", "Archived:", getBool(data, "is_archived"))
-
-	// Total size
-	if totalSize := getFloat64(data, "total_size"); totalSize > 0 {
-		fmt.Printf("%-20s %.2f MB\n", "Total Size:", totalSize/1024/1024)
-	}
-
-	// URL
-	if recordUrl != "" {
-		fmt.Printf("%-20s %s\n", "URL:", recordUrl)
-	}
-}
-
-func outputTable(recordWithMeta interface{}) {
-	// Convert to RecordWithMetadata to access both record and URL
-	rwm, ok := recordWithMeta.(*RecordWithMetadata)
-	if !ok {
-		log.Fatalf("unable to cast to RecordWithMetadata")
-	}
-
-	DisplayRecordDetails(rwm.Record, rwm.URL)
-}
-
-func outputJSON(record interface{}) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(record)
-}
-
-func outputYAML(record interface{}) error {
-	encoder := yaml.NewEncoder(os.Stdout)
-	encoder.SetIndent(2)
-	return encoder.Encode(record)
-}
-
-func convertToMap(v interface{}) (map[string]interface{}, error) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(data, &result)
-	return result, err
-}
-
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
+	recordUrl := ""
+	if recordName != nil {
+		recordUrl, err = pm.GetRecordUrl(recordName)
+		if err != nil {
+			log.Warnf("unable to get record url: %v", err)
+			recordUrl = ""
 		}
 	}
-	return ""
-}
 
-func getMap(m map[string]interface{}, key string) map[string]interface{} {
-	if v, ok := m[key]; ok {
-		if mapVal, ok := v.(map[string]interface{}); ok {
-			return mapVal
-		}
-	}
-	return nil
-}
+	// Create wrapped record with metadata
+	recordWithMeta := printable.NewRecordWithMetadata(record, recordUrl)
 
-func getSlice(m map[string]interface{}, key string) []interface{} {
-	if v, ok := m[key]; ok {
-		if slice, ok := v.([]interface{}); ok {
-			return slice
-		}
-	}
-	return nil
-}
-
-func getBool(m map[string]interface{}, key string) bool {
-	if v, ok := m[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return false
-}
-
-func getFloat64(m map[string]interface{}, key string) float64 {
-	if v, ok := m[key]; ok {
-		if f, ok := v.(float64); ok {
-			return f
-		}
-	}
-	return 0
-}
-
-func formatTimeFromMap(timeMap map[string]interface{}) string {
-	if timeMap == nil {
-		return ""
+	// Handle success message for table format
+	if showSuccessMessage && format == "table" {
+		fmt.Println("\nRecord created successfully!")
+		fmt.Println("-------------------------------------------------------------")
 	}
 
-	seconds := getFloat64(timeMap, "seconds")
-	nanos := getFloat64(timeMap, "nanos")
+	// Use the printer pattern
+	p := printer.Printer(format, &printer.Options{
+		TableOpts: &table.PrintOpts{
+			Verbose: false,
+		},
+	})
 
-	if seconds == 0 {
-		return ""
+	if err := p.PrintObj(recordWithMeta, os.Stdout); err != nil {
+		log.Fatalf("unable to print record: %v", err)
 	}
 
-	t := time.Unix(int64(seconds), int64(nanos))
-	return t.In(time.Local).Format(time.RFC3339)
+	if showSuccessMessage && format == "table" {
+		fmt.Println("-------------------------------------------------------------")
+	}
 }
