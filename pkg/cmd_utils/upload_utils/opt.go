@@ -22,6 +22,7 @@ type UploadManagerOpts struct {
 	Threads        int
 	PartSize       string
 	partSizeUint64 uint64
+	NoTTY          bool
 }
 
 func (opt *UploadManagerOpts) Valid() error {

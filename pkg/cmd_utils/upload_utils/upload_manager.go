@@ -148,6 +148,7 @@ type UploadManager struct {
 	spinnerIdx  int
 	manualQuit  bool
 	monitor     *tea.Program
+	noTTY       bool
 
 	// other
 	errs    map[string]error
@@ -181,8 +182,13 @@ func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOp
 		fileList:   []string{},
 		progressCh: make(chan IncUploadedMsg, 5000), // buffer the channel to avoid blocking
 		errs:       make(map[string]error),
+		noTTY:      opts.NoTTY,
 	}
-	um.monitor = tea.NewProgram(um)
+
+	// Only create tea.Program if we have TTY
+	if !um.noTTY {
+		um.monitor = tea.NewProgram(um)
+	}
 
 	return um, nil
 }
@@ -193,16 +199,21 @@ func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *Fi
 		return err
 	}
 
-	// Start the status monitor
-	um.goWithSentry("upload status monitor", func(_ *sentry.Hub) {
-		_, err := um.monitor.Run()
-		if err != nil {
-			log.Fatalf("Error running upload status monitor: %v", err)
-		}
-		if um.manualQuit {
-			log.Fatalf("Upload quit manually")
-		}
-	})
+	if um.noTTY {
+		// Non-interactive mode - use simple logging
+		log.Info("Starting upload in non-interactive mode...")
+	} else {
+		// Start the status monitor
+		um.goWithSentry("upload status monitor", func(_ *sentry.Hub) {
+			_, err := um.monitor.Run()
+			if err != nil {
+				log.Fatalf("Error running upload status monitor: %v", err)
+			}
+			if um.manualQuit {
+				log.Fatalf("Upload quit manually")
+			}
+		})
+	}
 
 	// Start the progress monitor
 	go func() {
@@ -212,8 +223,10 @@ func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *Fi
 		}
 	}()
 
-	// Send an empty message to wait for the monitor to start
-	um.monitor.Send(struct{}{})
+	// Send an empty message to wait for the monitor to start (only if we have monitor)
+	if !um.noTTY {
+		um.monitor.Send(struct{}{})
+	}
 
 	// Only enable trace logging if the log level is set to trace
 	if log.GetLevel() == log.TraceLevel {
@@ -271,7 +284,38 @@ func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *Fi
 		um.scheduleUploads(ctx, uploadInfos, uploadCh, uploadResultCh, um.opts.Threads)
 	})
 
+	// Start non-interactive progress reporter if in no-TTY mode
+	if um.noTTY {
+		um.goWithSentry("non-interactive progress reporter", func(_ *sentry.Hub) {
+			um.nonInteractiveProgressReporter()
+		})
+	}
+
 	um.uploadWg.Wait()
+
+	// Print final summary in non-interactive mode
+	if um.noTTY {
+		var totalFiles, completedFiles, failedFiles, skippedFiles int
+		for _, fileInfo := range um.fileInfos {
+			totalFiles++
+			switch fileInfo.Status {
+			case UploadCompleted:
+				completedFiles++
+			case UploadFailed:
+				failedFiles++
+			case PreviouslyUploaded:
+				skippedFiles++
+			}
+		}
+
+		log.Infof("Upload completed! Total: %d | Success: %d | Failed: %d | Skipped: %d",
+			totalFiles, completedFiles, failedFiles, skippedFiles)
+
+		if failedFiles > 0 {
+			log.Warn("Some files failed to upload. Check the error messages above.")
+		}
+	}
+
 	um.stopMonitorAndWait()
 
 	return nil
@@ -288,8 +332,10 @@ func (um *UploadManager) goWithSentry(routineName string, fn func(*sentry.Hub)) 
 
 // stopMonitorAndWait stops the monitor and waits for it to finish.
 func (um *UploadManager) stopMonitorAndWait() {
-	um.monitor.Quit()
-	um.monitor.Wait()
+	if !um.noTTY && um.monitor != nil {
+		um.monitor.Quit()
+		um.monitor.Wait()
+	}
 
 	um.printErrs()
 	if um.manualQuit {
@@ -349,7 +395,7 @@ func (um *UploadManager) produceMultipartUploadInfos(ctx context.Context, fileAb
 
 	// Check for largest object size allowed.
 	if fileInfo.Size > int64(maxSinglePutObjectSize) {
-		return nil, errors.Errorf("Your proposed upload size ‘%d’ exceeds the maximum allowed object size ‘%d’ for single PUT operation.", fileInfo.Size, maxSinglePutObjectSize)
+		return nil, errors.Errorf("Your proposed upload size '%d' exceeds the maximum allowed object size '%d' for single PUT operation.", fileInfo.Size, maxSinglePutObjectSize)
 	}
 
 	// Create uploader directory if not exists
@@ -522,6 +568,9 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 	if result.UploadId == "" {
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
+		if um.noTTY {
+			log.Infof("Completed upload: %s", result.Path)
+		}
 		return nil
 	}
 
@@ -594,6 +643,9 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
+		if um.noTTY {
+			log.Infof("Completed multipart upload: %s", result.Path)
+		}
 	}
 
 	return nil
@@ -707,8 +759,14 @@ func (um *UploadManager) addFile(path string) {
 func (um *UploadManager) debugF(format string, args ...interface{}) {
 	if um.isDebug {
 		msg := fmt.Sprintf(format, args...)
-		debugMsg := wordwrap.String(fmt.Sprintf("DEBUG: %s", msg), um.windowWidth)
-		um.monitor.Println(debugMsg)
+		if um.noTTY {
+			// In non-interactive mode, use logrus
+			log.Debug(msg)
+		} else if um.monitor != nil {
+			// In interactive mode, use tea.Program
+			debugMsg := wordwrap.String(fmt.Sprintf("DEBUG: %s", msg), um.windowWidth)
+			um.monitor.Println(debugMsg)
+		}
 	}
 }
 
@@ -718,6 +776,9 @@ func (um *UploadManager) addErr(path string, err error) {
 	um.fileInfos[path].Status = UploadFailed
 	um.errs[path] = err
 	um.uploadWg.Done()
+	if um.noTTY {
+		log.Errorf("Upload failed for %s: %v", path, err)
+	}
 }
 
 // printErrs prints all errors.
@@ -734,6 +795,10 @@ func (um *UploadManager) printErrs() {
 func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *name.Record, relativeDir string) map[string]string {
 	ret := make(map[string]string)
 	var files []*openv1alpha1resource.File
+
+	if um.noTTY && len(filesToUpload) > 0 {
+		log.Infof("Processing %d files for upload...", len(filesToUpload))
+	}
 
 	for _, f := range filesToUpload {
 		um.addFile(f)
@@ -761,6 +826,9 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 		if err == nil && getFileRes.Sha256 == checksum && getFileRes.Size == size {
 			um.fileInfos[f].Status = PreviouslyUploaded
 			um.uploadWg.Done()
+			if um.noTTY {
+				log.Infof("File %s already uploaded, skipping", relativePath)
+			}
 			continue
 		}
 
@@ -944,4 +1012,62 @@ func (r *uploadProgressSectionReader) Read(b []byte) (int, error) {
 		r.uploaded += int64(n)
 	}
 	return n, err
+}
+
+// nonInteractiveProgressReporter reports progress in non-interactive mode
+func (um *UploadManager) nonInteractiveProgressReporter() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			um.reportNonInteractiveProgress()
+		default:
+			// Check if all uploads are done
+			allDone := true
+			for _, fileInfo := range um.fileInfos {
+				if fileInfo.Status != UploadCompleted &&
+					fileInfo.Status != PreviouslyUploaded &&
+					fileInfo.Status != UploadFailed {
+					allDone = false
+					break
+				}
+			}
+			if allDone {
+				um.reportNonInteractiveProgress() // Final report
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// reportNonInteractiveProgress logs the current upload progress
+func (um *UploadManager) reportNonInteractiveProgress() {
+	var totalFiles, completedFiles, failedFiles, skippedFiles int
+	var totalBytes, uploadedBytes int64
+
+	for _, fileInfo := range um.fileInfos {
+		totalFiles++
+		totalBytes += fileInfo.Size
+		uploadedBytes += fileInfo.Uploaded
+
+		switch fileInfo.Status {
+		case UploadCompleted:
+			completedFiles++
+		case UploadFailed:
+			failedFiles++
+		case PreviouslyUploaded:
+			skippedFiles++
+		}
+	}
+
+	progress := float64(0)
+	if totalBytes > 0 {
+		progress = float64(uploadedBytes) * 100 / float64(totalBytes)
+	}
+
+	log.Infof("Upload Progress: %.1f%% | Total: %d | Completed: %d | Failed: %d | Skipped: %d",
+		progress, totalFiles, completedFiles, failedFiles, skippedFiles)
 }
