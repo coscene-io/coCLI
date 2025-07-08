@@ -262,24 +262,6 @@ func getFloat64(m map[string]interface{}, key string) float64 {
 	return 0
 }
 
-func formatTime(timeStr string) string {
-	if timeStr == "" {
-		return ""
-	}
-
-	// Try to parse the time string
-	t, err := time.Parse(time.RFC3339Nano, timeStr)
-	if err != nil {
-		// Try other formats
-		t, err = time.Parse(time.RFC3339, timeStr)
-		if err != nil {
-			return timeStr // Return as-is if can't parse
-		}
-	}
-
-	return t.In(time.Local).Format(time.RFC3339)
-}
-
 func formatTimeFromMap(timeMap map[string]interface{}) string {
 	if timeMap == nil {
 		return ""
