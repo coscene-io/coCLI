@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/name"
@@ -30,6 +31,12 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
+
+// RecordWithMetadata wraps the API record response with additional computed fields
+type RecordWithMetadata struct {
+	*openv1alpha1resource.Record `yaml:",inline"`
+	URL                          string `json:"url" yaml:"url"`
+}
 
 func NewDescribeCommand(cfgPath *string) *cobra.Command {
 	var (
@@ -65,18 +72,31 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get record: %v", err)
 			}
 
+			// Get record URL.
+			recordUrl, err := pm.GetRecordUrl(recordName)
+			if err != nil {
+				log.Warnf("unable to get record url: %v", err)
+				recordUrl = ""
+			}
+
+			// Create wrapped record with metadata.
+			recordWithMeta := &RecordWithMetadata{
+				Record: record,
+				URL:    recordUrl,
+			}
+
 			// Output based on format.
 			switch outputFormat {
 			case "json":
-				if err := outputJSON(record); err != nil {
+				if err := outputJSON(recordWithMeta); err != nil {
 					log.Fatalf("unable to output JSON: %v", err)
 				}
 			case "yaml":
-				if err := outputYAML(record); err != nil {
+				if err := outputYAML(recordWithMeta); err != nil {
 					log.Fatalf("unable to output YAML: %v", err)
 				}
 			default:
-				outputTable(record)
+				outputTable(recordWithMeta)
 			}
 		},
 	}
@@ -87,7 +107,29 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func outputTable(record interface{}) {
+// DisplayRecord displays record details with URL, handling URL fetching internally
+func DisplayRecord(record *openv1alpha1resource.Record, pm *config.ProfileManager) {
+	// Parse record name
+	recordName, err := name.NewRecord(record.Name)
+	if err != nil {
+		log.Warnf("unable to parse record name: %v", err)
+		DisplayRecordDetails(record, "")
+		return
+	}
+
+	// Get record URL
+	recordUrl, err := pm.GetRecordUrl(recordName)
+	if err != nil {
+		log.Warnf("unable to get record url: %v", err)
+		recordUrl = ""
+	}
+
+	// Display record details
+	DisplayRecordDetails(record, recordUrl)
+}
+
+// DisplayRecordDetails prints record details in table format with a provided URL
+func DisplayRecordDetails(record *openv1alpha1resource.Record, recordUrl string) {
 	// Convert record to a map for easier handling
 	data, err := convertToMap(record)
 	if err != nil {
@@ -135,6 +177,21 @@ func outputTable(record interface{}) {
 	if totalSize := getFloat64(data, "total_size"); totalSize > 0 {
 		fmt.Printf("%-20s %.2f MB\n", "Total Size:", totalSize/1024/1024)
 	}
+
+	// URL
+	if recordUrl != "" {
+		fmt.Printf("%-20s %s\n", "URL:", recordUrl)
+	}
+}
+
+func outputTable(recordWithMeta interface{}) {
+	// Convert to RecordWithMetadata to access both record and URL
+	rwm, ok := recordWithMeta.(*RecordWithMetadata)
+	if !ok {
+		log.Fatalf("unable to cast to RecordWithMetadata")
+	}
+
+	DisplayRecordDetails(rwm.Record, rwm.URL)
 }
 
 func outputJSON(record interface{}) error {
