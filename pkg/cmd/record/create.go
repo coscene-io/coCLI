@@ -36,10 +36,11 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 		thumbnail         = ""
 		multiOpts         = &upload_utils.UploadManagerOpts{}
 		timeout           time.Duration
+		outputFormat      = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "create [-t <title>] [-d <description>] [-l <labels>...] [-p <working-project-slug>] [-i <thumbnail>]",
+		Use:                   "create [-t <title>] [-d <description>] [-l <labels>...] [-p <working-project-slug>] [-i <thumbnail>] [-o <output-format>]",
 		Short:                 "Create a new record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
@@ -68,11 +69,8 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 
 			recordName, _ := name.NewRecord(res.Name)
 
-			// Display detailed record information
-			fmt.Println("\nRecord created successfully!")
-			fmt.Println("-------------------------------------------------------------")
-			DisplayRecord(res, pm)
-			fmt.Println("-------------------------------------------------------------")
+			// Display record in the requested format
+			DisplayRecordWithFormat(res, pm, outputFormat, true)
 
 			if thumbnail != "" {
 				// Upload thumbnail.
@@ -103,6 +101,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringSliceVarP(&labelDisplayNames, "labels", "l", []string{}, "labels of the record.")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&thumbnail, "thumbnail", "i", "", "thumbnail path of the record.")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
 	cmd.Flags().IntVarP(&multiOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&multiOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
