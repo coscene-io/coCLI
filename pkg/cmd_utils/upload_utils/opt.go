@@ -7,6 +7,7 @@ import (
 	"github.com/coscene-io/cocli/api"
 	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
+	"golang.org/x/term"
 )
 
 type ApiOpts struct {
@@ -22,6 +23,8 @@ type UploadManagerOpts struct {
 	Threads        int
 	PartSize       string
 	partSizeUint64 uint64
+	NoTTY          bool // Force non-interactive mode
+	TTY            bool // Force interactive mode
 }
 
 func (opt *UploadManagerOpts) Valid() error {
@@ -38,6 +41,40 @@ func (opt *UploadManagerOpts) partSize() (uint64, error) {
 		return defaultPartSize, nil
 	}
 	return humanize.ParseBytes(opt.PartSize)
+}
+
+// IsHeadlessEnvironment detects if we're running in a CI/headless environment
+func IsHeadlessEnvironment() bool {
+	// Check if stdin or stdout is not a terminal
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return true
+	}
+
+	// Check for common CI environment variables
+	if os.Getenv("CI") == "true" {
+		return true
+	}
+
+	// Check for dumb terminal
+	if os.Getenv("TERM") == "dumb" {
+		return true
+	}
+
+	return false
+}
+
+// ShouldUseInteractiveMode determines if interactive mode should be used
+func (opt *UploadManagerOpts) ShouldUseInteractiveMode() bool {
+	// Explicit flags take precedence
+	if opt.NoTTY {
+		return false
+	}
+	if opt.TTY {
+		return true
+	}
+
+	// Auto-detect based on environment
+	return !IsHeadlessEnvironment()
 }
 
 type FileOpts struct {
