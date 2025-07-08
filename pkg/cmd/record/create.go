@@ -66,14 +66,13 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Failed to create record: %v", err)
 			}
 
-			fmt.Printf("Record created: %v\n", res.Name)
 			recordName, _ := name.NewRecord(res.Name)
-			recordUrl, err := pm.GetRecordUrl(recordName)
-			if err != nil {
-				log.Errorf("unable to get record url: %v", err)
-			} else {
-				fmt.Println("The record url is:", recordUrl)
-			}
+
+			// Display detailed record information
+			fmt.Println("\nRecord created successfully!")
+			fmt.Println("-------------------------------------------------------------")
+			DisplayRecord(res, pm)
+			fmt.Println("-------------------------------------------------------------")
 
 			if thumbnail != "" {
 				// Upload thumbnail.
