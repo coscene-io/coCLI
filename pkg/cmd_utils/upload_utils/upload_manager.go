@@ -173,6 +173,9 @@ func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOp
 		return nil, errors.Wrap(err, "unable to create minio client")
 	}
 
+	// Determine if we should use interactive mode
+	useInteractive := opts.ShouldUseInteractiveMode()
+
 	um := &UploadManager{
 		opts:       opts,
 		apiOpts:    apiOpts,
@@ -182,11 +185,16 @@ func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOp
 		fileList:   []string{},
 		progressCh: make(chan IncUploadedMsg, 5000), // buffer the channel to avoid blocking
 		errs:       make(map[string]error),
-		noTTY:      opts.NoTTY,
+		noTTY:      !useInteractive,
 	}
 
-	// Only create tea.Program if we have TTY
-	if !um.noTTY {
+	// Log the mode detection
+	if !opts.NoTTY && !opts.TTY && IsHeadlessEnvironment() {
+		log.Info("Detected headless environment, automatically using non-interactive mode")
+	}
+
+	// Only create tea.Program if we're using interactive mode
+	if useInteractive {
 		um.monitor = tea.NewProgram(um)
 	}
 

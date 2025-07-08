@@ -108,6 +108,9 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&multiOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
 	cmd.Flags().BoolVar(&multiOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
+	cmd.Flags().BoolVar(&multiOpts.TTY, "tty", false, "force interactive mode even in headless environments")
+
+	cmd.MarkFlagsMutuallyExclusive("no-tty", "tty")
 
 	return cmd
 }
