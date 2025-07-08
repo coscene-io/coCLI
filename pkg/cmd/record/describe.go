@@ -113,15 +113,15 @@ func outputTable(record interface{}) {
 		labelNames := []string{}
 		for _, label := range labels {
 			if labelMap, ok := label.(map[string]interface{}); ok {
-				labelNames = append(labelNames, getString(labelMap, "displayName"))
+				labelNames = append(labelNames, getString(labelMap, "display_name"))
 			}
 		}
 		fmt.Printf("%-20s %s\n", "Labels:", strings.Join(labelNames, ", "))
 	}
 
 	// Times
-	fmt.Printf("%-20s %s\n", "Create Time:", formatTime(getString(data, "createTime")))
-	fmt.Printf("%-20s %s\n", "Update Time:", formatTime(getString(data, "updateTime")))
+	fmt.Printf("%-20s %s\n", "Create Time:", formatTimeFromMap(getMap(data, "create_time")))
+	fmt.Printf("%-20s %s\n", "Update Time:", formatTimeFromMap(getMap(data, "update_time")))
 
 	// Duration
 	if duration := getString(data, "duration"); duration != "" {
@@ -129,10 +129,10 @@ func outputTable(record interface{}) {
 	}
 
 	// Archived status
-	fmt.Printf("%-20s %v\n", "Archived:", getBool(data, "isArchived"))
+	fmt.Printf("%-20s %v\n", "Archived:", getBool(data, "is_archived"))
 
 	// Total size
-	if totalSize := getFloat64(data, "totalSize"); totalSize > 0 {
+	if totalSize := getFloat64(data, "total_size"); totalSize > 0 {
 		fmt.Printf("%-20s %.2f MB\n", "Total Size:", totalSize/1024/1024)
 	}
 }
@@ -220,5 +220,21 @@ func formatTime(timeStr string) string {
 		}
 	}
 
+	return t.In(time.Local).Format(time.RFC3339)
+}
+
+func formatTimeFromMap(timeMap map[string]interface{}) string {
+	if timeMap == nil {
+		return ""
+	}
+
+	seconds := getFloat64(timeMap, "seconds")
+	nanos := getFloat64(timeMap, "nanos")
+
+	if seconds == 0 {
+		return ""
+	}
+
+	t := time.Unix(int64(seconds), int64(nanos))
 	return t.In(time.Local).Format(time.RFC3339)
 }
