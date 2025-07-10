@@ -53,6 +53,9 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			if pageSize > 0 && (pageSize < 10 || pageSize > 100) {
 				log.Fatalf("--page-size must be between 10 and 100")
 			}
+			if page < 1 {
+				log.Fatalf("--page must be >= 1")
+			}
 
 			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
@@ -128,7 +131,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all records (overrides default page size)")
