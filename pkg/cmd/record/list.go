@@ -16,10 +16,13 @@ package record
 
 import (
 	"context"
+	"fmt"
 	"os"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -33,14 +36,27 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 		verbose        = false
 		includeArchive = false
 		outputFormat   = ""
+		pageSize       = 0
+		page           = 0
+		all            = false
+		labels         []string
+		titles         []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive]",
+		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [--page-size <size>] [--page <number>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
 		Short:                 "List records in the project.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
+			// Validate pagination flags
+			if pageSize > 0 && (pageSize < 10 || pageSize > 100) {
+				log.Fatalf("--page-size must be between 10 and 100")
+			}
+			if page < 1 {
+				log.Fatalf("--page must be >= 1")
+			}
+
 			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
@@ -48,13 +64,53 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// List records in project.
-			records, err := pm.RecordCli().ListAll(context.TODO(), &api.ListRecordsOptions{
+			var records []*openv1alpha1resource.Record
+
+			// Prepare list options with filters
+			listOptions := &api.ListRecordsOptions{
 				Project:        proj,
 				IncludeArchive: includeArchive,
-			})
-			if err != nil {
-				log.Fatalf("unable to list records: %v", err)
+				Labels:         labels,
+				Titles:         titles,
+			}
+
+			if all {
+				records, err = pm.RecordCli().ListAll(context.TODO(), listOptions)
+				if err != nil {
+					log.Fatalf("unable to list records: %v", err)
+				}
+			} else if pageSize > 0 || page > 1 {
+				effectivePageSize := pageSize
+				if effectivePageSize <= 0 {
+					effectivePageSize = constants.MaxPageSize
+				}
+
+				skip := 0
+				if page > 1 {
+					skip = (page - 1) * effectivePageSize
+				}
+
+				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, effectivePageSize, skip)
+				if err != nil {
+					log.Fatalf("unable to list records: %v", err)
+				}
+
+				// Show note when using default page size with --page
+				if pageSize <= 0 && page > 1 {
+					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d records for page %d.\n\n", effectivePageSize, page)
+				}
+			} else {
+				// Default behavior: use MaxPageSize and show note
+				defaultPageSize := constants.MaxPageSize
+				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, defaultPageSize, 0)
+				if err != nil {
+					log.Fatalf("unable to list records: %v", err)
+				}
+
+				// Show note about default behavior
+				if len(records) == defaultPageSize {
+					fmt.Fprintf(os.Stderr, "Note: Showing first %d records (default page size). Use --all to list all records or --page-size to specify page size.\n\n", defaultPageSize)
+				}
 			}
 
 			// Print listed records.
@@ -75,7 +131,16 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
+	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
+	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
+	cmd.Flags().BoolVar(&all, "all", false, "list all records (overrides default page size)")
+	cmd.Flags().StringSliceVar(&labels, "labels", []string{}, "filter by labels (comma-separated)")
+	cmd.Flags().StringSliceVar(&titles, "keywords", []string{}, "filter by keywords in titles (comma-separated)")
+
+	// Mark mutually exclusive flags
+	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
+	cmd.MarkFlagsMutuallyExclusive("all", "page")
 
 	return cmd
 }

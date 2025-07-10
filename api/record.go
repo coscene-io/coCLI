@@ -54,7 +54,7 @@ type RecordInterface interface {
 	// Update updates a record.
 	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error
 
-	//ListAllEvents lists all events in a record.
+	// ListAllEvents lists all events in a record.
 	ListAllEvents(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.Event, error)
 
 	// ListAllMoments lists all moments in a record.
@@ -62,6 +62,9 @@ type RecordInterface interface {
 
 	// ListAll lists all records in a project.
 	ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error)
+
+	// ListWithPagination lists records in a project with pagination support.
+	ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error)
 
 	// GenerateRecordThumbnailUploadUrl generates a pre-signed URL for uploading a record thumbnail.
 	GenerateRecordThumbnailUploadUrl(ctx context.Context, recordName *name.Record) (string, error)
@@ -73,6 +76,7 @@ type RecordInterface interface {
 type ListRecordsOptions struct {
 	Project        *name.Project
 	Titles         []string
+	Labels         []string
 	IncludeArchive bool
 }
 
@@ -80,6 +84,7 @@ type recordClient struct {
 	recordServiceClient openv1alpha1connect.RecordServiceClient
 	fileServiceClient   openv1alpha1connect.FileServiceClient
 	userServiceClient   openv1alpha1connect.UserServiceClient
+	labelServiceClient  openv1alpha1connect.LabelServiceClient
 }
 
 type Moment struct {
@@ -91,11 +96,12 @@ type Moment struct {
 	CustomFieldValues []map[string]any  `json:"customFieldValues"`
 }
 
-func NewRecordClient(recordServiceClient openv1alpha1connect.RecordServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient, userServiceClient openv1alpha1connect.UserServiceClient) RecordInterface {
+func NewRecordClient(recordServiceClient openv1alpha1connect.RecordServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient, userServiceClient openv1alpha1connect.UserServiceClient, labelServiceClient openv1alpha1connect.LabelServiceClient) RecordInterface {
 	return &recordClient{
 		recordServiceClient: recordServiceClient,
 		fileServiceClient:   fileServiceClient,
 		userServiceClient:   userServiceClient,
+		labelServiceClient:  labelServiceClient,
 	}
 }
 
@@ -345,6 +351,27 @@ func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions)
 	return ret, nil
 }
 
+func (c *recordClient) ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error) {
+	if options.Project.ProjectID == "" {
+		return nil, errors.Errorf("invalid project: %s", options.Project)
+	}
+
+	filter := c.filter(options)
+
+	req := connect.NewRequest(&openv1alpha1service.ListRecordsRequest{
+		Parent:   options.Project.String(),
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.recordServiceClient.ListRecords(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list records: %w", err)
+	}
+
+	return res.Msg.Records, nil
+}
+
 func (c *recordClient) filter(opts *ListRecordsOptions) string {
 	var filters []string
 	if !opts.IncludeArchive {
@@ -355,6 +382,16 @@ func (c *recordClient) filter(opts *ListRecordsOptions) string {
 			lo.Map(opts.Titles, func(title string, _ int) string { return fmt.Sprintf(`title:"%s"`, title) }),
 			` OR `,
 		)+")")
+	}
+	if len(opts.Labels) > 0 {
+		// Transform label display names to label IDs, following backend implementation
+		labelFilters, err := c.transformLabels(context.TODO(), opts.Project.String(), opts.Labels)
+		if err != nil {
+			// If label lookup fails, log warning but don't fail the entire request
+			fmt.Printf("Warning: failed to lookup labels: %v\n", err)
+		} else if len(labelFilters) > 0 {
+			filters = append(filters, "("+strings.Join(labelFilters, ` OR `)+")")
+		}
 	}
 	return strings.Join(filters, " AND ")
 }
@@ -386,4 +423,56 @@ func (c *recordClient) RecordId2Name(ctx context.Context, recordIdOrName string,
 	}
 
 	return recordName, nil
+}
+
+// transformLabels converts label display names to label IDs for filtering
+// Based on the implementation in /x/record/client.go
+func (c *recordClient) transformLabels(ctx context.Context, parent string, labelNames []string) ([]string, error) {
+	if len(labelNames) == 0 {
+		return nil, nil
+	}
+
+	// Create a map to track label display name to ID mapping
+	labelNameIdMap := make(map[string]string)
+	for _, labelName := range labelNames {
+		labelNameIdMap[labelName] = ""
+	}
+
+	// List labels from platform server using batch lookup
+	req := connect.NewRequest(&openv1alpha1service.ListLabelsRequest{
+		Parent:   parent,
+		Filter:   fmt.Sprintf("display_name=[%s]", strings.Join(labelNames, `,`)),
+		PageSize: constants.MaxPageSize,
+	})
+	labelResp, err := c.labelServiceClient.ListLabels(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	// Extract label IDs from the response
+	for _, label := range labelResp.Msg.Labels {
+		labelNameArr := strings.Split(label.Name, `/`)
+		labelId := labelNameArr[len(labelNameArr)-1]
+		labelNameIdMap[label.DisplayName] = labelId
+	}
+
+	// Check for missing labels
+	var missedLabelNames []string
+	for labelName, labelId := range labelNameIdMap {
+		if labelId == "" {
+			missedLabelNames = append(missedLabelNames, labelName)
+		}
+	}
+	if len(missedLabelNames) > 0 {
+		return nil, fmt.Errorf("labels not found: %v", strings.Join(missedLabelNames, ","))
+	}
+
+	// Construct label filters using label IDs
+	var ret []string
+	for _, labelName := range labelNames {
+		labelId := labelNameIdMap[labelName]
+		ret = append(ret, fmt.Sprintf("labels=[%s]", labelId))
+	}
+
+	return ret, nil
 }
