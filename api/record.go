@@ -48,6 +48,9 @@ type RecordInterface interface {
 	// ListAllFiles lists all files in a record.
 	ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error)
 
+	// ListFilesWithPagination lists files in a record with pagination support.
+	ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error)
+
 	// Delete deletes a record by name.
 	Delete(ctx context.Context, recordName *name.Record) error
 
@@ -162,9 +165,14 @@ func (c *recordClient) Copy(ctx context.Context, recordName *name.Record, target
 func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error {
 	copyPairs := lo.Map(files, func(file *openv1alpha1resource.File, _ int) *openv1alpha1service.CopyFilesRequest_CopyPair {
 		srcFileName, _ := name.NewFile(file.Name)
+		dstFileName := name.File{
+			ProjectID: dstRecordName.ProjectID,
+			RecordID:  dstRecordName.RecordID,
+			Filename:  srcFileName.Filename,
+		}
 		return &openv1alpha1service.CopyFilesRequest_CopyPair{
-			SrcFile: srcFileName.Filename,
-			DstFile: srcFileName.Filename,
+			SrcFile: srcFileName.String(),
+			DstFile: dstFileName.String(),
 		}
 	})
 
@@ -173,8 +181,16 @@ func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record
 		Destination: dstRecordName.String(),
 		CopyPairs:   copyPairs,
 	})
-	_, err := c.fileServiceClient.CopyFiles(ctx, req)
-	return err
+	res, err := c.fileServiceClient.CopyFiles(ctx, req)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("successfully copied files number: %d\n", len(res.Msg.Files))
+	fmt.Printf("failed to copy files number: %d\n", len(files)-len(res.Msg.Files))
+	if len(res.Msg.Files) != len(files) {
+		return errors.Errorf("unexpected number of files in response: %d", len(res.Msg.Files))
+	}
+	return nil
 }
 
 func (c *recordClient) ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error) {
@@ -204,6 +220,25 @@ func (c *recordClient) ListAllFiles(ctx context.Context, recordName *name.Record
 	}
 
 	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
+		return !strings.HasSuffix(file.Filename, "/")
+	}), nil
+}
+
+func (c *recordClient) ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
+	filter := "recursive=\"true\""
+
+	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+		Parent:   recordName.String(),
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.fileServiceClient.ListFiles(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files: %w", err)
+	}
+
+	return lo.Filter(res.Msg.Files, func(file *openv1alpha1resource.File, _ int) bool {
 		return !strings.HasSuffix(file.Filename, "/")
 	}), nil
 }
