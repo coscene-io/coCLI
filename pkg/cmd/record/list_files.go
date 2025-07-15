@@ -41,6 +41,7 @@ func NewListFilesCommand(cfgPath *string) *cobra.Command {
 		Short:                 "List files in the record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
+		Deprecated:            "use 'cocli record file list' instead",
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()

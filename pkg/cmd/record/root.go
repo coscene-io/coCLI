@@ -30,6 +30,7 @@ func NewRootCommand(cfgPath *string) *cobra.Command {
 	cmd.AddCommand(NewDeleteCommand(cfgPath))
 	cmd.AddCommand(NewDescribeCommand(cfgPath))
 	cmd.AddCommand(NewDownloadCommand(cfgPath))
+	cmd.AddCommand(NewFileCommand(cfgPath))
 	cmd.AddCommand(NewListCommand(cfgPath))
 	cmd.AddCommand(NewListFilesCommand(cfgPath))
 	cmd.AddCommand(NewListMomentsCommand(cfgPath))
