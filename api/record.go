@@ -51,6 +51,9 @@ type RecordInterface interface {
 	// Delete deletes a record by name.
 	Delete(ctx context.Context, recordName *name.Record) error
 
+	// DeleteFile deletes a file by name.
+	DeleteFile(ctx context.Context, recordName *name.Record, fileName string) error
+
 	// Update updates a record.
 	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error
 
@@ -210,6 +213,18 @@ func (c *recordClient) Delete(ctx context.Context, recordName *name.Record) erro
 		Name: recordName.String(),
 	})
 	_, err := c.recordServiceClient.DeleteRecord(ctx, deleteRecordReq)
+	return err
+}
+
+func (c *recordClient) DeleteFile(ctx context.Context, recordName *name.Record, fileName string) error {
+	deleteFileReq := connect.NewRequest(&openv1alpha1service.DeleteFileRequest{
+		Name: name.File{
+			ProjectID: recordName.ProjectID,
+			RecordID:  recordName.RecordID,
+			Filename:  fileName,
+		}.String(),
+	})
+	_, err := c.fileServiceClient.DeleteFile(ctx, deleteFileReq)
 	return err
 }
 
