@@ -52,10 +52,11 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 		pageSize     = 0
 		page         = 0
 		all          = false
+		keywords     = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all]",
+		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--keywords <path>]",
 		Short:                 "List files in the record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
@@ -87,7 +88,11 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			var files []*openv1alpha1resource.File
 
 			if all {
-				files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+				if keywords != "" {
+					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, fmt.Sprintf("path=\"%s\"", keywords))
+				} else {
+					files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
@@ -102,7 +107,11 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 					skip = (page - 1) * effectivePageSize
 				}
 
-				files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, effectivePageSize, skip)
+				if keywords != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, fmt.Sprintf("path=\"%s\"", keywords))
+				} else {
+					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, effectivePageSize, skip)
+				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
@@ -114,7 +123,11 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, defaultPageSize, 0)
+				if keywords != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, fmt.Sprintf("path=\"%s\"", keywords))
+				} else {
+					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, defaultPageSize, 0)
+				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
@@ -141,6 +154,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
+	cmd.Flags().StringVar(&keywords, "keywords", "", "filter files by path (e.g., 'myfile.txt' or 'folder/file')")
 
 	// Mark mutually exclusive flags
 	cmd.MarkFlagsMutuallyExclusive("all", "page-size")

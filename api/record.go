@@ -48,8 +48,14 @@ type RecordInterface interface {
 	// ListAllFiles lists all files in a record.
 	ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error)
 
+	// ListAllFilesWithFilter lists all files in a record with additional filter.
+	ListAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error)
+
 	// ListFilesWithPagination lists files in a record with pagination support.
 	ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error)
+
+	// ListFilesWithPaginationAndFilter lists files in a record with pagination support and additional filter.
+	ListFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error)
 
 	// Delete deletes a record by name.
 	Delete(ctx context.Context, recordName *name.Record) error
@@ -194,12 +200,23 @@ func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record
 }
 
 func (c *recordClient) ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, recordName, "")
+}
+
+func (c *recordClient) ListAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, recordName, additionalFilter)
+}
+
+func (c *recordClient) listAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error) {
 	var (
 		skip = 0
 		ret  []*openv1alpha1resource.File
 	)
 
 	filter := "recursive=\"true\""
+	if additionalFilter != "" {
+		filter += " AND " + additionalFilter
+	}
 
 	for {
 		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
@@ -225,7 +242,18 @@ func (c *recordClient) ListAllFiles(ctx context.Context, recordName *name.Record
 }
 
 func (c *recordClient) ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesWithPaginationAndFilter(ctx, recordName, pageSize, skip, "")
+}
+
+func (c *recordClient) ListFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesWithPaginationAndFilter(ctx, recordName, pageSize, skip, additionalFilter)
+}
+
+func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
 	filter := "recursive=\"true\""
+	if additionalFilter != "" {
+		filter += " AND " + additionalFilter
+	}
 
 	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
 		Parent:   recordName.String(),
