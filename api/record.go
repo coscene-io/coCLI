@@ -170,15 +170,9 @@ func (c *recordClient) Copy(ctx context.Context, recordName *name.Record, target
 
 func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error {
 	copyPairs := lo.Map(files, func(file *openv1alpha1resource.File, _ int) *openv1alpha1service.CopyFilesRequest_CopyPair {
-		srcFileName, _ := name.NewFile(file.Name)
-		dstFileName := name.File{
-			ProjectID: dstRecordName.ProjectID,
-			RecordID:  dstRecordName.RecordID,
-			Filename:  srcFileName.Filename,
-		}
 		return &openv1alpha1service.CopyFilesRequest_CopyPair{
-			SrcFile: srcFileName.String(),
-			DstFile: dstFileName.String(),
+			SrcFile: file.GetFilename(),
+			DstFile: file.GetFilename(),
 		}
 	})
 
@@ -187,14 +181,20 @@ func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record
 		Destination: dstRecordName.String(),
 		CopyPairs:   copyPairs,
 	})
+
 	res, err := c.fileServiceClient.CopyFiles(ctx, req)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("successfully copied files number: %d\n", len(res.Msg.Files))
-	fmt.Printf("failed to copy files number: %d\n", len(files)-len(res.Msg.Files))
-	if len(res.Msg.Files) != len(files) {
-		return errors.Errorf("unexpected number of files in response: %d", len(res.Msg.Files))
+	// TODO: The matrix server did not handle the copied files in the response correctly.
+	// 	 We will be able to check the Files field after the server is updated.
+	if res.Msg != nil {
+		if res.Msg.Files != nil && len(res.Msg.Files) == len(files) {
+			// Server returned copied files in response (ideal case)
+			return nil
+		}
+		// Server did not return copied files in response (current behavior)
+		return nil
 	}
 	return nil
 }
