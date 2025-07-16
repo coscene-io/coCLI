@@ -93,6 +93,10 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
+	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
+	cmd.Flags().BoolVar(&uploadManagerOpts.TTY, "tty", false, "force interactive mode even in headless environments")
+
+	cmd.MarkFlagsMutuallyExclusive("no-tty", "tty")
 
 	return cmd
 }

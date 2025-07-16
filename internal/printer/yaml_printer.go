@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2025 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,28 +15,33 @@
 package printer
 
 import (
+	"encoding/json"
 	"io"
 
 	"github.com/coscene-io/cocli/internal/printer/printable"
-	"github.com/coscene-io/cocli/internal/printer/table"
+	"google.golang.org/protobuf/encoding/protojson"
+	"gopkg.in/yaml.v3"
 )
 
-type Interface interface {
-	// PrintObj prints the object to the writer.
-	PrintObj(obj printable.Interface, w io.Writer) error
-}
+type YAMLPrinter struct{}
 
-type Options struct {
-	TableOpts *table.PrintOpts
-}
-
-func Printer(format string, opts *Options) Interface {
-	switch format {
-	case "json":
-		return &JSONPrinter{}
-	case "yaml":
-		return &YAMLPrinter{}
-	default:
-		return &TablePrinter{Opts: opts.TableOpts}
+func (p *YAMLPrinter) PrintObj(obj printable.Interface, w io.Writer) error {
+	// First convert proto message to JSON
+	jsonBytes, err := protojson.MarshalOptions{
+		UseProtoNames: true,
+	}.Marshal(obj.ToProtoMessage())
+	if err != nil {
+		return err
 	}
+
+	// Convert JSON to map for YAML marshaling
+	var data interface{}
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return err
+	}
+
+	// Marshal to YAML
+	encoder := yaml.NewEncoder(w)
+	encoder.SetIndent(2)
+	return encoder.Encode(data)
 }

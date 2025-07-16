@@ -45,14 +45,6 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// Confirm deletion.
-			if !force {
-				if confirmed := prompts.PromptYN("Are you sure you want to delete the record?"); !confirmed {
-					fmt.Println("Delete record aborted.")
-					return
-				}
-			}
-
 			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
@@ -60,6 +52,14 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
+			}
+
+			// Confirm deletion.
+			if !force {
+				if confirmed := prompts.PromptYN("Are you sure you want to delete the record?"); !confirmed {
+					fmt.Println("Delete record aborted.")
+					return
+				}
 			}
 
 			// Delete record.
