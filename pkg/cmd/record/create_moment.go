@@ -202,8 +202,6 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 
 	_ = cmd.MarkFlagRequired("display-name")
 	_ = cmd.MarkFlagRequired("duration")
-	_ = cmd.MarkFlagRequired("description")
-	_ = cmd.MarkFlagRequired("customized-fields")
 	_ = cmd.MarkFlagRequired("trigger-time")
 	return cmd
 }
