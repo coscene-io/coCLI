@@ -15,10 +15,12 @@
 package printable
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -76,6 +78,16 @@ func (r *RecordWithMetadata) ToProtoMessage() proto.Message {
 			recordStruct.Fields["labels"] = structpb.NewListValue(&structpb.ListValue{Values: labelList})
 		}
 
+		// Add custom field values
+		if len(r.Record.CustomFieldValues) > 0 {
+			customFieldValues := make([]*structpb.Value, 0, len(r.Record.CustomFieldValues))
+			for _, customFieldValue := range r.Record.CustomFieldValues {
+				customFieldStruct, _ := getCustomFieldStruct(customFieldValue)
+				customFieldValues = append(customFieldValues, structpb.NewStructValue(customFieldStruct))
+			}
+			recordStruct.Fields["custom_field_values"] = structpb.NewListValue(&structpb.ListValue{Values: customFieldValues})
+		}
+
 		// Add times
 		if r.Record.CreateTime != nil {
 			recordStruct.Fields["create_time"] = structpb.NewStringValue(r.Record.CreateTime.AsTime().Format(time.RFC3339))
@@ -91,6 +103,66 @@ func (r *RecordWithMetadata) ToProtoMessage() proto.Message {
 	}
 
 	return recordStruct
+}
+
+func getCustomFieldStruct(customFieldValue *commons.CustomFieldValue) (*structpb.Struct, error) {
+	switch customFieldValue.Property.GetType().(type) {
+	case *commons.Property_Text:
+		return structpb.NewStruct(map[string]interface{}{
+			"property": customFieldValue.Property.Name,
+			"value":    customFieldValue.GetText().Value,
+		})
+	case *commons.Property_Number:
+		return structpb.NewStruct(map[string]interface{}{
+			"property": customFieldValue.Property.Name,
+			"value":    customFieldValue.GetNumber().Value,
+		})
+	case *commons.Property_Enums:
+		if customFieldValue.Property.GetEnums().Multiple {
+			enumNames := lo.Map(customFieldValue.GetEnums().Ids, func(id string, _ int) string {
+				if v, ok := customFieldValue.Property.GetEnums().Values[id]; ok {
+					return v
+				}
+				// Fallback to id if display name not found
+				return id
+			})
+			return structpb.NewStruct(map[string]interface{}{
+				"property": customFieldValue.Property.Name,
+				"value":    strings.Join(enumNames, ", "),
+			})
+		} else {
+			var enumName string
+			if v, ok := customFieldValue.Property.GetEnums().Values[customFieldValue.GetEnums().Id]; ok {
+				enumName = v
+			} else {
+				// Fallback to id if display name not found
+				enumName = customFieldValue.GetEnums().Id
+			}
+			return structpb.NewStruct(map[string]interface{}{
+				"property": customFieldValue.Property.Name,
+				"value":    enumName,
+			})
+		}
+	case *commons.Property_Time:
+		return structpb.NewStruct(map[string]interface{}{
+			"property": customFieldValue.Property.Name,
+			"value":    customFieldValue.GetTime().Value.AsTime().Format(time.RFC3339),
+		})
+	case *commons.Property_User:
+		if customFieldValue.Property.GetUser().Multiple {
+			return structpb.NewStruct(map[string]interface{}{
+				"property": customFieldValue.Property.Name,
+				"value":    strings.Join(customFieldValue.GetUser().Ids, ", "),
+			})
+		} else {
+			return structpb.NewStruct(map[string]interface{}{
+				"property": customFieldValue.Property.Name,
+				"value":    customFieldValue.GetUser().Ids[0],
+			})
+		}
+	default:
+		return nil, errors.New("unknown custom field type")
+	}
 }
 
 // ToTable implements the table output format
@@ -118,6 +190,18 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 				return l.DisplayName
 			})
 			rows = append(rows, []string{"Labels:", strings.Join(labels, ", ")})
+		}
+
+		// Custom field values
+		if len(r.Record.CustomFieldValues) > 0 {
+			customFieldValues := make([]*structpb.Value, 0, len(r.Record.CustomFieldValues))
+			for _, customFieldValue := range r.Record.CustomFieldValues {
+				customFieldStruct, _ := getCustomFieldStruct(customFieldValue)
+				customFieldValues = append(customFieldValues, structpb.NewStructValue(customFieldStruct))
+			}
+			rows = append(rows, []string{"Custom Field Values:", strings.Join(lo.Map(customFieldValues, func(c *structpb.Value, _ int) string {
+				return fmt.Sprintf("(%s: %v)", c.AsInterface().(map[string]any)["property"].(string), c.AsInterface().(map[string]any)["value"])
+			}), ", ")})
 		}
 
 		// Times
