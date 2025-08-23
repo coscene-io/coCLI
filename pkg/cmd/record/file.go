@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
@@ -29,6 +28,7 @@ import (
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -276,71 +276,11 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 					log.Fatalf("failed to list source files: %v", err)
 				}
 			} else if len(fileNames) > 0 {
-				// Get all files first, then filter by exact filename matches or directory prefixes
-				sourceFiles, err := pm.RecordCli().ListAllFiles(context.TODO(), sourceRecordName)
-				if err != nil {
-					log.Fatalf("failed to list source files: %v", err)
-				}
-
-				// Create collections for requested exact filenames and directory prefixes
-				requestedFiles := make(map[string]bool)
-				requestedDirs := make([]string, 0)
-				dirFound := make(map[string]bool)
-				for _, filenameArg := range fileNames {
-					// Split by comma in case user provided "file1,file2" format
-					individualFiles := []string{filenameArg}
-					if strings.Contains(filenameArg, ",") {
-						individualFiles = strings.Split(filenameArg, ",")
+				allFiles = lo.Map(fileNames, func(fileName string, _ int) *openv1alpha1resource.File {
+					return &openv1alpha1resource.File{
+						Filename: fileName,
 					}
-
-					for _, filename := range individualFiles {
-						filename = strings.TrimSpace(filename)
-						if filename != "" {
-							if strings.HasSuffix(filename, "/") {
-								requestedDirs = append(requestedDirs, filename)
-								dirFound[filename] = false
-							} else {
-								requestedFiles[filename] = true
-							}
-						}
-					}
-				}
-
-				// Match exact files and mark directories that contain files
-				for _, file := range sourceFiles {
-					if requestedFiles[file.Filename] {
-						allFiles = append(allFiles, file)
-						delete(requestedFiles, file.Filename)
-						continue
-					}
-					for _, dir := range requestedDirs {
-						if strings.HasPrefix(file.Filename, dir) {
-							dirFound[dir] = true
-							break
-						}
-					}
-				}
-
-				// Add one entry per requested directory that exists; pass directory path directly to server
-				for dir, found := range dirFound {
-					if found {
-						allFiles = append(allFiles, &openv1alpha1resource.File{Filename: dir})
-					}
-				}
-
-				// Report any requested files that weren't found
-				var missing []string
-				for filename := range requestedFiles {
-					missing = append(missing, filename)
-				}
-				for dir, found := range dirFound {
-					if !found {
-						missing = append(missing, dir)
-					}
-				}
-				if len(missing) > 0 {
-					log.Fatalf("the following paths were not found in source record: %v", missing)
-				}
+				})
 			} else {
 				log.Fatalf("either --all or --files must be specified")
 			}
