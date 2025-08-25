@@ -31,13 +31,12 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 	var (
 		projectSlug = ""
 		dstProject  = ""
-		dstRecord   = ""
 		force       = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "copy <record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [-R <dst-record-name/id>] [-f]",
-		Short:                 "Copy a record to target project/record",
+		Use:                   "copy <record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [-f]",
+		Short:                 "Copy a record to target project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -60,31 +59,26 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 			}
 			var (
 				dstProjectName *name.Project
-				dstRecordName  *name.Record
 			)
 			if len(dstProject) != 0 {
 				dstProjectName, err = pm.ProjectName(context.TODO(), dstProject)
 				if err != nil {
 					log.Fatalf("failed to get destination project name: %v", err)
 				}
-			}
-
-			if len(dstRecord) != 0 {
-				dstRecordName, err = pm.RecordCli().RecordId2Name(context.TODO(), dstRecord, proj)
-				if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-					fmt.Printf("failed to find destination record: %s in project: %s\n", dstRecord, proj)
-					return
-				} else if err != nil {
-					log.Fatalf("unable to get destination record name from %s: %v", dstRecord, err)
+			} else {
+				if len(projectSlug) != 0 {
+					dstProject = projectSlug
+				} else {
+					dstProject = pm.GetCurrentProfile().ProjectSlug
 				}
+				dstProjectName = proj
 			}
 
 			// Show operation and confirm
 			if len(dstProject) != 0 {
-				fmt.Printf("Will copy entire record %s to project %s\n", recordName.String(), dstProject)
-			}
-			if len(dstRecord) != 0 {
-				fmt.Printf("Will copy all files from %s to %s\n", recordName.String(), dstRecordName.String())
+				fmt.Printf("Will copy entire record %s to project %s\n", recordName.RecordID, dstProject)
+			} else {
+				fmt.Printf("Will copy entire record %s to current project %s\n", recordName.RecordID, dstProject)
 			}
 
 			if !force {
@@ -106,42 +100,6 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 				copiedRecordName, _ = name.NewRecord(copied.Name)
 			}
 
-			if len(dstRecord) != 0 {
-				// List all files to copy from source record.
-				filesToCopy, err := pm.RecordCli().ListAllFiles(context.TODO(), recordName)
-				if err != nil {
-					log.Fatalf("failed to list files: %v", err)
-				}
-
-				if len(filesToCopy) == 0 {
-					fmt.Println("No files to copy.")
-					return
-				}
-
-				// Show confirmation
-				if !force {
-					fmt.Printf("About to copy %d files from %s to %s.\n", len(filesToCopy), recordName, dstRecordName)
-					for _, file := range filesToCopy {
-						fmt.Printf("  - %s\n", file.Filename)
-					}
-
-					yn := prompts.PromptYN("Do you want to continue?")
-					if !yn {
-						fmt.Println("Copy operation cancelled.")
-						return
-					}
-				}
-
-				// Perform the copy operation
-				err = pm.RecordCli().CopyFiles(context.TODO(), recordName, dstRecordName, filesToCopy)
-				if err != nil {
-					log.Fatalf("failed to copy files: %v", err)
-				}
-
-				fmt.Printf("Successfully copied %d files to %s.\n", len(filesToCopy), dstRecordName)
-				copiedRecordName = dstRecordName
-			}
-
 			copiedRecordUrl, err := pm.GetRecordUrl(copiedRecordName)
 			if err != nil {
 				log.Errorf("unable to get record url: %v", err)
@@ -153,10 +111,7 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&dstProject, "dst-project", "P", "", "destination project slug")
-	cmd.Flags().StringVarP(&dstRecord, "dst-record", "R", "", "destination record name")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force copy without confirmation")
-
-	cmd.MarkFlagsMutuallyExclusive("dst-project", "dst-record")
 
 	return cmd
 }
