@@ -15,17 +15,18 @@
 package api
 
 import (
-	"context"
-	"fmt"
-	"strings"
+    "context"
+    "fmt"
+    "strings"
 
-	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
-	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
-	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
-	"connectrpc.com/connect"
-	"github.com/coscene-io/cocli/internal/constants"
-	"github.com/coscene-io/cocli/internal/name"
-	"github.com/samber/lo"
+    openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+    openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
+    openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+    openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
+    "connectrpc.com/connect"
+    "github.com/coscene-io/cocli/internal/constants"
+    "github.com/coscene-io/cocli/internal/name"
+    "github.com/samber/lo"
 )
 
 type ActionInterface interface {
@@ -116,17 +117,15 @@ func (c *actionClient) filter(opt *ListActionsOptions) string {
 }
 
 func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error {
-	req := connect.NewRequest(&openv1alpha1service.CreateActionRunRequest{
-		Parent: record.Project().String(),
-		ActionRun: &openv1alpha1resource.ActionRun{
-			Action: action,
-			Records: []*openv1alpha1resource.Record{
-				{
-					Name: record.String(),
-				},
-			},
-		},
-	})
+    req := connect.NewRequest(&openv1alpha1service.CreateActionRunRequest{
+        Parent: record.Project().String(),
+        ActionRun: &openv1alpha1resource.ActionRun{
+            Action: action,
+            Match: &openv1alpha1commons.TriggerMatch{
+                Records: []string{record.String()},
+            },
+        },
+    })
 	_, err := c.actionRunServiceClient.CreateActionRun(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to create action run: %w", err)
