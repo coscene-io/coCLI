@@ -35,24 +35,24 @@ import (
 // Note that if Org is set, then Token is authorized
 // If ProjectName is set, then ProjectSlug is authorized and validated
 type Profile struct {
-	Name             string `koanf:"name"`
-	EndPoint         string `koanf:"endpoint"`
-	Token            string `koanf:"token"`
-	Org              string `koanf:"org"`
-	ProjectSlug      string `koanf:"project"`
-	ProjectName      string `koanf:"project-name"`
-	cliOnce          sync.Once
-	orgcli           api.OrganizationInterface
-	projcli          api.ProjectInterface
-	rcdcli           api.RecordInterface
-	lblcli           api.LabelInterface
-	usercli          api.UserInterface
-	filecli          api.FileInterface
-	actioncli        api.ActionInterface
-	securitytokencli api.SecurityTokenInterface
-	eventcli         api.EventInterface
-    taskcli              api.TaskInterface
-    containerregistrycli api.ContainerRegistryInterface
+	Name                 string `koanf:"name"`
+	EndPoint             string `koanf:"endpoint"`
+	Token                string `koanf:"token"`
+	Org                  string `koanf:"org"`
+	ProjectSlug          string `koanf:"project"`
+	ProjectName          string `koanf:"project-name"`
+	cliOnce              sync.Once
+	orgcli               api.OrganizationInterface
+	projcli              api.ProjectInterface
+	rcdcli               api.RecordInterface
+	lblcli               api.LabelInterface
+	usercli              api.UserInterface
+	filecli              api.FileInterface
+	actioncli            api.ActionInterface
+	securitytokencli     api.SecurityTokenInterface
+	eventcli             api.EventInterface
+	taskcli              api.TaskInterface
+	containerregistrycli api.ContainerRegistryInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
@@ -207,50 +207,50 @@ func (p *Profile) EventCli() api.EventInterface {
 
 // TaskCli return task api interface used profile.
 func (p *Profile) TaskCli() api.TaskInterface {
-    p.initCli()
-    return p.taskcli
+	p.initCli()
+	return p.taskcli
 }
 
 // ContainerRegistryCli returns container registry api interface used by profile.
 func (p *Profile) ContainerRegistryCli() api.ContainerRegistryInterface {
-    p.initCli()
-    return p.containerregistrycli
+	p.initCli()
+	return p.containerregistrycli
 }
 
 // initCli initializes the api clients for the profile.
 // This function is ensured to be called only once.
 func (p *Profile) initCli() {
-    p.cliOnce.Do(func() {
-        conncli := api_utils.NewConnectClient()
-        interceptorsFactory := func() connect.Option {
-            return connect.WithInterceptors(api_utils.AuthInterceptor(p.Token), api_utils.UnaryRetryInterceptor(3))
-        }
+	p.cliOnce.Do(func() {
+		conncli := api_utils.NewConnectClient()
+		interceptorsFactory := func() connect.Option {
+			return connect.WithInterceptors(api_utils.AuthInterceptor(p.Token), api_utils.UnaryRetryInterceptor(3))
+		}
 
-        var (
-            actionServiceClient        = openv1alpha1connect.NewActionServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            actionRunServiceClient     = openv1alpha1connect.NewActionRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            eventServiceClient         = openv1alpha1connect.NewEventServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            organizationServiceClient  = openv1alpha1connect.NewOrganizationServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            projectServiceClient       = openv1alpha1connect.NewProjectServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            recordServiceClient        = openv1alpha1connect.NewRecordServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            fileServiceClient          = openv1alpha1connect.NewFileServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            labelServiceClient         = openv1alpha1connect.NewLabelServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            taskServiceClient          = openv1alpha1connect.NewTaskServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            userServiceClient          = openv1alpha1connect.NewUserServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            securityTokenServiceClient = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-            containerRegistryServiceClient = openv1alpha1connect.NewContainerRegistryServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-        )
+		var (
+			actionServiceClient            = openv1alpha1connect.NewActionServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			actionRunServiceClient         = openv1alpha1connect.NewActionRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			eventServiceClient             = openv1alpha1connect.NewEventServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			organizationServiceClient      = openv1alpha1connect.NewOrganizationServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			projectServiceClient           = openv1alpha1connect.NewProjectServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			recordServiceClient            = openv1alpha1connect.NewRecordServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			fileServiceClient              = openv1alpha1connect.NewFileServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			labelServiceClient             = openv1alpha1connect.NewLabelServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			taskServiceClient              = openv1alpha1connect.NewTaskServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			userServiceClient              = openv1alpha1connect.NewUserServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			securityTokenServiceClient     = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			containerRegistryServiceClient = openv1alpha1connect.NewContainerRegistryServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+		)
 
-        p.orgcli = api.NewOrganizationClient(organizationServiceClient)
-        p.projcli = api.NewProjectClient(projectServiceClient)
-        p.rcdcli = api.NewRecordClient(recordServiceClient, fileServiceClient, userServiceClient, labelServiceClient)
-        p.lblcli = api.NewLabelClient(labelServiceClient)
-        p.usercli = api.NewUserClient(userServiceClient)
-        p.filecli = api.NewFileClient(fileServiceClient)
-        p.actioncli = api.NewActionClient(actionServiceClient, actionRunServiceClient)
-        p.securitytokencli = api.NewSecurityTokenClient(securityTokenServiceClient)
-        p.eventcli = api.NewEventClient(eventServiceClient)
-        p.taskcli = api.NewTaskClient(taskServiceClient)
-        p.containerregistrycli = api.NewContainerRegistryClient(containerRegistryServiceClient)
-    })
+		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
+		p.projcli = api.NewProjectClient(projectServiceClient)
+		p.rcdcli = api.NewRecordClient(recordServiceClient, fileServiceClient, userServiceClient, labelServiceClient)
+		p.lblcli = api.NewLabelClient(labelServiceClient)
+		p.usercli = api.NewUserClient(userServiceClient)
+		p.filecli = api.NewFileClient(fileServiceClient)
+		p.actioncli = api.NewActionClient(actionServiceClient, actionRunServiceClient)
+		p.securitytokencli = api.NewSecurityTokenClient(securityTokenServiceClient)
+		p.eventcli = api.NewEventClient(eventServiceClient)
+		p.taskcli = api.NewTaskClient(taskServiceClient)
+		p.containerregistrycli = api.NewContainerRegistryClient(containerRegistryServiceClient)
+	})
 }
