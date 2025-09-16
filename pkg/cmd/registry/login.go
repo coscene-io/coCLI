@@ -86,8 +86,8 @@ func inferRegistryHost(endpoint, override string) (string, error) {
 		return "cr.dev.coscene.cn", nil
 	}
 
-	if strings.HasPrefix(host, "openapi.") {
-		return "cr." + strings.TrimPrefix(host, "openapi."), nil
+	if after, found := strings.CutPrefix(host, "openapi."); found {
+		return "cr." + after, nil
 	}
 
 	return "", fmt.Errorf("unable to infer registry host from endpoint '%s'; please specify --registry", endpoint)
