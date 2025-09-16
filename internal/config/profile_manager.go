@@ -142,7 +142,12 @@ func (pm *ProfileManager) EventCli() api.EventInterface {
 
 // TaskCli return task client of current profile.
 func (pm *ProfileManager) TaskCli() api.TaskInterface {
-	return pm.GetCurrentProfile().TaskCli()
+    return pm.GetCurrentProfile().TaskCli()
+}
+
+// ContainerRegistryCli return container registry client of current profile.
+func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface {
+    return pm.GetCurrentProfile().ContainerRegistryCli()
 }
 
 // GetCurrentProfile return current profile of profile manager.
