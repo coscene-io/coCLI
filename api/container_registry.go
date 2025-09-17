@@ -15,34 +15,33 @@
 package api
 
 import (
-    "context"
+	"context"
 
-    openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
-    openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
-    "connectrpc.com/connect"
+	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
+	"connectrpc.com/connect"
 )
 
 // ContainerRegistryInterface defines APIs for container registry operations.
 type ContainerRegistryInterface interface {
-    // CreateBasicCredential creates a basic docker credential (username+password).
-    CreateBasicCredential(ctx context.Context) (*openv1alpha1service.BasicCredential, error)
+	// CreateBasicCredential creates a basic docker credential (username+password).
+	CreateBasicCredential(ctx context.Context) (*openv1alpha1service.BasicCredential, error)
 }
 
 type containerRegistryClient struct {
-    cli openv1alpha1connect.ContainerRegistryServiceClient
+	cli openv1alpha1connect.ContainerRegistryServiceClient
 }
 
 // NewContainerRegistryClient creates a new container registry client.
 func NewContainerRegistryClient(cli openv1alpha1connect.ContainerRegistryServiceClient) ContainerRegistryInterface {
-    return &containerRegistryClient{cli: cli}
+	return &containerRegistryClient{cli: cli}
 }
 
 func (c *containerRegistryClient) CreateBasicCredential(ctx context.Context) (*openv1alpha1service.BasicCredential, error) {
-    req := connect.NewRequest(&openv1alpha1service.CreateBasicCredentialRequest{})
-    resp, err := c.cli.CreateBasicCredential(ctx, req)
-    if err != nil {
-        return nil, err
-    }
-    return resp.Msg, nil
+	req := connect.NewRequest(&openv1alpha1service.CreateBasicCredentialRequest{})
+	resp, err := c.cli.CreateBasicCredential(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
 }
-
