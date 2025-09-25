@@ -1,5 +1,5 @@
 FILE_IGNORES := $(FILE_IGNORES) \
-	.vscode/ .DS_Store .idea/ bin/
+	.vscode/ .DS_Store .idea/ bin/ .cache/
 
 GO_ALL_REPO_PKGS := ./cmd/... ./internal/... ./pkg/... ./api/...
 GO_BINS := $(GO_BINS) \
