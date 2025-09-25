@@ -80,6 +80,8 @@ func inferRegistryHost(endpoint, override string) (string, error) {
 	switch host {
 	case "openapi.coscene.cn":
 		return "cr.coscene.cn", nil
+	case "openapi.coscene.io":
+		return "cr.coscene.io", nil
 	case "openapi.staging.coscene.cn":
 		return "cr.staging.coscene.cn", nil
 	case "openapi.api.coscene.dev", "api.dev.coscene.cn":
