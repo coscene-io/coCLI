@@ -70,7 +70,7 @@ jobs:
           cp bin/cocli bin/cocli-oversea-${{ matrix.os }}-${{ matrix.arch }}
 
       - name: Upload release artifact (oversea)
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: bin/cocli-oversea-${{ matrix.os }}-${{ matrix.arch }}
