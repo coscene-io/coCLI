@@ -5,6 +5,8 @@ set -u
 
 VERSION="latest"
 FILE_NAME="cocli"
+DEFAULT_DOWNLOAD_BASE_URL="https://download.coscene.cn/"
+DOWNLOAD_BASE_URL="${COCLI_DOWNLOAD_BASE_URL:-$DEFAULT_DOWNLOAD_BASE_URL}"
 
 if [ $# -eq 1 ]; then
     VERSION=$1
@@ -12,6 +14,7 @@ if [ $# -eq 1 ]; then
 else
     echo "Downloading the latest version of coScene CLI..."
 fi
+echo "Using download base: $DOWNLOAD_BASE_URL"
 echo ""
 
 if uname -s | grep -q -i "darwin"; then
@@ -40,7 +43,7 @@ else
     echo "Unsupported OS: $(uname -s)"
     exit 1
 fi
-URL="https://download.coscene.cn/cocli/${VERSION}/${CLI_OS}-${ARCH}.gz"
+URL="${DOWNLOAD_BASE_URL%/}/cocli/${VERSION}/${CLI_OS}-${ARCH}.gz"
 echo "Downloading from: $URL"
 curl -XGET "$URL" > $FILE_NAME.gz
 gzip -d $FILE_NAME.gz

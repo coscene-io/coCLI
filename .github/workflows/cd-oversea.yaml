@@ -87,6 +87,12 @@ jobs:
       - name: gzip cocli
         run: gzip -f cocli
 
+      - name: Prepare install script
+        run: |
+          cp scripts/install.sh install.sh
+          chmod +x install.sh
+          sed -i 's#DEFAULT_DOWNLOAD_BASE_URL="https://download.coscene.cn/"#DEFAULT_DOWNLOAD_BASE_URL="https://download.coscene.io/"#' install.sh
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -98,9 +104,12 @@ jobs:
       - name: Upload cocli to GCS corresponding version
         run: |
           gsutil cp cocli.gz gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/$TAG_NAME/${{ matrix.os }}-${{ matrix.arch }}.gz
+          gsutil cp install.sh gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/$TAG_NAME/install.sh
+          gsutil cp install.sh gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/install.sh
 
       - name: Upload cocli to GCS latest
         if: env.IS_RELEASE == 'true'
         run: |
           gsutil cp cocli.gz gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/latest/${{ matrix.os }}-${{ matrix.arch }}.gz
           gsutil cp ${{ matrix.os }}-${{ matrix.arch }}.json gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/${{ matrix.os }}-${{ matrix.arch }}.json
+          gsutil cp install.sh gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/install.sh
