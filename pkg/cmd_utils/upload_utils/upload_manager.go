@@ -227,7 +227,9 @@ func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *Fi
 	go func() {
 		for {
 			msg := <-um.progressCh
-			um.fileInfos[msg.Path].Uploaded += msg.UploadedInc
+			if status, ok := um.fileInfos[msg.Path]; ok && status != nil {
+				status.Uploaded += msg.UploadedInc
+			}
 		}
 	}()
 
@@ -889,7 +891,10 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 
 // calculateUploadProgress is used to calculate the progress of a file upload
 func (um *UploadManager) calculateUploadProgress(name string) float64 {
-	status := um.fileInfos[name]
+	status, ok := um.fileInfos[name]
+	if !ok || status == nil {
+		return 0
+	}
 	if status.Size == 0 {
 		return 100
 	}
@@ -923,9 +928,14 @@ func (um *UploadManager) View() string {
 	successCount := 0
 	spinnerFrame := spinnerFrames[um.spinnerIdx]
 	for _, k := range um.fileList {
+		status, ok := um.fileInfos[k]
+		if !ok || status == nil {
+			s += fmt.Sprintf("%s:%*s\n", k, um.windowWidth-len(k)-1, "Waiting for upload")
+			continue
+		}
 		// Check if the file has been uploaded before
 		statusStrLen := um.windowWidth - len(k) - 1
-		switch um.fileInfos[k].Status {
+		switch status.Status {
 		case Unprocessed:
 			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Preparing for upload"+spinnerFrame)
 		case CalculatingSha256:
