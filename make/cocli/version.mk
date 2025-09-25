@@ -16,7 +16,9 @@ endif
 override LDFLAGS += \
   -X github.com/coscene-io/cocli.version=$(VERSION) \
   -X github.com/coscene-io/cocli.gitCommit=${GIT_COMMIT} \
-  -X github.com/coscene-io/cocli.gitTreeState=${GIT_TREE_STATE}
+  -X github.com/coscene-io/cocli.gitTreeState=${GIT_TREE_STATE} \
+  -X github.com/coscene-io/cocli/internal/constants.DownloadBaseUrl=$(COCLI_DOWNLOAD_BASE_URL) \
+  -X github.com/coscene-io/cocli/internal/constants.BaseApiEndpoint=$(COCLI_API_ENDPOINT)
 
 ifneq ($(GIT_TAG),)
 override LDFLAGS += -X github.com/coscene-io/cocli.gitTag=${GIT_TAG}
