@@ -1,15 +1,13 @@
 name: CD Oversea
+# Pretty much mirrors CD.yaml but with GCS bucket
+# Upload everything to GCS Bucket CNAMEed to
+# https://download.coscene.io
 
 on:
   release:
     types:
       - released
       - prereleased
-  # 添加 push tags 触发器
-  push:
-    tags:
-      - "v*.*.*"
-      - "v*.*.*-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
