@@ -104,7 +104,6 @@ jobs:
       - name: Upload cocli to GCS corresponding version
         run: |
           gsutil cp cocli.gz gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/$TAG_NAME/${{ matrix.os }}-${{ matrix.arch }}.gz
-          gsutil cp install.sh gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/$TAG_NAME/install.sh
           gsutil cp install.sh gs://$GCP_DOWNLOAD_BUCKET_NAME/cocli/install.sh
 
       - name: Upload cocli to GCS latest
