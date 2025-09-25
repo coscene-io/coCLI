@@ -5,9 +5,11 @@ on:
     types:
       - released
       - prereleased
-  pull_request:
-    branches:
-      - dev
+  # 添加 push tags 触发器
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
