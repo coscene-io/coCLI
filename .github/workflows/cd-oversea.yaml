@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: write
     env:
-      GCP_DOWNLOAD_BUCKET_NAME: ${{ vars.GCP_DOWNLOAD_BUCKET_NAME }}
+      GCP_DOWNLOAD_BUCKET_NAME: ${{ secrets.GCP_DOWNLOAD_BUCKET_NAME }}
     steps:
       - name: Determine version
         run: |
