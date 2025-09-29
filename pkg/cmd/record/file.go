@@ -222,12 +222,11 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 		projectSlug    = ""
 		dstProjectSlug = ""
 		fileNames      []string
-		copyAll        = false
 		force          = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "copy <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [--all] [-f]",
+		Use:                   "copy <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [-f]",
 		Short:                 "Copy files from one record to another",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -269,13 +268,7 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 
 			// Determine which files to copy
 			var allFiles []*openv1alpha1resource.File
-			if copyAll {
-				// Get all files from source record
-				allFiles, err = pm.RecordCli().ListAllFiles(context.TODO(), sourceRecordName)
-				if err != nil {
-					log.Fatalf("failed to list source files: %v", err)
-				}
-			} else if len(fileNames) > 0 {
+			if len(fileNames) > 0 {
 				allFiles = lo.Map(fileNames, func(fileName string, _ int) *openv1alpha1resource.File {
 					return &openv1alpha1resource.File{
 						Filename: fileName,
@@ -325,10 +318,7 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&dstProjectSlug, "dst-project", "P", "", "destination project slug (defaults to source project)")
 	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "exact filenames to copy (can specify multiple, comma-separated)")
-	cmd.Flags().BoolVar(&copyAll, "all", false, "copy all files from source record")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force copy without confirmation")
-
-	cmd.MarkFlagsMutuallyExclusive("files", "all")
 
 	return cmd
 }
