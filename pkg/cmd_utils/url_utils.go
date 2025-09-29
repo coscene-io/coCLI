@@ -29,7 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
+var (
 	retryWaitMin = 1 * time.Second
 	retryWaitMax = 5 * time.Second
 )
@@ -80,15 +80,15 @@ func DownloadFileThroughUrl(file string, downloadUrl string, maxRetries int) err
 		return errors.Wrapf(err, "unable to create directories for file %v", file)
 	}
 
-	fileWriter, err := os.Create(file)
-	if err != nil {
-		return errors.Wrapf(err, "unable to open file %v for writing", file)
-	}
-	defer func() { _ = fileWriter.Close() }()
-
 	var attempt int
 
 	operation := func() error {
+		fileWriter, createErr := os.Create(file)
+		if createErr != nil {
+			return errors.Wrapf(createErr, "unable to open file %v for writing", file)
+		}
+		defer func() { _ = fileWriter.Close() }()
+
 		opErr := downloadWithFileWriter(fileWriter, downloadUrl, attempt)
 		if opErr != nil {
 			retryPrefix := ""
@@ -124,6 +124,10 @@ func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) 
 		return errors.Wrapf(err, "unable to get file from url %v", downloadUrl)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return errors.Wrapf(fmt.Errorf("status code %d", resp.StatusCode), "unable to get file from url %v", downloadUrl)
+	}
 
 	progress := &Progress{
 		PrintPrefix: "File download in progress",
