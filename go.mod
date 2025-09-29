@@ -1,6 +1,6 @@
 module github.com/coscene-io/cocli
 
-go 1.23.2
+go 1.25.0
 
 require (
 	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.18.1-20250915074700-e5499cd30e76.1

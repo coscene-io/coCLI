@@ -21,7 +21,6 @@ import (
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
-	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
@@ -64,7 +63,7 @@ type CreateProjectUsingTemplateOptions struct {
 	Slug            string
 	DisplayName     string
 	ProjectTemplate string
-	TemplateScopes  []services.CreateProjectUsingTemplateRequest_TemplateScope
+	TemplateScopes  []openv1alpha1service.CreateProjectUsingTemplateRequest_TemplateScope
 	Visibility      enums.ProjectVisibilityEnum_ProjectVisibility
 	Description     string
 }
