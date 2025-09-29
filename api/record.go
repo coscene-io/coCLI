@@ -42,8 +42,14 @@ type RecordInterface interface {
 	// Copy copies a record to target project.
 	Copy(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
 
+	// Move moves a record to target project.
+	Move(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
+
 	// CopyFiles copies files from src record to dst record.
 	CopyFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error
+
+	// MoveFiles moves files from src record to dst record.
+	MoveFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error
 
 	// ListAllFiles lists all files in a record.
 	ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error)
@@ -194,6 +200,53 @@ func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record
 			return nil
 		}
 		// Server did not return copied files in response (current behavior)
+		return nil
+	}
+	return nil
+}
+
+func (c *recordClient) Move(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error) {
+	req := connect.NewRequest(&openv1alpha1service.MoveRecordsRequest{
+		Parent:      recordName.Project().String(),
+		Destination: targetProjectName.String(),
+		Records:     []string{recordName.String()},
+	})
+	resp, err := c.recordServiceClient.MoveRecords(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Msg.Records) != 1 {
+		return nil, errors.Errorf("unexpected number of records in response: %d", len(resp.Msg.Records))
+	}
+	return resp.Msg.Records[0], nil
+}
+
+func (c *recordClient) MoveFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error {
+	movePairs := lo.Map(files, func(file *openv1alpha1resource.File, _ int) *openv1alpha1service.MoveFilesRequest_MovePair {
+		return &openv1alpha1service.MoveFilesRequest_MovePair{
+			SrcFile: file.GetFilename(),
+			DstFile: file.GetFilename(),
+		}
+	})
+
+	req := connect.NewRequest(&openv1alpha1service.MoveFilesRequest{
+		Parent:      srcRecordName.String(),
+		Destination: dstRecordName.String(),
+		MovePairs:   movePairs,
+	})
+
+	res, err := c.fileServiceClient.MoveFiles(ctx, req)
+	if err != nil {
+		return err
+	}
+	// TODO: The matrix server did not handle the moved files in the response correctly.
+	// 	 We will be able to check the Files field after the server is updated.
+	if res.Msg != nil {
+		if res.Msg.Files != nil && len(res.Msg.Files) == len(files) {
+			// Server returned moved files in response (ideal case)
+			return nil
+		}
+		// Server did not return moved files in response (current behavior)
 		return nil
 	}
 	return nil
