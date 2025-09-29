@@ -26,6 +26,7 @@ import (
 	"github.com/coscene-io/cocli/pkg/cmd/login"
 	"github.com/coscene-io/cocli/pkg/cmd/project"
 	"github.com/coscene-io/cocli/pkg/cmd/record"
+	"github.com/coscene-io/cocli/pkg/cmd/registry"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -106,6 +107,7 @@ func NewCommand() *cobra.Command {
 	cmd.AddCommand(action.NewRootCommand(&cfgPath))
 	cmd.AddCommand(login.NewRootCommand(&cfgPath))
 	cmd.AddCommand(project.NewRootCommand(&cfgPath))
+	cmd.AddCommand(registry.NewRootCommand(&cfgPath))
 	cmd.AddCommand(record.NewRootCommand(&cfgPath))
 	cmd.AddCommand(NewUpdateCommand())
 

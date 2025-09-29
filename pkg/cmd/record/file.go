@@ -28,6 +28,7 @@ import (
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -40,6 +41,7 @@ func NewFileCommand(cfgPath *string) *cobra.Command {
 
 	cmd.AddCommand(NewFileListCommand(cfgPath))
 	cmd.AddCommand(NewFileDeleteCommand(cfgPath))
+	cmd.AddCommand(NewFileCopyCommand(cfgPath))
 
 	return cmd
 }
@@ -211,6 +213,122 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 
 	cmd.Flags().BoolVarP(&force, "force", "f", force, "Force delete without confirmation")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+
+	return cmd
+}
+
+func NewFileCopyCommand(cfgPath *string) *cobra.Command {
+	var (
+		projectSlug    = ""
+		dstProjectSlug = ""
+		fileNames      []string
+		copyAll        = false
+		force          = false
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "copy <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [--all] [-f]",
+		Short:                 "Copy files from one record to another",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			// Get current profile.
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			// Get working project.
+			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			// Handle args and flags.
+			sourceRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get source record name from %s: %v", args[0], err)
+			}
+
+			// Determine destination project - use dst project if specified, otherwise use source project
+			destProject := proj
+			if dstProjectSlug != "" {
+				destProject, err = pm.ProjectName(context.TODO(), dstProjectSlug)
+				if err != nil {
+					log.Fatalf("unable to get destination project name: %v", err)
+				}
+			}
+
+			destRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[1], destProject)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get destination record name from %s: %v", args[1], err)
+			}
+
+			// Determine which files to copy
+			var allFiles []*openv1alpha1resource.File
+			if copyAll {
+				// Get all files from source record
+				allFiles, err = pm.RecordCli().ListAllFiles(context.TODO(), sourceRecordName)
+				if err != nil {
+					log.Fatalf("failed to list source files: %v", err)
+				}
+			} else if len(fileNames) > 0 {
+				allFiles = lo.Map(fileNames, func(fileName string, _ int) *openv1alpha1resource.File {
+					return &openv1alpha1resource.File{
+						Filename: fileName,
+					}
+				})
+			} else {
+				log.Fatalf("either --all or --files must be specified")
+			}
+
+			if len(allFiles) == 0 {
+				fmt.Println("No files found to copy.")
+				return
+			}
+
+			// Show confirmation
+			if !force {
+				fmt.Printf("About to copy %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
+				for _, file := range allFiles {
+					fmt.Printf("  - %s\n", file.Filename)
+				}
+
+				yn := prompts.PromptYN("Do you want to continue?")
+				if !yn {
+					fmt.Println("Copy operation cancelled.")
+					return
+				}
+			}
+
+			// Perform the copy operation (server will handle authorization)
+			err = pm.RecordCli().CopyFiles(context.TODO(), sourceRecordName, destRecordName, allFiles)
+			if err != nil {
+				log.Fatalf("failed to copy files: %v", err)
+			}
+
+			fmt.Printf("Successfully copied %d files to %s.\n", len(allFiles), destRecordName)
+
+			// Display destination record URL
+			destRecordUrl, err := pm.GetRecordUrl(destRecordName)
+			if err != nil {
+				log.Errorf("unable to get destination record url: %v", err)
+			} else {
+				fmt.Printf("View copied files at: %s\n", destRecordUrl)
+			}
+		},
+	}
+
+	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringVarP(&dstProjectSlug, "dst-project", "P", "", "destination project slug (defaults to source project)")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "exact filenames to copy (can specify multiple, comma-separated)")
+	cmd.Flags().BoolVar(&copyAll, "all", false, "copy all files from source record")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force copy without confirmation")
+
+	cmd.MarkFlagsMutuallyExclusive("files", "all")
 
 	return cmd
 }

@@ -145,6 +145,11 @@ func (pm *ProfileManager) TaskCli() api.TaskInterface {
 	return pm.GetCurrentProfile().TaskCli()
 }
 
+// ContainerRegistryCli return container registry client of current profile.
+func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface {
+	return pm.GetCurrentProfile().ContainerRegistryCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {

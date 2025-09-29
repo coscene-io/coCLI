@@ -208,35 +208,11 @@ func (c *recordClient) ListAllFilesWithFilter(ctx context.Context, recordName *n
 }
 
 func (c *recordClient) listAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error) {
-	var (
-		skip = 0
-		ret  []*openv1alpha1resource.File
-	)
-
-	filter := "recursive=\"true\""
-	if additionalFilter != "" {
-		filter += " AND " + additionalFilter
+	files, err := c.listFilesCore(ctx, recordName, 0, 0, additionalFilter, true)
+	if err != nil {
+		return nil, err
 	}
-
-	for {
-		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
-			Parent:   recordName.String(),
-			PageSize: constants.MaxPageSize,
-			Skip:     int32(skip),
-			Filter:   filter,
-		})
-		res, err := c.fileServiceClient.ListFiles(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list files at skip %d: %w", skip, err)
-		}
-		if len(res.Msg.Files) == 0 {
-			break
-		}
-		ret = append(ret, res.Msg.Files...)
-		skip += constants.MaxPageSize
-	}
-
-	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
+	return lo.Filter(files, func(file *openv1alpha1resource.File, _ int) bool {
 		return !strings.HasSuffix(file.Filename, "/")
 	}), nil
 }
@@ -250,9 +226,48 @@ func (c *recordClient) ListFilesWithPaginationAndFilter(ctx context.Context, rec
 }
 
 func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	files, err := c.listFilesCore(ctx, recordName, pageSize, skip, additionalFilter, false)
+	if err != nil {
+		return nil, err
+	}
+	return lo.Filter(files, func(file *openv1alpha1resource.File, _ int) bool {
+		return !strings.HasSuffix(file.Filename, "/")
+	}), nil
+}
+
+// listFilesCore is an internal helper that lists files either across all pages
+// (all=true) or a single page (all=false). It returns raw results including
+// directories. Callers can filter directories as needed.
+func (c *recordClient) listFilesCore(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string, all bool) ([]*openv1alpha1resource.File, error) {
 	filter := "recursive=\"true\""
 	if additionalFilter != "" {
 		filter += " AND " + additionalFilter
+	}
+
+	if all {
+		var (
+			ret  []*openv1alpha1resource.File
+			offs = skip
+		)
+		for {
+			req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+				Parent:   recordName.String(),
+				PageSize: constants.MaxPageSize,
+				Skip:     int32(offs),
+				Filter:   filter,
+			})
+			res, err := c.fileServiceClient.ListFiles(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list files at skip %d: %w", offs, err)
+			}
+
+			ret = append(ret, res.Msg.Files...)
+			offs += constants.MaxPageSize
+			if offs >= int(res.Msg.TotalSize) {
+				break
+			}
+		}
+		return ret, nil
 	}
 
 	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
@@ -265,10 +280,7 @@ func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, rec
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
-
-	return lo.Filter(res.Msg.Files, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return res.Msg.Files, nil
 }
 
 func (c *recordClient) Delete(ctx context.Context, recordName *name.Record) error {
