@@ -22,6 +22,7 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer/table"
+	"github.com/coscene-io/cocli/internal/printer/utils"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -76,6 +77,12 @@ func (r *RecordWithMetadata) ToProtoMessage() proto.Message {
 			recordStruct.Fields["labels"] = structpb.NewListValue(&structpb.ListValue{Values: labelList})
 		}
 
+		// Add custom field values
+		if len(r.Record.CustomFieldValues) > 0 {
+			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
+			recordStruct.Fields["custom_field_values"] = structpb.NewListValue(&structpb.ListValue{Values: customFieldValues})
+		}
+
 		// Add times
 		if r.Record.CreateTime != nil {
 			recordStruct.Fields["create_time"] = structpb.NewStringValue(r.Record.CreateTime.AsTime().Format(time.RFC3339))
@@ -118,6 +125,14 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 				return l.DisplayName
 			})
 			rows = append(rows, []string{"Labels:", strings.Join(labels, ", ")})
+		}
+
+		// Custom field values
+		if len(r.Record.CustomFieldValues) > 0 {
+			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
+			rows = append(rows, []string{"Custom Field Values:", strings.Join(lo.Map(customFieldValues, func(c *structpb.Value, _ int) string {
+				return fmt.Sprintf("(%s: %v)", c.AsInterface().(map[string]any)["property"].(string), c.AsInterface().(map[string]any)["value"])
+			}), ", ")})
 		}
 
 		// Times
