@@ -25,6 +25,7 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -46,7 +47,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 		outputFormat string
 	)
 	cmd := &cobra.Command{
-		Use:                   "create -p <project-slug> -n <display-name> -b <visibility> [--template <template-slug>] [--description <description>]",
+		Use:                   "create -p <project-slug> -n <display-name> -b <visibility> [--template <template-slug-or-name>] [--scope <scopes>] [--description <description>]",
 		Short:                 "Create a project.",
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -73,6 +74,34 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 				visEnum = openv1alpha1enums.ProjectVisibilityEnum_INTERNAL
 			}
 
+			// If template is provided, validate it exists and require scopes
+			var validatedTemplateName string
+			if templateSlug != "" {
+				// Check if scopes are
+				if scopeStr == "" {
+					log.Fatalf("scope is required when template is provided")
+				}
+
+				if strings.HasPrefix(templateSlug, "projects/") {
+					validatedTemplateName = templateSlug
+				} else {
+					tplProject, err := pm.ProjectCli().Name(context.Background(), templateSlug)
+					if err != nil {
+						log.Fatalf("failed to find template project: %v", err)
+					}
+					validatedTemplateName = tplProject.String()
+				}
+
+				tplName, err := name.NewProject(validatedTemplateName)
+				if err != nil {
+					log.Fatalf("invalid template project name: %v", err)
+				}
+				_, err = pm.ProjectCli().Get(context.Background(), tplName)
+				if err != nil {
+					log.Fatalf("template project does not exist: %v", err)
+				}
+			}
+
 			// Confirm unless forced
 			if !forceYes {
 				// Build a short summary for confirmation
@@ -80,7 +109,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 				summary += "  name: " + projectSlug + "\n"
 				summary += "  display_name: " + displayName + "\n"
 				if templateSlug != "" {
-					summary += "  template: " + templateSlug + "\n"
+					summary += "  template: " + validatedTemplateName + "\n"
 				}
 				// scopes shown only for template. if provided without template, show note
 				if scopeStr != "" {
@@ -128,7 +157,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 					Parent:          "",
 					Slug:            projectSlug,
 					DisplayName:     displayName,
-					ProjectTemplate: templateSlug,
+					ProjectTemplate: validatedTemplateName,
 					TemplateScopes:  tplScopes,
 					Visibility:      visEnum,
 					Description:     description,
@@ -150,8 +179,8 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project-slug", "p", "", "The slug of the project [required].")
 	cmd.Flags().StringVarP(&displayName, "display-name", "n", "", "The display name of the project [required]")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "The description of the project")
-	cmd.Flags().StringVarP(&templateSlug, "template", "t", "", "The template to use when creating the project.")
-	cmd.Flags().StringVarP(&scopeStr, "scope", "s", "", "Template scopes (unused; reserved).")
+	cmd.Flags().StringVarP(&templateSlug, "template", "t", "", "The template to use when creating the project. Can be either 'projects/uuid' or a project slug.")
+	cmd.Flags().StringVarP(&scopeStr, "scope", "s", "", "Template scopes (CUSTOM_FIELDS|ACTIONS|TRIGGERS|LAYOUTS) comma separated. Required when template is provided.")
 	cmd.Flags().StringVarP(&visibility, "visibility", "b", "", "Project visibility (private|internal) [required]")
 	cmd.Flags().BoolVarP(&forceYes, "yes", "y", false, "Skip confirmation and create without prompting")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
