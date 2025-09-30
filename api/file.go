@@ -22,7 +22,6 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
-	"github.com/coscene-io/cocli/internal/name"
 )
 
 type FileInterface interface {
@@ -30,10 +29,16 @@ type FileInterface interface {
 	GetFile(ctx context.Context, fileResourceName string) (*openv1alpha1resource.File, error)
 
 	// GenerateFileUploadUrls generates pre-signed URLs for file uploads.
-	GenerateFileUploadUrls(ctx context.Context, recordName *name.Record, files []*openv1alpha1resource.File) (map[string]string, error)
+	GenerateFileUploadUrls(ctx context.Context, parent string, files []*openv1alpha1resource.File) (map[string]string, error)
 
 	// GenerateFileDownloadUrl generates a pre-signed URL for file download.
 	GenerateFileDownloadUrl(ctx context.Context, fileResourceName string) (string, error)
+
+	// DeleteFile deletes a file by name.
+	DeleteFile(ctx context.Context, fileResourceName string) error
+
+	// BatchDeleteFiles deletes multiple files under a parent.
+	BatchDeleteFiles(ctx context.Context, parent string, names []string) error
 }
 
 type fileClient struct {
@@ -57,9 +62,9 @@ func (c *fileClient) GetFile(ctx context.Context, fileResourceName string) (*ope
 	return res.Msg, nil
 }
 
-func (c *fileClient) GenerateFileUploadUrls(ctx context.Context, recordName *name.Record, files []*openv1alpha1resource.File) (map[string]string, error) {
+func (c *fileClient) GenerateFileUploadUrls(ctx context.Context, parent string, files []*openv1alpha1resource.File) (map[string]string, error) {
 	req := connect.NewRequest(&openv1alpha1service.GenerateFileUploadUrlsRequest{
-		Parent: recordName.String(),
+		Parent: parent,
 		Files:  files,
 	})
 	res, err := c.fileServiceClient.GenerateFileUploadUrls(ctx, req)
@@ -80,4 +85,27 @@ func (c *fileClient) GenerateFileDownloadUrl(ctx context.Context, fileResourceNa
 		return "", fmt.Errorf("failed to generate file download url: %w", err)
 	}
 	return res.Msg.PreSignedUrl, nil
+}
+
+func (c *fileClient) DeleteFile(ctx context.Context, fileResourceName string) error {
+	req := connect.NewRequest(&openv1alpha1service.DeleteFileRequest{
+		Name: fileResourceName,
+	})
+	_, err := c.fileServiceClient.DeleteFile(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+	return nil
+}
+
+func (c *fileClient) BatchDeleteFiles(ctx context.Context, parent string, names []string) error {
+	req := connect.NewRequest(&openv1alpha1service.BatchDeleteFilesRequest{
+		Parent: parent,
+		Names:  names,
+	})
+	_, err := c.fileServiceClient.BatchDeleteFiles(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to batch delete files: %w", err)
+	}
+	return nil
 }

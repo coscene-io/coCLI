@@ -151,6 +151,19 @@ func (p *Profile) GetRecordUrl(recordName *name.Record) (string, error) {
 	return recordUrl, nil
 }
 
+// GetProjectUrl returns the url of the project in the corresponding coScene website.
+func (p *Profile) GetProjectUrl(projectName *name.Project) (string, error) {
+	proj, err := p.ProjectCli().Get(context.TODO(), projectName)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to get project")
+	}
+	projectUrl, err := url.JoinPath(p.GetBaseUrl(), p.Org, proj.Slug)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to join url")
+	}
+	return projectUrl, nil
+}
+
 // OrgCli return org api interface used profile.
 func (p *Profile) OrgCli() api.OrganizationInterface {
 	p.initCli()
@@ -242,7 +255,7 @@ func (p *Profile) initCli() {
 		)
 
 		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
-		p.projcli = api.NewProjectClient(projectServiceClient)
+		p.projcli = api.NewProjectClient(projectServiceClient, fileServiceClient)
 		p.rcdcli = api.NewRecordClient(recordServiceClient, fileServiceClient, userServiceClient, labelServiceClient)
 		p.lblcli = api.NewLabelClient(labelServiceClient)
 		p.usercli = api.NewUserClient(userServiceClient)

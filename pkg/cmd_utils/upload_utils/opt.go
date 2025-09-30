@@ -3,6 +3,7 @@ package upload_utils
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/coscene-io/cocli/api"
 	"github.com/dustin/go-humanize"
@@ -80,11 +81,28 @@ func (opt *UploadManagerOpts) ShouldUseInteractiveMode() bool {
 type FileOpts struct {
 	Path          string
 	relDir        string
+	expandedPaths []string // Populated if Path contains glob patterns
 	Recursive     bool
 	IncludeHidden bool
 
 	// Additional mapping from file path to oss path
 	AdditionalUploads map[string]string
+}
+
+// GetPaths returns the list of paths to upload. If glob was used, returns expanded paths; otherwise returns single Path.
+func (opt *FileOpts) GetPaths() []string {
+	if len(opt.expandedPaths) > 0 {
+		return opt.expandedPaths
+	}
+	if opt.Path != "" {
+		return []string{opt.Path}
+	}
+	return nil
+}
+
+// RelDir returns the base directory for computing relative paths.
+func (opt *FileOpts) RelDir() string {
+	return opt.relDir
 }
 
 func (opt *FileOpts) Valid() error {
@@ -96,13 +114,48 @@ func (opt *FileOpts) Valid() error {
 		return nil
 	}
 
-	opt.relDir = opt.Path
-	fileInfo, err := os.Stat(opt.Path)
+	// Detect glob pattern
+	if hasGlobPattern(opt.Path) {
+		matches, err := filepath.Glob(opt.Path)
+		if err != nil {
+			return errors.Wrap(err, "invalid glob pattern")
+		}
+		if len(matches) == 0 {
+			return errors.New("glob pattern matched no files")
+		}
+
+		opt.expandedPaths = matches
+		// relDir is the base directory before the first wildcard
+		opt.relDir = globBaseDir(opt.Path)
+		return nil
+	}
+
+	// Regular path (no glob)
+	_, err := os.Stat(opt.Path)
 	if err != nil {
 		return errors.Wrap(err, "invalid file path")
 	}
-	if !fileInfo.IsDir() {
-		opt.relDir = filepath.Dir(opt.Path)
-	}
+	// Always use parent directory as relative base to preserve directory/file names
+	opt.relDir = filepath.Dir(opt.Path)
 	return nil
+}
+
+// hasGlobPattern checks if path contains glob wildcards.
+func hasGlobPattern(path string) bool {
+	return strings.ContainsAny(path, "*?[")
+}
+
+// globBaseDir returns the directory part before the first wildcard in a glob pattern.
+// Examples: "a/*" -> "a", "a/**/*.txt" -> "a", "a/b/c*.txt" -> "a/b"
+func globBaseDir(pattern string) string {
+	wildcardPos := strings.IndexAny(pattern, "*?[")
+	if wildcardPos == -1 {
+		return filepath.Dir(pattern)
+	}
+
+	beforeWildcard := pattern[:wildcardPos]
+
+	// If it ends with a separator, remove it; otherwise get the directory
+	beforeWildcard = strings.TrimRight(beforeWildcard, string(filepath.Separator))
+	return filepath.Dir(beforeWildcard)
 }

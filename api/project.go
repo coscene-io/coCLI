@@ -17,6 +17,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -25,6 +26,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/name"
+	"github.com/samber/lo"
 )
 
 type ProjectInterface interface {
@@ -42,6 +44,9 @@ type ProjectInterface interface {
 
 	// CreateProjectUsingTemplate creates a project using a template.
 	CreateProjectUsingTemplate(ctx context.Context, opts *CreateProjectUsingTemplateOptions) (*openv1alpha1resource.Project, error)
+
+	// ListAllFiles lists all files in a project.
+	ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error)
 }
 
 type ListProjectsOptions struct {
@@ -49,6 +54,7 @@ type ListProjectsOptions struct {
 
 type projectClient struct {
 	projectServiceClient openv1alpha1connect.ProjectServiceClient
+	fileServiceClient    openv1alpha1connect.FileServiceClient
 }
 
 type CreateProjectOptions struct {
@@ -68,9 +74,10 @@ type CreateProjectUsingTemplateOptions struct {
 	Description     string
 }
 
-func NewProjectClient(projectServiceClient openv1alpha1connect.ProjectServiceClient) ProjectInterface {
+func NewProjectClient(projectServiceClient openv1alpha1connect.ProjectServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient) ProjectInterface {
 	return &projectClient{
 		projectServiceClient: projectServiceClient,
+		fileServiceClient:    fileServiceClient,
 	}
 }
 
@@ -198,4 +205,40 @@ func (c *projectClient) CreateProjectUsingTemplate(
 		return nil, fmt.Errorf("failed to create project using template: %w", err)
 	}
 	return res.Msg, nil
+}
+
+// ListAllFiles lists all files in a project.
+func (c *projectClient) ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error) {
+	var (
+		ret  []*openv1alpha1resource.File
+		skip = 0
+	)
+
+	filter := "recursive=\"true\""
+
+	for {
+		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+			Parent:   projectName.String(),
+			PageSize: constants.MaxPageSize,
+			Skip:     int32(skip),
+			Filter:   filter,
+		})
+		res, err := c.fileServiceClient.ListFiles(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list project files at skip %d: %w", skip, err)
+		}
+		if len(res.Msg.Files) == 0 {
+			break
+		}
+		ret = append(ret, res.Msg.Files...)
+		skip += constants.MaxPageSize
+		if skip >= int(res.Msg.TotalSize) {
+			break
+		}
+	}
+
+	// Filter out directories to match record file behavior
+	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
+		return !strings.HasSuffix(file.Filename, "/")
+	}), nil
 }

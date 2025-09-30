@@ -1,0 +1,335 @@
+// Copyright 2025 coScene
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package project
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/name"
+	"github.com/coscene-io/cocli/internal/printer"
+	"github.com/coscene-io/cocli/internal/printer/printable"
+	"github.com/coscene-io/cocli/internal/printer/table"
+	"github.com/coscene-io/cocli/internal/prompts"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
+	upload_utils "github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+)
+
+func NewFileCommand(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "file",
+		Short: "Manage files in projects",
+	}
+
+	cmd.AddCommand(NewFileListCommand(cfgPath))
+	cmd.AddCommand(NewFileDownloadCommand(cfgPath))
+	cmd.AddCommand(NewFileUploadCommand(cfgPath))
+	cmd.AddCommand(NewFileDeleteCommand(cfgPath))
+
+	return cmd
+}
+
+func NewFileListCommand(cfgPath *string) *cobra.Command {
+	var (
+		verbose      = false
+		outputFormat = ""
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "list <project-resource-name/slug>",
+		Short:                 "List files in the project",
+		Args:                  cobra.ExactArgs(1),
+		DisableFlagsInUseLine: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			// Get current profile.
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			// Handle args and flags.
+			projectName, err := pm.ProjectName(cmd.Context(), args[0])
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			// List all files in the project.
+			files, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+			if err != nil {
+				// Check if the error indicates that project-level files are not supported
+				if strings.Contains(err.Error(), "invalid_argument") || strings.Contains(err.Error(), "validation error") || strings.Contains(err.Error(), "file_ListFiles_parent_format") {
+					log.Fatalf("Project-level file listing is not currently supported. The server requires files to be associated with records (validation error: parent must match pattern 'projects/{uuid}/records/{uuid}').")
+				}
+				log.Fatalf("unable to list project files: %v", err)
+			}
+
+			// Filter out record files if any
+			var projectFiles []*openv1alpha1resource.File
+			for _, f := range files {
+				if !strings.Contains(f.Name, "/records/") {
+					projectFiles = append(projectFiles, f)
+				}
+			}
+
+			// Print listed files.
+			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+				Verbose: verbose,
+			}}).PrintObj(printable.NewFile(projectFiles), os.Stdout)
+			if err != nil {
+				log.Fatalf("unable to print files: %v", err)
+			}
+		},
+	}
+
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json|yaml)")
+
+	return cmd
+}
+
+func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
+	var (
+		maxRetries = 0
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "download <project-resource-name/slug> <dst-dir>",
+		Short:                 "Download files from project to directory.",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			// Get current profile.
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			// Handle args and flags.
+			projectName, err := pm.ProjectName(cmd.Context(), args[0])
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			dirPath, err := filepath.Abs(args[1])
+			if err != nil {
+				log.Fatalf("unable to get absolute path: %v", err)
+			}
+			if dirInfo, err := os.Stat(dirPath); err != nil {
+				log.Fatalf("Error checking destination directory: %v", err)
+			} else if !dirInfo.IsDir() {
+				log.Fatalf("Destination directory is not a directory: %s", dirPath)
+			}
+
+			// List all files in the project.
+			files, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+			if err != nil {
+				// Check if the error indicates that project-level files are not supported
+				if strings.Contains(err.Error(), "invalid_argument") || strings.Contains(err.Error(), "validation error") || strings.Contains(err.Error(), "file_ListFiles_parent_format") {
+					log.Fatalf("Project-level file download is not currently supported. The server requires files to be associated with records (validation error: parent must match pattern 'projects/{uuid}/records/{uuid}').")
+				}
+				log.Fatalf("unable to list project files: %v", err)
+			}
+
+			// Filter to get only project-level files (not record files)
+			var projectFiles []*openv1alpha1resource.File
+			for _, f := range files {
+				if !strings.Contains(f.Name, "/records/") {
+					projectFiles = append(projectFiles, f)
+				}
+			}
+
+			if len(projectFiles) == 0 {
+				fmt.Println("No project-level files found to download.")
+				return
+			}
+
+			dstDir := filepath.Join(dirPath, projectName.ProjectID)
+			fmt.Println("-------------------------------------------------------------")
+			fmt.Printf("Downloading project files from %s\n", projectName.ProjectID)
+			projectUrl, err := pm.GetProjectUrl(projectName)
+			if err == nil {
+				fmt.Println("View project at:", projectUrl)
+			} else {
+				log.Errorf("unable to get project url: %v", err)
+			}
+			fmt.Printf("Saving to %s\n", dstDir)
+
+			totalFiles := len(projectFiles)
+			successCount := 0
+			for fIdx, f := range projectFiles {
+				// For project files, we need to parse the file name
+				fileName, err := name.NewProjectFile(f.Name)
+				if err != nil {
+					log.Errorf("unable to parse file name %s: %v", f.Name, err)
+					continue
+				}
+
+				localPath := filepath.Join(dstDir, fileName.Filename)
+				fmt.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
+
+				if !strings.HasPrefix(localPath, dstDir+string(os.PathSeparator)) {
+					log.Errorf("illegal file name: %s", fileName.Filename)
+					continue
+				}
+
+				// Check if local file exists and have the same checksum and size
+				if _, err := os.Stat(localPath); err == nil {
+					checksum, size, err := fs.CalSha256AndSize(localPath)
+					if err != nil {
+						log.Errorf("unable to calculate checksum and size: %v", err)
+						continue
+					}
+					if checksum == f.Sha256 && size == f.Size {
+						successCount++
+						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
+						continue
+					}
+				}
+
+				// Get download file pre-signed URL
+				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(context.TODO(), f.Name)
+				if err != nil {
+					log.Errorf("unable to get download URL for file %s: %v", fileName.Filename, err)
+					continue
+				}
+
+				// Download file with #maxRetries retries
+				if err = cmd_utils.DownloadFileThroughUrl(localPath, downloadUrl, maxRetries); err != nil {
+					log.Errorf("download file %s failed: %v\n", fileName.Filename, err)
+					continue
+				}
+
+				successCount++
+			}
+
+			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
+		},
+	}
+
+	cmd.Flags().IntVarP(&maxRetries, "max-retries", "r", 3, "maximum number of retries for downloading a file")
+
+	return cmd
+}
+
+func NewFileUploadCommand(cfgPath *string) *cobra.Command {
+	var (
+		isRecursive       = false
+		includeHidden     = false
+		maxRetries        = 0 // unused, kept for parity
+		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "upload <project-resource-name/slug> <directory>",
+		Short:                 "Upload files in directory to a project.",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			projectName, err := pm.ProjectName(cmd.Context(), args[0])
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			dirPath, err := filepath.Abs(args[1])
+			if err != nil {
+				log.Fatalf("unable to get absolute path: %v", err)
+			}
+
+			if dirInfo, err := os.Stat(dirPath); err != nil {
+				log.Fatalf("Error checking source directory: %v", err)
+			} else if !dirInfo.IsDir() {
+				log.Fatalf("Source is not a directory: %s", dirPath)
+			}
+
+			fmt.Println("-------------------------------------------------------------")
+			fmt.Printf("Uploading files to project: %s\n", projectName.ProjectID)
+
+			um, err := upload_utils.NewUploadManagerFromConfig(projectName, 0,
+				&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, uploadManagerOpts)
+			if err != nil {
+				log.Fatalf("unable to create upload manager: %v", err)
+			}
+
+			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{Path: dirPath, Recursive: isRecursive, IncludeHidden: includeHidden}); err != nil {
+				log.Fatalf("Unable to upload files: %v", err)
+			}
+
+			projectUrl, err := pm.GetProjectUrl(projectName)
+			if err == nil {
+				fmt.Println("View project at:", projectUrl)
+			} else {
+				log.Errorf("unable to get project url: %v", err)
+			}
+			_ = maxRetries // silence unused var
+		},
+	}
+
+	cmd.Flags().BoolVarP(&isRecursive, "recursive", "R", false, "upload files in the current directory recursively")
+	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
+	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
+	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
+	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
+	cmd.Flags().BoolVar(&uploadManagerOpts.TTY, "tty", false, "force interactive mode even in headless environments")
+
+	cmd.MarkFlagsMutuallyExclusive("no-tty", "tty")
+
+	return cmd
+}
+
+func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
+	var (
+		force = false
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "delete <project-resource-name/slug> <filename> [-f]",
+		Short:                 "Delete a specific file from a project",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			projectName, err := pm.ProjectName(cmd.Context(), args[0])
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			fileName := args[1]
+
+			if !force {
+				if confirmed := prompts.PromptYN(fmt.Sprintf("Are you sure you want to delete the file '%s' from project?", fileName)); !confirmed {
+					fmt.Println("Delete file aborted.")
+					return
+				}
+			}
+
+			// Build full resource name and delete
+			fullName := name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
+			if err := pm.FileCli().DeleteFile(context.TODO(), fullName); err != nil {
+				log.Fatalf("failed to delete file: %v", err)
+			}
+
+			fmt.Printf("File '%s' successfully deleted.\n", fileName)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", force, "Force delete without confirmation")
+
+	return cmd
+}
