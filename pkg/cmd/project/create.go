@@ -77,7 +77,6 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 			// If template is provided, validate it exists and require scopes
 			var validatedTemplateName string
 			if templateSlug != "" {
-				// Check if scopes are
 				if scopeStr == "" {
 					log.Fatalf("scope is required when template is provided")
 				}
