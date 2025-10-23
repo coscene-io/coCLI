@@ -90,11 +90,12 @@ const (
 
 // FileInfo contains the path, size and sha256 of a file.
 type FileInfo struct {
-	Path     string
-	Size     int64
-	Sha256   string
-	Uploaded int64
-	Status   UploadStatusEnum
+	Path       string // Local absolute path
+	RemotePath string // Remote destination path (for display)
+	Size       int64
+	Sha256     string
+	Uploaded   int64
+	Status     UploadStatusEnum
 }
 
 // UploadInfo contains the information needed to upload a file or a file part (multipart upload).
@@ -630,7 +631,11 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
 		if um.noTTY {
-			log.Infof("Completed upload: %s", result.Path)
+			displayPath := um.fileInfos[result.Path].RemotePath
+			if displayPath == "" {
+				displayPath = result.Path
+			}
+			log.Infof("Completed upload: %s", displayPath)
 		}
 		return nil
 	}
@@ -705,7 +710,11 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
 		if um.noTTY {
-			log.Infof("Completed multipart upload: %s", result.Path)
+			displayPath := um.fileInfos[result.Path].RemotePath
+			if displayPath == "" {
+				displayPath = result.Path
+			}
+			log.Infof("Completed multipart upload: %s", displayPath)
 		}
 	}
 
@@ -903,6 +912,7 @@ func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx p
 		}
 
 		um.fileInfos[f].Status = WaitingForUpload
+		um.fileInfos[f].RemotePath = remotePath // Set remote path for display
 		files = append(files, &openv1alpha1resource.File{
 			Name:     resourceName,
 			Filename: remotePath,
@@ -983,32 +993,37 @@ func (um *UploadManager) View() string {
 	successCount := 0
 	spinnerFrame := spinnerFrames[um.spinnerIdx]
 	for _, k := range um.fileList {
-		// Check if the file has been uploaded before
-		statusStrLen := um.windowWidth - len(k) - 1
+		// Use remote path for display if available, fallback to local path
+		displayPath := um.fileInfos[k].RemotePath
+		if displayPath == "" {
+			displayPath = k
+		}
+
+		statusStrLen := um.windowWidth - len(displayPath) - 1
 		switch um.fileInfos[k].Status {
 		case Unprocessed:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Preparing for upload"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Preparing for upload"+spinnerFrame)
 		case CalculatingSha256:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Calculating sha256"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Calculating sha256"+spinnerFrame)
 		case PreviouslyUploaded:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Previously uploaded, skipping")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Previously uploaded, skipping")
 			skipCount++
 		case WaitingForUpload:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Waiting for upload")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Waiting for upload")
 		case UploadCompleted:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Upload completed")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload completed")
 			successCount++
 		case MultipartCompletionInProgress:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Completing multipart upload"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Completing multipart upload"+spinnerFrame)
 		case UploadFailed:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Upload failed")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload failed")
 		case UploadInProgress:
 			progress := um.calculateUploadProgress(k)
 			barWidth := max(um.windowWidth-len(k)-12, 10)                       // Adjust for label and percentage, make sure it is at least 10
 			progressCount := min(int(progress*float64(barWidth)/100), barWidth) // min used to prevent float rounding errors
 			emptyBar := strings.Repeat("-", barWidth-progressCount)
 			progressBar := strings.Repeat("█", progressCount)
-			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", k, progressBar, emptyBar, 6, progress)
+			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", displayPath, progressBar, emptyBar, 6, progress)
 		}
 	}
 
