@@ -289,12 +289,12 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 	var (
 		includeHidden     = false
-		targetPrefix      = ""
+		targetDir         = ""
 		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <project-resource-name/slug> <path> [--prefix <target-dir>] [-H]",
+		Use:                   "upload <project-resource-name/slug> <path> [--dir <target-dir>] [-H]",
 		Short:                 "Upload files or directory to a project. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -317,8 +317,8 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Uploading files to project: %s\n", projectName.ProjectID)
-			if targetPrefix != "" {
-				fmt.Printf("Target directory: %s\n", targetPrefix)
+			if targetDir != "" {
+				fmt.Printf("Target directory: %s\n", targetDir)
 			}
 
 			um, err := upload_utils.NewUploadManagerFromConfig(projectName, 0,
@@ -331,7 +331,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 				Path:          sourcePath,
 				Recursive:     true, // Always recursive; use glob patterns for selective upload
 				IncludeHidden: includeHidden,
-				Prefix:        targetPrefix,
+				Prefix:        targetDir,
 			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
@@ -346,7 +346,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
-	cmd.Flags().StringVar(&targetPrefix, "prefix", "", "target directory prefix in remote (e.g., 'data/' to upload to data/ subdirectory)")
+	cmd.Flags().StringVarP(&targetDir, "dir", "d", "", "target directory in remote (e.g., 'backup/' to upload to backup/ subdirectory)")
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")

@@ -32,13 +32,13 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 	var (
 		includeHidden     = false
 		projectSlug       = ""
-		targetPrefix      = ""
+		targetDir         = ""
 		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
 		timeout           time.Duration
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--prefix <target-dir>] [-H]",
+		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--dir <target-dir>] [-H]",
 		Short:                 "Upload files or directory to a record. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -65,8 +65,8 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Uploading files to record: %s\n", recordName.RecordID)
-			if targetPrefix != "" {
-				fmt.Printf("Target directory: %s\n", targetPrefix)
+			if targetDir != "" {
+				fmt.Printf("Target directory: %s\n", targetDir)
 			}
 
 			// create minio client and upload manager first.
@@ -81,7 +81,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 				Path:          filePath,
 				Recursive:     true, // Always recursive; use glob patterns for selective upload
 				IncludeHidden: includeHidden,
-				Prefix:        targetPrefix,
+				Prefix:        targetDir,
 			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
@@ -97,7 +97,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
-	cmd.Flags().StringVar(&targetPrefix, "prefix", "", "target directory prefix in remote (e.g., 'data/' to upload to data/ subdirectory)")
+	cmd.Flags().StringVarP(&targetDir, "dir", "d", "", "target directory in remote (e.g., 'backup/' to upload to backup/ subdirectory)")
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
