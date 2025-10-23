@@ -180,11 +180,13 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 	var (
 		maxRetries = 0
+		dir        = ""
+		fileNames  []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "download <project-resource-name/slug> <dst-dir>",
-		Short:                 "Download files from project to directory.",
+		Use:                   "download <project-resource-name/slug> <dst-dir> [--dir <path>] [--files <file1,file2,...>]",
+		Short:                 "Download files or directory from project.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -207,10 +209,32 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Destination directory is not a directory: %s", dirPath)
 			}
 
-			// List all files in the project.
-			files, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
-			if err != nil {
-				log.Fatalf("unable to list project files: %v", err)
+			// List files based on filters
+			var files []*openv1alpha1resource.File
+			if dir != "" {
+				// Download specific directory
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, fmt.Sprintf("dir=\"%s\"", normalizedDir))
+				if err != nil {
+					log.Fatalf("unable to list project files: %v", err)
+				}
+			} else if len(fileNames) > 0 {
+				// Download specific files - fetch each file info
+				for _, fileName := range fileNames {
+					resourceName := name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
+					fileInfo, err := pm.FileCli().GetFile(context.TODO(), resourceName)
+					if err != nil {
+						log.Warnf("unable to get file %s: %v, skipping", fileName, err)
+						continue
+					}
+					files = append(files, fileInfo)
+				}
+			} else {
+				// Download all files (default)
+				files, err = pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+				if err != nil {
+					log.Fatalf("unable to list project files: %v", err)
+				}
 			}
 
 			if len(files) == 0 {
@@ -282,6 +306,10 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&maxRetries, "max-retries", "r", 3, "maximum number of retries for downloading a file")
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download specific directory")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "download specific files (comma-separated)")
+
+	cmd.MarkFlagsMutuallyExclusive("dir", "files")
 
 	return cmd
 }
