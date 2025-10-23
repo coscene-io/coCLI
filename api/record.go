@@ -261,13 +261,7 @@ func (c *recordClient) ListAllFilesWithFilter(ctx context.Context, recordName *n
 }
 
 func (c *recordClient) listAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error) {
-	files, err := c.listFilesCore(ctx, recordName, 0, 0, additionalFilter, true)
-	if err != nil {
-		return nil, err
-	}
-	return lo.Filter(files, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return c.listFilesCore(ctx, recordName, 0, 0, additionalFilter, true)
 }
 
 func (c *recordClient) ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
@@ -279,13 +273,7 @@ func (c *recordClient) ListFilesWithPaginationAndFilter(ctx context.Context, rec
 }
 
 func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
-	files, err := c.listFilesCore(ctx, recordName, pageSize, skip, additionalFilter, false)
-	if err != nil {
-		return nil, err
-	}
-	return lo.Filter(files, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return c.listFilesCore(ctx, recordName, pageSize, skip, additionalFilter, false)
 }
 
 // listFilesCore is an internal helper that lists files either across all pages

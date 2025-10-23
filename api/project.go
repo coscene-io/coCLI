@@ -17,7 +17,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -26,7 +25,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/name"
-	"github.com/samber/lo"
 )
 
 type ProjectInterface interface {
@@ -260,9 +258,7 @@ func (c *projectClient) listAllFilesWithFilter(ctx context.Context, projectName 
 		}
 	}
 
-	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return ret, nil
 }
 
 func (c *projectClient) listFilesPage(ctx context.Context, projectName *name.Project, pageSize int, skip int, filter string) ([]*openv1alpha1resource.File, error) {

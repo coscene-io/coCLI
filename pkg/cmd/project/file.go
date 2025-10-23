@@ -58,12 +58,12 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 		pageSize     = 0
 		page         = 0
 		all          = false
-		keywords     = ""
+		dir          = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <project-resource-name/slug> [-R] [-v] [--page-size <size>] [--page <number>] [--all] [--keywords <path>]",
-		Short:                 "List files in the project",
+		Use:                   "list <project-resource-name/slug> [-R] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
+		Short:                 "List files and directories in the project",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -89,8 +89,10 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			if recursive {
 				filterParts = append(filterParts, "recursive=\"true\"")
 			}
-			if keywords != "" {
-				filterParts = append(filterParts, fmt.Sprintf("path=\"%s\"", keywords))
+			if dir != "" {
+				// Normalize: ensure no trailing slash for filter consistency
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				filterParts = append(filterParts, fmt.Sprintf("dir=\"%s\"", normalizedDir))
 			}
 			additionalFilter := strings.Join(filterParts, " && ")
 
@@ -143,18 +145,10 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			// Filter out record files if any
-			var projectFiles []*openv1alpha1resource.File
-			for _, f := range files {
-				if !strings.Contains(f.Name, "/records/") {
-					projectFiles = append(projectFiles, f)
-				}
-			}
-
-			// Print listed files.
+			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(projectFiles), os.Stdout)
+			}}).PrintObj(printable.NewFile(files), os.Stdout)
 			if err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
@@ -167,7 +161,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
-	cmd.Flags().StringVar(&keywords, "keywords", "", "filter files by path")
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "filter by directory path")
 
 	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
 	cmd.MarkFlagsMutuallyExclusive("all", "page")
@@ -208,23 +202,11 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			// List all files in the project.
 			files, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
 			if err != nil {
-				// Check if the error indicates that project-level files are not supported
-				if strings.Contains(err.Error(), "invalid_argument") || strings.Contains(err.Error(), "validation error") || strings.Contains(err.Error(), "file_ListFiles_parent_format") {
-					log.Fatalf("Project-level file download is not currently supported. The server requires files to be associated with records (validation error: parent must match pattern 'projects/{uuid}/records/{uuid}').")
-				}
 				log.Fatalf("unable to list project files: %v", err)
 			}
 
-			// Filter to get only project-level files (not record files)
-			var projectFiles []*openv1alpha1resource.File
-			for _, f := range files {
-				if !strings.Contains(f.Name, "/records/") {
-					projectFiles = append(projectFiles, f)
-				}
-			}
-
-			if len(projectFiles) == 0 {
-				fmt.Println("No project-level files found to download.")
+			if len(files) == 0 {
+				fmt.Println("No files found to download.")
 				return
 			}
 
@@ -239,9 +221,9 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 			fmt.Printf("Saving to %s\n", dstDir)
 
-			totalFiles := len(projectFiles)
+			totalFiles := len(files)
 			successCount := 0
-			for fIdx, f := range projectFiles {
+			for fIdx, f := range files {
 				// For project files, we need to parse the file name
 				fileName, err := name.NewProjectFile(f.Name)
 				if err != nil {
@@ -400,50 +382,26 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("must specify at least one file to delete")
 			}
 
-			// Expand directories: if name ends with / or is a directory prefix, list and collect
-			var finalFilesToDelete []string
-			for _, fileName := range filesToDelete {
-				if strings.HasSuffix(fileName, "/") {
-					// Directory: list all files with this prefix
-					allFiles, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
-					if err != nil {
-						log.Fatalf("unable to list project files: %v", err)
-					}
-					for _, f := range allFiles {
-						// Extract filename from resource name
-						projectFile, err := name.NewProjectFile(f.Name)
-						if err != nil {
-							continue
-						}
-						if strings.HasPrefix(projectFile.Filename, fileName) {
-							finalFilesToDelete = append(finalFilesToDelete, projectFile.Filename)
-						}
-					}
-				} else {
-					finalFilesToDelete = append(finalFilesToDelete, fileName)
-				}
-			}
-
-			if len(finalFilesToDelete) == 0 {
-				fmt.Println("No files found to delete.")
-				return
-			}
-
 			// Confirm deletion
 			if !force {
-				fmt.Printf("About to delete %d file(s) from project:\n", len(finalFilesToDelete))
-				for _, f := range finalFilesToDelete {
-					fmt.Printf("  - %s\n", f)
+				fmt.Printf("About to delete %d item(s) from project:\n", len(filesToDelete))
+				for _, f := range filesToDelete {
+					if strings.HasSuffix(f, "/") {
+						fmt.Printf("  - %s (directory - all contents will be deleted)\n", f)
+					} else {
+						fmt.Printf("  - %s\n", f)
+					}
 				}
 				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
-					fmt.Println("Delete file aborted.")
+					fmt.Println("Delete aborted.")
 					return
 				}
 			}
 
 			// Build full resource names for batch delete
-			resourceNames := make([]string, len(finalFilesToDelete))
-			for i, fileName := range finalFilesToDelete {
+			// Server handles recursive deletion for directories
+			resourceNames := make([]string, len(filesToDelete))
+			for i, fileName := range filesToDelete {
 				resourceNames[i] = name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
 			}
 
@@ -452,7 +410,7 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("failed to delete files: %v", err)
 			}
 
-			fmt.Printf("Successfully deleted %d file(s).\n", len(finalFilesToDelete))
+			fmt.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
 		},
 	}
 

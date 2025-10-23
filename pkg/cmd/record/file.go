@@ -57,12 +57,12 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 		pageSize     = 0
 		page         = 0
 		all          = false
-		keywords     = ""
+		dir          = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--keywords <path>]",
-		Short:                 "List files in the record",
+		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
+		Short:                 "List files and directories in the record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -92,9 +92,17 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 			var files []*openv1alpha1resource.File
 
+			// Build filter
+			var filterStr string
+			if dir != "" {
+				// Normalize: ensure no trailing slash for filter consistency
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				filterStr = fmt.Sprintf("dir=\"%s\"", normalizedDir)
+			}
+
 			if all {
-				if keywords != "" {
-					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
 				}
@@ -112,8 +120,8 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 					skip = (page - 1) * effectivePageSize
 				}
 
-				if keywords != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, effectivePageSize, skip)
 				}
@@ -128,8 +136,8 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				if keywords != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, defaultPageSize, 0)
 				}
@@ -143,7 +151,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			// Print listed files.
+			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
 			}}).PrintObj(printable.NewFile(files), os.Stdout)
@@ -159,7 +167,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
-	cmd.Flags().StringVar(&keywords, "keywords", "", "filter files by path (e.g., 'myfile.txt' or 'folder/file')")
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "filter by directory path")
 
 	// Mark mutually exclusive flags
 	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
@@ -207,48 +215,26 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("must specify at least one file to delete")
 			}
 
-			// Expand directories
-			var finalFilesToDelete []string
-			for _, fileName := range filesToDelete {
-				if strings.HasSuffix(fileName, "/") {
-					allFiles, err := pm.RecordCli().ListAllFiles(context.TODO(), recordName)
-					if err != nil {
-						log.Fatalf("unable to list record files: %v", err)
-					}
-					for _, f := range allFiles {
-						recordFile, err := name.NewFile(f.Name)
-						if err != nil {
-							continue
-						}
-						if strings.HasPrefix(recordFile.Filename, fileName) {
-							finalFilesToDelete = append(finalFilesToDelete, recordFile.Filename)
-						}
-					}
-				} else {
-					finalFilesToDelete = append(finalFilesToDelete, fileName)
-				}
-			}
-
-			if len(finalFilesToDelete) == 0 {
-				fmt.Println("No files found to delete.")
-				return
-			}
-
 			// Confirm deletion
 			if !force {
-				fmt.Printf("About to delete %d file(s) from record:\n", len(finalFilesToDelete))
-				for _, f := range finalFilesToDelete {
-					fmt.Printf("  - %s\n", f)
+				fmt.Printf("About to delete %d item(s) from record:\n", len(filesToDelete))
+				for _, f := range filesToDelete {
+					if strings.HasSuffix(f, "/") {
+						fmt.Printf("  - %s (directory - all contents will be deleted)\n", f)
+					} else {
+						fmt.Printf("  - %s\n", f)
+					}
 				}
 				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
-					fmt.Println("Delete file aborted.")
+					fmt.Println("Delete aborted.")
 					return
 				}
 			}
 
 			// Build full resource names for batch delete
-			resourceNames := make([]string, len(finalFilesToDelete))
-			for i, fileName := range finalFilesToDelete {
+			// Server handles recursive deletion for directories
+			resourceNames := make([]string, len(filesToDelete))
+			for i, fileName := range filesToDelete {
 				resourceNames[i] = name.File{
 					ProjectID: recordName.ProjectID,
 					RecordID:  recordName.RecordID,
@@ -261,7 +247,7 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("failed to delete files: %v", err)
 			}
 
-			fmt.Printf("Successfully deleted %d file(s).\n", len(finalFilesToDelete))
+			fmt.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
 		},
 	}
 
