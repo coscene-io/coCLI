@@ -79,9 +79,9 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 			// Upload files
 			if err := um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{
 				Path:          filePath,
-				Recursive:     true, // Always recursive; use glob patterns for selective upload
+				Recursive:     true,
 				IncludeHidden: includeHidden,
-				Prefix:        targetDir,
+				TargetDir:     targetDir,
 			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}

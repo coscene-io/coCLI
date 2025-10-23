@@ -94,7 +94,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				normalizedDir := strings.TrimSuffix(dir, "/")
 				filterParts = append(filterParts, fmt.Sprintf("dir=\"%s\"", normalizedDir))
 			}
-			additionalFilter := strings.Join(filterParts, " && ")
+			additionalFilter := strings.Join(filterParts, " AND ")
 
 			if all {
 				if additionalFilter != "" {
@@ -357,9 +357,9 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 
 			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{
 				Path:          sourcePath,
-				Recursive:     true, // Always recursive; use glob patterns for selective upload
+				Recursive:     true,
 				IncludeHidden: includeHidden,
-				Prefix:        targetDir,
+				TargetDir:     targetDir,
 			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}

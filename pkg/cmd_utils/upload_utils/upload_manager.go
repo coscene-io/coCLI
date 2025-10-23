@@ -189,8 +189,6 @@ func (pp ProjectParent) BuildResourceName(relativePath string) string {
 	return name.ProjectFile{ProjectID: pp.P.ProjectID, Filename: relativePath}.String()
 }
 
-// removed old helpers; prefer UploadParent and newParentContextFrom
-
 func newParentContextFrom(up UploadParent) parentContext {
 	return parentContext{
 		parentString:      up.ParentString(),
@@ -290,7 +288,7 @@ func (um *UploadManager) Run(ctx context.Context, parent UploadParent, fileOpts 
 	}
 	um.uploadWg.Add(len(filesToUpload) + len(fileOpts.AdditionalUploads))
 
-	fileToUploadUrls := um.findAllUploadUrlsGeneric(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.Prefix)
+	fileToUploadUrls := um.findAllUploadUrls(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.TargetDir)
 	for f, v := range fileOpts.AdditionalUploads {
 		fileToUploadUrls[f] = v
 		um.addFile(f)
@@ -374,9 +372,6 @@ func (um *UploadManager) Run(ctx context.Context, parent UploadParent, fileOpts 
 
 	return nil
 }
-
-// RunToProject uploads files directly under a project (no record) using project-level file APIs.
-// RunToProject has been removed; use Run with UploadParent instead.
 
 // goWithSentry starts a goroutine with sentry error publishing.
 // Also stops the monitor and waits for it to finish if an error occurs.
@@ -862,12 +857,8 @@ func (um *UploadManager) printErrs() {
 	}
 }
 
-// removed old compatibility wrapper: findAllUploadUrls
-
-// removed old compatibility wrapper: findAllUploadUrlsProject
-
-// findAllUploadUrlsGeneric prepares upload URLs for either record or project parent using parentContext.
-func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx parentContext, relativeDir string, targetPrefix string) map[string]string {
+// findAllUploadUrls prepares upload URLs for either record or project parent using parentContext.
+func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentContext, relativeDir string, targetDir string) map[string]string {
 	ret := make(map[string]string)
 	var files []*openv1alpha1resource.File
 	resourceToRel := make(map[string]string)
@@ -893,10 +884,10 @@ func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx p
 			continue
 		}
 
-		// Apply target prefix if specified
+		// Apply target directory if specified
 		remotePath := relativePath
-		if targetPrefix != "" {
-			remotePath = filepath.Join(targetPrefix, relativePath)
+		if targetDir != "" {
+			remotePath = filepath.Join(targetDir, relativePath)
 		}
 
 		// Existence check
