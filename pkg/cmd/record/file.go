@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -170,22 +172,21 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 	var (
 		force       = false
 		projectSlug = ""
+		fileNames   []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "delete <record-resource-name/id> <filename> [-p <working-project-slug>] [-f]",
-		Short:                 "Delete a specific file from a record",
+		Use:                   "delete <record-resource-name/id> [<filename>] [-p <working-project-slug>] [--files <file1,file2,...>] [-f]",
+		Short:                 "Delete file(s) or directory from a record",
 		DisableFlagsInUseLine: true,
-		Args:                  cobra.ExactArgs(2),
+		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
@@ -194,26 +195,79 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
 			}
 
-			fileName := args[1]
+			var filesToDelete []string
+			if len(args) == 2 {
+				filesToDelete = append(filesToDelete, args[1])
+			}
+			if len(fileNames) > 0 {
+				filesToDelete = append(filesToDelete, fileNames...)
+			}
 
-			// Confirm deletion.
+			if len(filesToDelete) == 0 {
+				log.Fatalf("must specify at least one file to delete")
+			}
+
+			// Expand directories
+			var finalFilesToDelete []string
+			for _, fileName := range filesToDelete {
+				if strings.HasSuffix(fileName, "/") {
+					allFiles, err := pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+					if err != nil {
+						log.Fatalf("unable to list record files: %v", err)
+					}
+					for _, f := range allFiles {
+						recordFile, err := name.NewFile(f.Name)
+						if err != nil {
+							continue
+						}
+						if strings.HasPrefix(recordFile.Filename, fileName) {
+							finalFilesToDelete = append(finalFilesToDelete, recordFile.Filename)
+						}
+					}
+				} else {
+					finalFilesToDelete = append(finalFilesToDelete, fileName)
+				}
+			}
+
+			if len(finalFilesToDelete) == 0 {
+				fmt.Println("No files found to delete.")
+				return
+			}
+
+			// Confirm deletion
 			if !force {
-				if confirmed := prompts.PromptYN(fmt.Sprintf("Are you sure you want to delete the file '%s' from record?", fileName)); !confirmed {
+				fmt.Printf("About to delete %d file(s) from record:\n", len(finalFilesToDelete))
+				for _, f := range finalFilesToDelete {
+					fmt.Printf("  - %s\n", f)
+				}
+				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
 					fmt.Println("Delete file aborted.")
 					return
 				}
 			}
 
-			if err = pm.RecordCli().DeleteFile(context.TODO(), recordName, fileName); err != nil {
-				log.Fatalf("failed to delete file: %v", err)
+			// Build full resource names for batch delete
+			resourceNames := make([]string, len(finalFilesToDelete))
+			for i, fileName := range finalFilesToDelete {
+				resourceNames[i] = name.File{
+					ProjectID: recordName.ProjectID,
+					RecordID:  recordName.RecordID,
+					Filename:  fileName,
+				}.String()
 			}
 
-			fmt.Printf("File '%s' successfully deleted.\n", fileName)
+			// Always use batch delete for consistency
+			if err := pm.FileCli().BatchDeleteFiles(context.TODO(), recordName.String(), resourceNames); err != nil {
+				log.Fatalf("failed to delete files: %v", err)
+			}
+
+			fmt.Printf("Successfully deleted %d file(s).\n", len(finalFilesToDelete))
 		},
 	}
 
 	cmd.Flags().BoolVarP(&force, "force", "f", force, "Force delete without confirmation")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "additional files to delete (comma-separated)")
 
 	return cmd
 }

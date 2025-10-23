@@ -294,14 +294,15 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 
 func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 	var (
-		force = false
+		force     = false
+		fileNames []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "delete <project-resource-name/slug> <filename> [-f]",
-		Short:                 "Delete a specific file from a project",
+		Use:                   "delete <project-resource-name/slug> [<filename>] [--files <file1,file2,...>] [-f]",
+		Short:                 "Delete file(s) or directory from a project",
 		DisableFlagsInUseLine: true,
-		Args:                  cobra.ExactArgs(2),
+		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
@@ -310,26 +311,78 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			fileName := args[1]
+			var filesToDelete []string
 
+			// Collect files to delete from args and flags
+			if len(args) == 2 {
+				filesToDelete = append(filesToDelete, args[1])
+			}
+			if len(fileNames) > 0 {
+				filesToDelete = append(filesToDelete, fileNames...)
+			}
+
+			if len(filesToDelete) == 0 {
+				log.Fatalf("must specify at least one file to delete")
+			}
+
+			// Expand directories: if name ends with / or is a directory prefix, list and collect
+			var finalFilesToDelete []string
+			for _, fileName := range filesToDelete {
+				if strings.HasSuffix(fileName, "/") {
+					// Directory: list all files with this prefix
+					allFiles, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+					if err != nil {
+						log.Fatalf("unable to list project files: %v", err)
+					}
+					for _, f := range allFiles {
+						// Extract filename from resource name
+						projectFile, err := name.NewProjectFile(f.Name)
+						if err != nil {
+							continue
+						}
+						if strings.HasPrefix(projectFile.Filename, fileName) {
+							finalFilesToDelete = append(finalFilesToDelete, projectFile.Filename)
+						}
+					}
+				} else {
+					finalFilesToDelete = append(finalFilesToDelete, fileName)
+				}
+			}
+
+			if len(finalFilesToDelete) == 0 {
+				fmt.Println("No files found to delete.")
+				return
+			}
+
+			// Confirm deletion
 			if !force {
-				if confirmed := prompts.PromptYN(fmt.Sprintf("Are you sure you want to delete the file '%s' from project?", fileName)); !confirmed {
+				fmt.Printf("About to delete %d file(s) from project:\n", len(finalFilesToDelete))
+				for _, f := range finalFilesToDelete {
+					fmt.Printf("  - %s\n", f)
+				}
+				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
 					fmt.Println("Delete file aborted.")
 					return
 				}
 			}
 
-			// Build full resource name and delete
-			fullName := name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
-			if err := pm.FileCli().DeleteFile(context.TODO(), fullName); err != nil {
-				log.Fatalf("failed to delete file: %v", err)
+			// Build full resource names for batch delete
+			resourceNames := make([]string, len(finalFilesToDelete))
+			for i, fileName := range finalFilesToDelete {
+				resourceNames[i] = name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
 			}
 
-			fmt.Printf("File '%s' successfully deleted.\n", fileName)
+			// Always use batch delete for consistency
+			if err := pm.FileCli().BatchDeleteFiles(context.TODO(), projectName.String(), resourceNames); err != nil {
+				log.Fatalf("failed to delete files: %v", err)
+			}
+
+			fmt.Printf("Successfully deleted %d file(s).\n", len(finalFilesToDelete))
 		},
 	}
 
 	cmd.Flags().BoolVarP(&force, "force", "f", force, "Force delete without confirmation")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "additional files to delete (comma-separated)")
 
 	return cmd
 }
