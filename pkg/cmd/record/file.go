@@ -151,6 +151,14 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
+			// Strip directory prefix from display if --dir was specified
+			if dir != "" {
+				normalizedPrefix := strings.TrimSuffix(dir, "/") + "/"
+				for _, f := range files {
+					f.Filename = strings.TrimPrefix(f.Filename, normalizedPrefix)
+				}
+			}
+
 			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
