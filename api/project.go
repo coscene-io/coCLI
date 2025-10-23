@@ -47,6 +47,15 @@ type ProjectInterface interface {
 
 	// ListAllFiles lists all files in a project.
 	ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error)
+
+	// ListAllFilesWithFilter lists all files in a project with additional filter.
+	ListAllFilesWithFilter(ctx context.Context, projectName *name.Project, additionalFilter string) ([]*openv1alpha1resource.File, error)
+
+	// ListFilesWithPagination lists files in a project with pagination support.
+	ListFilesWithPagination(ctx context.Context, projectName *name.Project, pageSize int, skip int) ([]*openv1alpha1resource.File, error)
+
+	// ListFilesWithPaginationAndFilter lists files in a project with pagination support and additional filter.
+	ListFilesWithPaginationAndFilter(ctx context.Context, projectName *name.Project, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error)
 }
 
 type ListProjectsOptions struct {
@@ -207,38 +216,65 @@ func (c *projectClient) CreateProjectUsingTemplate(
 	return res.Msg, nil
 }
 
-// ListAllFiles lists all files in a project.
+// ListAllFiles lists all files in a project recursively (default behavior for backward compatibility).
 func (c *projectClient) ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, projectName, "recursive=\"true\"")
+}
+
+func (c *projectClient) ListAllFilesWithFilter(ctx context.Context, projectName *name.Project, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, projectName, additionalFilter)
+}
+
+func (c *projectClient) ListFilesWithPagination(ctx context.Context, projectName *name.Project, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesPage(ctx, projectName, pageSize, skip, "")
+}
+
+func (c *projectClient) ListFilesWithPaginationAndFilter(ctx context.Context, projectName *name.Project, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesPage(ctx, projectName, pageSize, skip, additionalFilter)
+}
+
+func (c *projectClient) listAllFilesWithFilter(ctx context.Context, projectName *name.Project, filter string) ([]*openv1alpha1resource.File, error) {
 	var (
 		ret  []*openv1alpha1resource.File
-		skip = 0
+		offs = 0
 	)
-
-	filter := "recursive=\"true\""
 
 	for {
 		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
 			Parent:   projectName.String(),
 			PageSize: constants.MaxPageSize,
-			Skip:     int32(skip),
+			Skip:     int32(offs),
 			Filter:   filter,
 		})
 		res, err := c.fileServiceClient.ListFiles(ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list project files at skip %d: %w", skip, err)
+			return nil, fmt.Errorf("failed to list project files at skip %d: %w", offs, err)
 		}
 		if len(res.Msg.Files) == 0 {
 			break
 		}
 		ret = append(ret, res.Msg.Files...)
-		skip += constants.MaxPageSize
-		if skip >= int(res.Msg.TotalSize) {
+		offs += constants.MaxPageSize
+		if offs >= int(res.Msg.TotalSize) {
 			break
 		}
 	}
 
-	// Filter out directories to match record file behavior
 	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
 		return !strings.HasSuffix(file.Filename, "/")
 	}), nil
+}
+
+func (c *projectClient) listFilesPage(ctx context.Context, projectName *name.Project, pageSize int, skip int, filter string) ([]*openv1alpha1resource.File, error) {
+	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+		Parent:   projectName.String(),
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.fileServiceClient.ListFiles(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files: %w", err)
+	}
+	return res.Msg.Files, nil
 }

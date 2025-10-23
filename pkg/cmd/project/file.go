@@ -23,6 +23,7 @@ import (
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/fs"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
@@ -53,31 +54,93 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
+		recursive    = false
+		pageSize     = 0
+		page         = 0
+		all          = false
+		keywords     = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <project-resource-name/slug>",
+		Use:                   "list <project-resource-name/slug> [-R] [-v] [--page-size <size>] [--page <number>] [--all] [--keywords <path>]",
 		Short:                 "List files in the project",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
-			// Get current profile.
+			// Validate pagination flags
+			if pageSize > 0 && (pageSize < 10 || pageSize > 100) {
+				log.Fatalf("--page-size must be between 10 and 100")
+			}
+			if page < 1 {
+				log.Fatalf("--page must be >= 1")
+			}
+
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
-			// Handle args and flags.
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// List all files in the project.
-			files, err := pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
-			if err != nil {
-				// Check if the error indicates that project-level files are not supported
-				if strings.Contains(err.Error(), "invalid_argument") || strings.Contains(err.Error(), "validation error") || strings.Contains(err.Error(), "file_ListFiles_parent_format") {
-					log.Fatalf("Project-level file listing is not currently supported. The server requires files to be associated with records (validation error: parent must match pattern 'projects/{uuid}/records/{uuid}').")
+			var files []*openv1alpha1resource.File
+			var filterParts []string
+
+			// Build filter
+			if recursive {
+				filterParts = append(filterParts, "recursive=\"true\"")
+			}
+			if keywords != "" {
+				filterParts = append(filterParts, fmt.Sprintf("path=\"%s\"", keywords))
+			}
+			additionalFilter := strings.Join(filterParts, " && ")
+
+			if all {
+				if additionalFilter != "" {
+					files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, additionalFilter)
+				} else {
+					files, err = pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
 				}
-				log.Fatalf("unable to list project files: %v", err)
+				if err != nil {
+					log.Fatalf("unable to list files: %v", err)
+				}
+			} else if pageSize > 0 || page > 1 {
+				effectivePageSize := pageSize
+				if effectivePageSize <= 0 {
+					effectivePageSize = constants.MaxPageSize
+				}
+
+				skip := 0
+				if page > 1 {
+					skip = (page - 1) * effectivePageSize
+				}
+
+				if additionalFilter != "" {
+					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(context.TODO(), projectName, effectivePageSize, skip, additionalFilter)
+				} else {
+					files, err = pm.ProjectCli().ListFilesWithPagination(context.TODO(), projectName, effectivePageSize, skip)
+				}
+				if err != nil {
+					log.Fatalf("unable to list files: %v", err)
+				}
+
+				if pageSize <= 0 && page > 1 {
+					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d files for page %d.\n\n", effectivePageSize, page)
+				}
+			} else {
+				// Default behavior: use MaxPageSize and show note
+				defaultPageSize := constants.MaxPageSize
+				if additionalFilter != "" {
+					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(context.TODO(), projectName, defaultPageSize, 0, additionalFilter)
+				} else {
+					files, err = pm.ProjectCli().ListFilesWithPagination(context.TODO(), projectName, defaultPageSize, 0)
+				}
+				if err != nil {
+					log.Fatalf("unable to list files: %v", err)
+				}
+
+				if len(files) == defaultPageSize {
+					fmt.Fprintf(os.Stderr, "Note: Showing first %d files (default page size). Use --all to list all files or --page-size to specify page size.\n\n", defaultPageSize)
+				}
 			}
 
 			// Filter out record files if any
@@ -100,6 +163,14 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json|yaml)")
+	cmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "list files recursively")
+	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
+	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
+	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
+	cmd.Flags().StringVar(&keywords, "keywords", "", "filter files by path")
+
+	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
+	cmd.MarkFlagsMutuallyExclusive("all", "page")
 
 	return cmd
 }
