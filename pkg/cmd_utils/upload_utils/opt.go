@@ -84,6 +84,7 @@ type FileOpts struct {
 	expandedPaths []string // Populated if Path contains glob patterns
 	Recursive     bool
 	IncludeHidden bool
+	Prefix        string // Target directory prefix in remote (e.g., "data/" to upload to data/ subdirectory)
 
 	// Additional mapping from file path to oss path
 	AdditionalUploads map[string]string

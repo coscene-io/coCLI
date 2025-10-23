@@ -300,13 +300,13 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 	var (
 		isRecursive       = false
 		includeHidden     = false
-		maxRetries        = 0 // unused, kept for parity
+		targetPrefix      = ""
 		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <project-resource-name/slug> <directory>",
-		Short:                 "Upload files in directory to a project.",
+		Use:                   "upload <project-resource-name/slug> <path> [--prefix <target-dir>] [-R] [-H]",
+		Short:                 "Upload files or directory to a project.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -317,19 +317,20 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			dirPath, err := filepath.Abs(args[1])
+			sourcePath, err := filepath.Abs(args[1])
 			if err != nil {
 				log.Fatalf("unable to get absolute path: %v", err)
 			}
 
-			if dirInfo, err := os.Stat(dirPath); err != nil {
-				log.Fatalf("Error checking source directory: %v", err)
-			} else if !dirInfo.IsDir() {
-				log.Fatalf("Source is not a directory: %s", dirPath)
+			if _, err := os.Stat(sourcePath); err != nil {
+				log.Fatalf("Error checking source path: %v", err)
 			}
 
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Uploading files to project: %s\n", projectName.ProjectID)
+			if targetPrefix != "" {
+				fmt.Printf("Target directory: %s\n", targetPrefix)
+			}
 
 			um, err := upload_utils.NewUploadManagerFromConfig(projectName, 0,
 				&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, uploadManagerOpts)
@@ -337,7 +338,12 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to create upload manager: %v", err)
 			}
 
-			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{Path: dirPath, Recursive: isRecursive, IncludeHidden: includeHidden}); err != nil {
+			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{
+				Path:          sourcePath,
+				Recursive:     isRecursive,
+				IncludeHidden: includeHidden,
+				Prefix:        targetPrefix,
+			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
 
@@ -347,12 +353,12 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 			} else {
 				log.Errorf("unable to get project url: %v", err)
 			}
-			_ = maxRetries // silence unused var
 		},
 	}
 
 	cmd.Flags().BoolVarP(&isRecursive, "recursive", "R", false, "upload files in the current directory recursively")
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
+	cmd.Flags().StringVar(&targetPrefix, "prefix", "", "target directory prefix in remote (e.g., 'data/' to upload to data/ subdirectory)")
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")

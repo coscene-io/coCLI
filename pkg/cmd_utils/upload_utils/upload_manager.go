@@ -289,7 +289,7 @@ func (um *UploadManager) Run(ctx context.Context, parent UploadParent, fileOpts 
 	}
 	um.uploadWg.Add(len(filesToUpload) + len(fileOpts.AdditionalUploads))
 
-	fileToUploadUrls := um.findAllUploadUrlsGeneric(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir())
+	fileToUploadUrls := um.findAllUploadUrlsGeneric(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.Prefix)
 	for f, v := range fileOpts.AdditionalUploads {
 		fileToUploadUrls[f] = v
 		um.addFile(f)
@@ -858,7 +858,7 @@ func (um *UploadManager) printErrs() {
 // removed old compatibility wrapper: findAllUploadUrlsProject
 
 // findAllUploadUrlsGeneric prepares upload URLs for either record or project parent using parentContext.
-func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx parentContext, relativeDir string) map[string]string {
+func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx parentContext, relativeDir string, targetPrefix string) map[string]string {
 	ret := make(map[string]string)
 	var files []*openv1alpha1resource.File
 	resourceToRel := make(map[string]string)
@@ -884,8 +884,14 @@ func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx p
 			continue
 		}
 
+		// Apply target prefix if specified
+		remotePath := relativePath
+		if targetPrefix != "" {
+			remotePath = filepath.Join(targetPrefix, relativePath)
+		}
+
 		// Existence check
-		resourceName := pCtx.buildResourceName(relativePath)
+		resourceName := pCtx.buildResourceName(remotePath)
 		getFileRes, err := um.apiOpts.GetFile(context.TODO(), resourceName)
 		if err == nil && getFileRes.Sha256 == checksum && getFileRes.Size == size {
 			um.fileInfos[f].Status = PreviouslyUploaded
@@ -899,7 +905,7 @@ func (um *UploadManager) findAllUploadUrlsGeneric(filesToUpload []string, pCtx p
 		um.fileInfos[f].Status = WaitingForUpload
 		files = append(files, &openv1alpha1resource.File{
 			Name:     resourceName,
-			Filename: relativePath,
+			Filename: remotePath,
 			Sha256:   checksum,
 			Size:     size,
 		})
