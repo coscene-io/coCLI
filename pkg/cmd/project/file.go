@@ -298,15 +298,14 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 
 func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 	var (
-		isRecursive       = false
 		includeHidden     = false
 		targetPrefix      = ""
 		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <project-resource-name/slug> <path> [--prefix <target-dir>] [-R] [-H]",
-		Short:                 "Upload files or directory to a project.",
+		Use:                   "upload <project-resource-name/slug> <path> [--prefix <target-dir>] [-H]",
+		Short:                 "Upload files or directory to a project. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -340,7 +339,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 
 			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{
 				Path:          sourcePath,
-				Recursive:     isRecursive,
+				Recursive:     true, // Always recursive; use glob patterns for selective upload
 				IncludeHidden: includeHidden,
 				Prefix:        targetPrefix,
 			}); err != nil {
@@ -356,7 +355,6 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&isRecursive, "recursive", "R", false, "upload files in the current directory recursively")
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVar(&targetPrefix, "prefix", "", "target directory prefix in remote (e.g., 'data/' to upload to data/ subdirectory)")
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")

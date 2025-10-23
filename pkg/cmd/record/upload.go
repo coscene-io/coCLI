@@ -30,7 +30,6 @@ import (
 
 func NewUploadCommand(cfgPath *string) *cobra.Command {
 	var (
-		isRecursive       = false
 		includeHidden     = false
 		projectSlug       = ""
 		targetPrefix      = ""
@@ -39,8 +38,8 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--prefix <target-dir>] [-R] [-H]",
-		Short:                 "Upload files or directory to a record in coScene.",
+		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--prefix <target-dir>] [-H]",
+		Short:                 "Upload files or directory to a record. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -80,7 +79,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 			// Upload files
 			if err := um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{
 				Path:          filePath,
-				Recursive:     isRecursive,
+				Recursive:     true, // Always recursive; use glob patterns for selective upload
 				IncludeHidden: includeHidden,
 				Prefix:        targetPrefix,
 			}); err != nil {
@@ -96,7 +95,6 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&isRecursive, "recursive", "R", false, "upload files in the current directory recursively")
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVar(&targetPrefix, "prefix", "", "target directory prefix in remote (e.g., 'data/' to upload to data/ subdirectory)")
