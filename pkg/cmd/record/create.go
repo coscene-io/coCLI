@@ -86,7 +86,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 					log.Fatalf("unable to create upload manager: %v", err)
 				}
 
-				err = um.Run(context.TODO(), recordName, &upload_utils.FileOpts{AdditionalUploads: map[string]string{
+				err = um.Run(context.TODO(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
 					thumbnail: thumbnailUploadUrl,
 				}})
 				if err != nil {

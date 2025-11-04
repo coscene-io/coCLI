@@ -48,6 +48,7 @@ import (
 
 const (
 	userTagRecordIdKey     = "X-COS-RECORD-ID"
+	userTagProjectIdKey    = "X-COS-PROJECT-ID"
 	mutipartUploadInfoKey  = "STORE-KEY-MUTIPART-UPLOAD-INFO"
 	maxSinglePutObjectSize = 1024 * 1024 * 1024 * 500 // 500GiB
 	defaultWindowSize      = 1024 * 1024 * 1024       // 1GiB
@@ -89,11 +90,12 @@ const (
 
 // FileInfo contains the path, size and sha256 of a file.
 type FileInfo struct {
-	Path     string
-	Size     int64
-	Sha256   string
-	Uploaded int64
-	Status   UploadStatusEnum
+	Path       string // Local absolute path
+	RemotePath string // Remote destination path (for display)
+	Size       int64
+	Sha256     string
+	Uploaded   int64
+	Status     UploadStatusEnum
 }
 
 // UploadInfo contains the information needed to upload a file or a file part (multipart upload).
@@ -155,6 +157,45 @@ type UploadManager struct {
 	isDebug bool
 }
 
+// parentContext abstracts record/project parent for upload.
+type parentContext struct {
+	parentString      string
+	buildResourceName func(relativePath string) string
+}
+
+// UploadParent is a public abstraction for upload destination (record or project).
+type UploadParent interface {
+	ParentString() string
+	BuildResourceName(relativePath string) string
+}
+
+// RecordParent implements UploadParent for record-level uploads.
+type RecordParent struct{ R *name.Record }
+
+func NewRecordParent(r *name.Record) RecordParent { return RecordParent{R: r} }
+
+func (rp RecordParent) ParentString() string { return rp.R.String() }
+func (rp RecordParent) BuildResourceName(relativePath string) string {
+	return name.File{ProjectID: rp.R.ProjectID, RecordID: rp.R.RecordID, Filename: relativePath}.String()
+}
+
+// ProjectParent implements UploadParent for project-level uploads.
+type ProjectParent struct{ P *name.Project }
+
+func NewProjectParent(p *name.Project) ProjectParent { return ProjectParent{P: p} }
+
+func (pp ProjectParent) ParentString() string { return pp.P.String() }
+func (pp ProjectParent) BuildResourceName(relativePath string) string {
+	return name.ProjectFile{ProjectID: pp.P.ProjectID, Filename: relativePath}.String()
+}
+
+func newParentContextFrom(up UploadParent) parentContext {
+	return parentContext{
+		parentString:      up.ParentString(),
+		buildResourceName: func(relativePath string) string { return up.BuildResourceName(relativePath) },
+	}
+}
+
 func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOpts *ApiOpts, opts *UploadManagerOpts) (*UploadManager, error) {
 	if err := opts.Valid(); err != nil {
 		return nil, errors.Wrap(err, "invalid multipart options")
@@ -202,7 +243,7 @@ func NewUploadManagerFromConfig(proj *name.Project, timeout time.Duration, apiOp
 }
 
 // Run is used to start the upload process.
-func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *FileOpts) error {
+func (um *UploadManager) Run(ctx context.Context, parent UploadParent, fileOpts *FileOpts) error {
 	if err := fileOpts.Valid(); err != nil {
 		return err
 	}
@@ -241,10 +282,13 @@ func (um *UploadManager) Run(ctx context.Context, rcd *name.Record, fileOpts *Fi
 		um.client.TraceOn(log.StandardLogger().WriterLevel(log.TraceLevel))
 	}
 
-	filesToUpload := fs.FindFiles(fileOpts.Path, fileOpts.Recursive, fileOpts.IncludeHidden)
+	var filesToUpload []string
+	for _, path := range fileOpts.GetPaths() {
+		filesToUpload = append(filesToUpload, fs.FindFiles(path, fileOpts.Recursive, fileOpts.IncludeHidden)...)
+	}
 	um.uploadWg.Add(len(filesToUpload) + len(fileOpts.AdditionalUploads))
 
-	fileToUploadUrls := um.findAllUploadUrls(filesToUpload, rcd, fileOpts.relDir)
+	fileToUploadUrls := um.findAllUploadUrls(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.TargetDir)
 	for f, v := range fileOpts.AdditionalUploads {
 		fileToUploadUrls[f] = v
 		um.addFile(f)
@@ -412,7 +456,12 @@ func (um *UploadManager) produceMultipartUploadInfos(ctx context.Context, fileAb
 	}
 
 	// Create uploader db
-	db, err := NewUploadDB(fileAbsolutePath, tags[userTagRecordIdKey], fileInfo.Sha256, um.opts.partSizeUint64)
+	// Prefer record id if present; otherwise fallback to project id to uniquely key uploads per destination
+	recordOrProjectId := tags[userTagRecordIdKey]
+	if recordOrProjectId == "" {
+		recordOrProjectId = tags[userTagProjectIdKey]
+	}
+	db, err := NewUploadDB(fileAbsolutePath, recordOrProjectId, fileInfo.Sha256, um.opts.partSizeUint64)
 	if err != nil {
 		return nil, errors.Wrap(err, "Create uploader db failed")
 	}
@@ -577,7 +626,11 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
 		if um.noTTY {
-			log.Infof("Completed upload: %s", result.Path)
+			displayPath := um.fileInfos[result.Path].RemotePath
+			if displayPath == "" {
+				displayPath = result.Path
+			}
+			log.Infof("Completed upload: %s", displayPath)
 		}
 		return nil
 	}
@@ -652,7 +705,11 @@ func (um *UploadManager) handleUploadResult(result UploadInfo) error {
 		um.fileInfos[result.Path].Status = UploadCompleted
 		um.uploadWg.Done()
 		if um.noTTY {
-			log.Infof("Completed multipart upload: %s", result.Path)
+			displayPath := um.fileInfos[result.Path].RemotePath
+			if displayPath == "" {
+				displayPath = result.Path
+			}
+			log.Infof("Completed multipart upload: %s", displayPath)
 		}
 	}
 
@@ -800,9 +857,11 @@ func (um *UploadManager) printErrs() {
 	}
 }
 
-func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *name.Record, relativeDir string) map[string]string {
+// findAllUploadUrls prepares upload URLs for either record or project parent using parentContext.
+func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentContext, relativeDir string, targetDir string) map[string]string {
 	ret := make(map[string]string)
 	var files []*openv1alpha1resource.File
+	resourceToRel := make(map[string]string)
 
 	if um.noTTY && len(filesToUpload) > 0 {
 		log.Infof("Processing %d files for upload...", len(filesToUpload))
@@ -825,12 +884,15 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 			continue
 		}
 
-		// Check if the file already exists in the record.
-		getFileRes, err := um.apiOpts.GetFile(context.TODO(), name.File{
-			ProjectID: recordName.ProjectID,
-			RecordID:  recordName.RecordID,
-			Filename:  relativePath,
-		}.String())
+		// Apply target directory if specified
+		remotePath := relativePath
+		if targetDir != "" {
+			remotePath = filepath.Join(targetDir, relativePath)
+		}
+
+		// Existence check
+		resourceName := pCtx.buildResourceName(remotePath)
+		getFileRes, err := um.apiOpts.GetFile(context.TODO(), resourceName)
 		if err == nil && getFileRes.Sha256 == checksum && getFileRes.Size == size {
 			um.fileInfos[f].Status = PreviouslyUploaded
 			um.uploadWg.Done()
@@ -841,21 +903,18 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 		}
 
 		um.fileInfos[f].Status = WaitingForUpload
-
+		um.fileInfos[f].RemotePath = remotePath // Set remote path for display
 		files = append(files, &openv1alpha1resource.File{
-			Name: name.File{
-				ProjectID: recordName.ProjectID,
-				RecordID:  recordName.RecordID,
-				Filename:  relativePath,
-			}.String(),
-			Filename: relativePath,
+			Name:     resourceName,
+			Filename: remotePath,
 			Sha256:   checksum,
 			Size:     size,
 		})
+		resourceToRel[resourceName] = relativePath
 
 		if len(files) == processBatchSize {
 			um.debugF("Generating upload urls for %d files", len(files))
-			res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), recordName, files)
+			res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), pCtx.parentString, files)
 			if err != nil {
 				for _, file := range files {
 					um.addErr(filepath.Join(relativeDir, file.Filename), errors.Wrapf(err, "unable to generate upload urls"))
@@ -863,8 +922,9 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 				continue
 			}
 			for k, v := range res {
-				fileResource, _ := name.NewFile(k)
-				ret[filepath.Join(relativeDir, fileResource.Filename)] = v
+				if rel, ok := resourceToRel[k]; ok {
+					ret[filepath.Join(relativeDir, rel)] = v
+				}
 			}
 			files = nil
 		}
@@ -872,15 +932,16 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, recordName *n
 
 	if len(files) > 0 {
 		um.debugF("Generating upload urls for %d files", len(files))
-		res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), recordName, files)
+		res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), pCtx.parentString, files)
 		if err != nil {
 			for _, file := range files {
 				um.addErr(filepath.Join(relativeDir, file.Filename), errors.Wrapf(err, "unable to generate upload urls"))
 			}
 		}
 		for k, v := range res {
-			fileResource, _ := name.NewFile(k)
-			ret[filepath.Join(relativeDir, fileResource.Filename)] = v
+			if rel, ok := resourceToRel[k]; ok {
+				ret[filepath.Join(relativeDir, rel)] = v
+			}
 		}
 	}
 
@@ -923,32 +984,37 @@ func (um *UploadManager) View() string {
 	successCount := 0
 	spinnerFrame := spinnerFrames[um.spinnerIdx]
 	for _, k := range um.fileList {
-		// Check if the file has been uploaded before
-		statusStrLen := um.windowWidth - len(k) - 1
+		// Use remote path for display if available, fallback to local path
+		displayPath := um.fileInfos[k].RemotePath
+		if displayPath == "" {
+			displayPath = k
+		}
+
+		statusStrLen := um.windowWidth - len(displayPath) - 1
 		switch um.fileInfos[k].Status {
 		case Unprocessed:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Preparing for upload"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Preparing for upload"+spinnerFrame)
 		case CalculatingSha256:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Calculating sha256"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Calculating sha256"+spinnerFrame)
 		case PreviouslyUploaded:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Previously uploaded, skipping")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Previously uploaded, skipping")
 			skipCount++
 		case WaitingForUpload:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Waiting for upload")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Waiting for upload")
 		case UploadCompleted:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Upload completed")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload completed")
 			successCount++
 		case MultipartCompletionInProgress:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Completing multipart upload"+spinnerFrame)
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Completing multipart upload"+spinnerFrame)
 		case UploadFailed:
-			s += fmt.Sprintf("%s:%*s\n", k, statusStrLen, "Upload failed")
+			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload failed")
 		case UploadInProgress:
 			progress := um.calculateUploadProgress(k)
 			barWidth := max(um.windowWidth-len(k)-12, 10)                       // Adjust for label and percentage, make sure it is at least 10
 			progressCount := min(int(progress*float64(barWidth)/100), barWidth) // min used to prevent float rounding errors
 			emptyBar := strings.Repeat("-", barWidth-progressCount)
 			progressBar := strings.Repeat("█", progressCount)
-			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", k, progressBar, emptyBar, 6, progress)
+			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", displayPath, progressBar, emptyBar, 6, progress)
 		}
 	}
 
