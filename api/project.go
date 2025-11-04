@@ -17,6 +17,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -36,6 +37,9 @@ type ProjectInterface interface {
 
 	// ListAllUserProjects lists all projects in the current organization.
 	ListAllUserProjects(ctx context.Context, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error)
+
+	// ListProjectsWithPagination lists projects with pagination.
+	ListProjectsWithPagination(ctx context.Context, pageSize int, skip int, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error)
 
 	// CreateProject creates a project.
 	CreateProject(ctx context.Context, opts *CreateProjectOptions) (*openv1alpha1resource.Project, error)
@@ -57,6 +61,8 @@ type ProjectInterface interface {
 }
 
 type ListProjectsOptions struct {
+	DisplayNames   []string
+	IncludeArchive bool
 }
 
 type projectClient struct {
@@ -141,8 +147,40 @@ func (c *projectClient) ListAllUserProjects(ctx context.Context, listOpts *ListP
 	return ret, nil
 }
 
+func (c *projectClient) ListProjectsWithPagination(ctx context.Context, pageSize int, skip int, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error) {
+	filter := c.filter(listOpts)
+	req := connect.NewRequest(&openv1alpha1service.ListProjectsRequest{
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.projectServiceClient.ListProjects(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+	return res.Msg.Projects, nil
+}
+
 func (c *projectClient) filter(opts *ListProjectsOptions) string {
-	return ""
+	if opts == nil {
+		return ""
+	}
+
+	var filters []string
+
+	if !opts.IncludeArchive {
+		filters = append(filters, "is_archived=\"false\"")
+	}
+
+	if len(opts.DisplayNames) > 0 {
+		keywordFilters := make([]string, len(opts.DisplayNames))
+		for i, name := range opts.DisplayNames {
+			keywordFilters[i] = fmt.Sprintf("displayName:\"%s\"", name)
+		}
+		filters = append(filters, "("+strings.Join(keywordFilters, " OR ")+")")
+	}
+
+	return strings.Join(filters, " AND ")
 }
 
 // CreateProject creates a project with the given slug in the current organization.
