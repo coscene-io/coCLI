@@ -77,7 +77,10 @@ func (p *ActionRun) ToTable(opts *table.PrintOpts) table.Table {
 		{
 			FieldName: "ACTION TITLE",
 			FieldValueFunc: func(a *openv1alpha1resource.ActionRun, opts *table.PrintOpts) string {
-				return a.Action.Spec.Name
+				if a.Action.Spec != nil {
+					return a.Action.Spec.Name
+				}
+				return ""
 			},
 			TrimSize: actionRunActionTitleTrimSize,
 		},

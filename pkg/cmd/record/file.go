@@ -24,11 +24,13 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +44,7 @@ func NewFileCommand(cfgPath *string) *cobra.Command {
 	cmd.AddCommand(NewFileListCommand(cfgPath))
 	cmd.AddCommand(NewFileDeleteCommand(cfgPath))
 	cmd.AddCommand(NewFileCopyCommand(cfgPath))
+	cmd.AddCommand(NewFileMoveCommand(cfgPath))
 
 	return cmd
 }
@@ -54,12 +57,12 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 		pageSize     = 0
 		page         = 0
 		all          = false
-		keywords     = ""
+		dir          = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--keywords <path>]",
-		Short:                 "List files in the record",
+		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
+		Short:                 "List files and directories in the record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -89,9 +92,17 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 			var files []*openv1alpha1resource.File
 
+			// Build filter
+			var filterStr string
+			if dir != "" {
+				// Normalize: ensure no trailing slash for filter consistency
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				filterStr = fmt.Sprintf("dir=\"%s\"", normalizedDir)
+			}
+
 			if all {
-				if keywords != "" {
-					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
 				}
@@ -109,8 +120,8 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 					skip = (page - 1) * effectivePageSize
 				}
 
-				if keywords != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, effectivePageSize, skip)
 				}
@@ -125,8 +136,8 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				if keywords != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, fmt.Sprintf("path=\"%s\"", keywords))
+				if filterStr != "" {
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, filterStr)
 				} else {
 					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, defaultPageSize, 0)
 				}
@@ -140,7 +151,15 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			// Print listed files.
+			// Strip directory prefix from display if --dir was specified
+			if dir != "" {
+				normalizedPrefix := strings.TrimSuffix(dir, "/") + "/"
+				for _, f := range files {
+					f.Filename = strings.TrimPrefix(f.Filename, normalizedPrefix)
+				}
+			}
+
+			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
 			}}).PrintObj(printable.NewFile(files), os.Stdout)
@@ -156,7 +175,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
-	cmd.Flags().StringVar(&keywords, "keywords", "", "filter files by path (e.g., 'myfile.txt' or 'folder/file')")
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "filter by directory path")
 
 	// Mark mutually exclusive flags
 	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
@@ -169,22 +188,21 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 	var (
 		force       = false
 		projectSlug = ""
+		fileNames   []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "delete <record-resource-name/id> <filename> [-p <working-project-slug>] [-f]",
-		Short:                 "Delete a specific file from a record",
+		Use:                   "delete <record-resource-name/id> [<filename>] [-p <working-project-slug>] [--files <file1,file2,...>] [-f]",
+		Short:                 "Delete file(s) or directory from a record",
 		DisableFlagsInUseLine: true,
-		Args:                  cobra.ExactArgs(2),
+		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
@@ -193,26 +211,57 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
 			}
 
-			fileName := args[1]
+			var filesToDelete []string
+			if len(args) == 2 {
+				filesToDelete = append(filesToDelete, args[1])
+			}
+			if len(fileNames) > 0 {
+				filesToDelete = append(filesToDelete, fileNames...)
+			}
 
-			// Confirm deletion.
+			if len(filesToDelete) == 0 {
+				log.Fatalf("must specify at least one file to delete")
+			}
+
+			// Confirm deletion
 			if !force {
-				if confirmed := prompts.PromptYN(fmt.Sprintf("Are you sure you want to delete the file '%s' from record?", fileName)); !confirmed {
-					fmt.Println("Delete file aborted.")
+				fmt.Printf("About to delete %d item(s) from record:\n", len(filesToDelete))
+				for _, f := range filesToDelete {
+					if strings.HasSuffix(f, "/") {
+						fmt.Printf("  - %s (directory - all contents will be deleted)\n", f)
+					} else {
+						fmt.Printf("  - %s\n", f)
+					}
+				}
+				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
+					fmt.Println("Delete aborted.")
 					return
 				}
 			}
 
-			if err = pm.RecordCli().DeleteFile(context.TODO(), recordName, fileName); err != nil {
-				log.Fatalf("failed to delete file: %v", err)
+			// Build full resource names for batch delete
+			// Server handles recursive deletion for directories
+			resourceNames := make([]string, len(filesToDelete))
+			for i, fileName := range filesToDelete {
+				resourceNames[i] = name.File{
+					ProjectID: recordName.ProjectID,
+					RecordID:  recordName.RecordID,
+					Filename:  fileName,
+				}.String()
 			}
 
-			fmt.Printf("File '%s' successfully deleted.\n", fileName)
+			// Always use batch delete for consistency
+			if err := pm.FileCli().BatchDeleteFiles(context.TODO(), recordName.String(), resourceNames); err != nil {
+				log.Fatalf("failed to delete files: %v", err)
+			}
+
+			fmt.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
 		},
 	}
 
 	cmd.Flags().BoolVarP(&force, "force", "f", force, "Force delete without confirmation")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "additional files to delete (comma-separated)")
 
 	return cmd
 }
@@ -222,12 +271,11 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 		projectSlug    = ""
 		dstProjectSlug = ""
 		fileNames      []string
-		copyAll        = false
 		force          = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "copy <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [--all] [-f]",
+		Use:                   "copy <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [-f]",
 		Short:                 "Copy files from one record to another",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -269,53 +317,12 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 
 			// Determine which files to copy
 			var allFiles []*openv1alpha1resource.File
-			if copyAll {
-				// Get all files from source record
-				allFiles, err = pm.RecordCli().ListAllFiles(context.TODO(), sourceRecordName)
-				if err != nil {
-					log.Fatalf("failed to list source files: %v", err)
-				}
-			} else if len(fileNames) > 0 {
-				// Get all files first, then filter by exact filename matches
-				sourceFiles, err := pm.RecordCli().ListAllFiles(context.TODO(), sourceRecordName)
-				if err != nil {
-					log.Fatalf("failed to list source files: %v", err)
-				}
-
-				// Create map of requested filenames for efficient lookup
-				requestedFiles := make(map[string]bool)
-				for _, filenameArg := range fileNames {
-					// Split by comma in case user provided "file1,file2" format
-					individualFiles := []string{filenameArg}
-					if strings.Contains(filenameArg, ",") {
-						individualFiles = strings.Split(filenameArg, ",")
+			if len(fileNames) > 0 {
+				allFiles = lo.Map(fileNames, func(fileName string, _ int) *openv1alpha1resource.File {
+					return &openv1alpha1resource.File{
+						Filename: fileName,
 					}
-
-					for _, filename := range individualFiles {
-						filename = strings.TrimSpace(filename)
-						if filename != "" {
-							requestedFiles[filename] = true
-						}
-					}
-				}
-
-				// Filter files by exact filename matches
-				for _, file := range sourceFiles {
-					if requestedFiles[file.Filename] {
-						allFiles = append(allFiles, file)
-						// Remove from map to track which files were found
-						delete(requestedFiles, file.Filename)
-					}
-				}
-
-				// Report any requested files that weren't found
-				if len(requestedFiles) > 0 {
-					var missingFiles []string
-					for filename := range requestedFiles {
-						missingFiles = append(missingFiles, filename)
-					}
-					log.Fatalf("the following files were not found in source record: %v", missingFiles)
-				}
+				})
 			} else {
 				log.Fatalf("either --all or --files must be specified")
 			}
@@ -360,10 +367,108 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&dstProjectSlug, "dst-project", "P", "", "destination project slug (defaults to source project)")
 	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "exact filenames to copy (can specify multiple, comma-separated)")
-	cmd.Flags().BoolVar(&copyAll, "all", false, "copy all files from source record")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force copy without confirmation")
 
-	cmd.MarkFlagsMutuallyExclusive("files", "all")
+	return cmd
+}
+
+func NewFileMoveCommand(cfgPath *string) *cobra.Command {
+	var (
+		projectSlug    = ""
+		dstProjectSlug = ""
+		fileNames      []string
+		force          = false
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "move <source-record-resource-name/id> <destination-record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [--files <filename1,filename2,...>] [-f]",
+		Short:                 "Move files from one record to another",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			// Get current profile.
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+
+			// Get working project.
+			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			sourceRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get source record name from %s: %v", args[0], err)
+			}
+
+			// Determine destination project - use dst project if specified, otherwise use source project
+			destProject := proj
+			if dstProjectSlug != "" {
+				destProject, err = pm.ProjectName(context.TODO(), dstProjectSlug)
+				if err != nil {
+					log.Fatalf("unable to get destination project name: %v", err)
+				}
+			}
+
+			destRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[1], destProject)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get destination record name from %s: %v", args[1], err)
+			}
+
+			var allFiles []*openv1alpha1resource.File
+			if len(fileNames) > 0 {
+				allFiles = lo.Map(fileNames, func(fileName string, _ int) *openv1alpha1resource.File {
+					return &openv1alpha1resource.File{
+						Filename: fileName,
+					}
+				})
+			} else {
+				log.Fatalf("either --all or --files must be specified")
+			}
+
+			if len(allFiles) == 0 {
+				fmt.Println("No files found to move.")
+				return
+			}
+
+			if !force {
+				fmt.Printf("About to move %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
+				for _, file := range allFiles {
+					fmt.Printf("  - %s\n", file.Filename)
+				}
+
+				yn := prompts.PromptYN("Do you want to continue?")
+				if !yn {
+					fmt.Println("Move operation cancelled.")
+					return
+				}
+			}
+
+			err = pm.RecordCli().MoveFiles(context.TODO(), sourceRecordName, destRecordName, allFiles)
+			if err != nil {
+				log.Fatalf("failed to move files: %v", err)
+			}
+
+			fmt.Printf("Successfully moved %d files to %s.\n", len(allFiles), destRecordName)
+
+			destRecordUrl, err := pm.GetRecordUrl(destRecordName)
+			if err != nil {
+				log.Errorf("unable to get destination record url: %v", err)
+			} else {
+				fmt.Printf("View moved files at: %s\n", destRecordUrl)
+			}
+		},
+	}
+
+	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringVarP(&dstProjectSlug, "dst-project", "P", "", "destination project slug (defaults to source project)")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "exact filenames to move (can specify multiple, comma-separated)")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force move without confirmation")
 
 	return cmd
 }

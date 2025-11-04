@@ -12,32 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package record
+package registry
 
 import (
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/spf13/cobra"
 )
 
 func NewRootCommand(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "record",
-		Short: "Work with coScene record.",
+		Use:   "registry",
+		Short: "Manage coScene container registry access",
 	}
 
-	cmd.AddCommand(NewCopyCommand(cfgPath))
-	cmd.AddCommand(NewCreateCommand(cfgPath))
-	cmd.AddCommand(NewCreateMomentCmd(cfgPath))
-	cmd.AddCommand(NewDeleteCommand(cfgPath))
-	cmd.AddCommand(NewDescribeCommand(cfgPath))
-	cmd.AddCommand(NewDownloadCommand(cfgPath))
-	cmd.AddCommand(NewFileCommand(cfgPath))
-	cmd.AddCommand(NewListCommand(cfgPath))
-	cmd.AddCommand(NewListFilesCommand(cfgPath))
-	cmd.AddCommand(NewListMomentsCommand(cfgPath))
-	cmd.AddCommand(NewMoveCommand(cfgPath))
-	cmd.AddCommand(NewUpdateCommand(cfgPath))
-	cmd.AddCommand(NewUploadCommand(cfgPath))
-	cmd.AddCommand(NewViewCommand(cfgPath))
+	// Registry operations don't require org/project auth checks
+	cmd_utils.DisableAuthCheck(cmd)
+
+	cmd.AddCommand(NewLoginCommand(cfgPath))
+	cmd.AddCommand(NewCreateCredentialCommand(cfgPath))
 
 	return cmd
 }

@@ -30,16 +30,16 @@ import (
 
 func NewUploadCommand(cfgPath *string) *cobra.Command {
 	var (
-		isRecursive       = false
 		includeHidden     = false
 		projectSlug       = ""
+		targetDir         = ""
 		uploadManagerOpts = &upload_utils.UploadManagerOpts{}
 		timeout           time.Duration
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <record-resource-name/id> <directory> [-p <working-project-slug>] [-R] [-H]",
-		Short:                 "Upload files in directory to a record in coScene.",
+		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--dir <target-dir>] [-H]",
+		Short:                 "Upload files or directory to a record. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -65,6 +65,9 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Uploading files to record: %s\n", recordName.RecordID)
+			if targetDir != "" {
+				fmt.Printf("Target directory: %s\n", targetDir)
+			}
 
 			// create minio client and upload manager first.
 			um, err := upload_utils.NewUploadManagerFromConfig(proj, timeout,
@@ -74,7 +77,12 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Upload files
-			if err := um.Run(cmd.Context(), recordName, &upload_utils.FileOpts{Path: filePath, Recursive: isRecursive, IncludeHidden: includeHidden}); err != nil {
+			if err := um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{
+				Path:          filePath,
+				Recursive:     true,
+				IncludeHidden: includeHidden,
+				TargetDir:     targetDir,
+			}); err != nil {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
 
@@ -87,9 +95,9 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&isRecursive, "recursive", "R", false, "upload files in the current directory recursively")
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringVarP(&targetDir, "dir", "d", "", "target directory in remote (e.g., 'backup/' to upload to backup/ subdirectory)")
 	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")

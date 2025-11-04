@@ -42,8 +42,14 @@ type RecordInterface interface {
 	// Copy copies a record to target project.
 	Copy(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
 
+	// Move moves a record to target project.
+	Move(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
+
 	// CopyFiles copies files from src record to dst record.
 	CopyFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error
+
+	// MoveFiles moves files from src record to dst record.
+	MoveFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error
 
 	// ListAllFiles lists all files in a record.
 	ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error)
@@ -199,6 +205,53 @@ func (c *recordClient) CopyFiles(ctx context.Context, srcRecordName *name.Record
 	return nil
 }
 
+func (c *recordClient) Move(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error) {
+	req := connect.NewRequest(&openv1alpha1service.MoveRecordsRequest{
+		Parent:      recordName.Project().String(),
+		Destination: targetProjectName.String(),
+		Records:     []string{recordName.String()},
+	})
+	resp, err := c.recordServiceClient.MoveRecords(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Msg.Records) != 1 {
+		return nil, errors.Errorf("unexpected number of records in response: %d", len(resp.Msg.Records))
+	}
+	return resp.Msg.Records[0], nil
+}
+
+func (c *recordClient) MoveFiles(ctx context.Context, srcRecordName *name.Record, dstRecordName *name.Record, files []*openv1alpha1resource.File) error {
+	movePairs := lo.Map(files, func(file *openv1alpha1resource.File, _ int) *openv1alpha1service.MoveFilesRequest_MovePair {
+		return &openv1alpha1service.MoveFilesRequest_MovePair{
+			SrcFile: file.GetFilename(),
+			DstFile: file.GetFilename(),
+		}
+	})
+
+	req := connect.NewRequest(&openv1alpha1service.MoveFilesRequest{
+		Parent:      srcRecordName.String(),
+		Destination: dstRecordName.String(),
+		MovePairs:   movePairs,
+	})
+
+	res, err := c.fileServiceClient.MoveFiles(ctx, req)
+	if err != nil {
+		return err
+	}
+	// TODO: The matrix server did not handle the moved files in the response correctly.
+	// 	 We will be able to check the Files field after the server is updated.
+	if res.Msg != nil {
+		if res.Msg.Files != nil && len(res.Msg.Files) == len(files) {
+			// Server returned moved files in response (ideal case)
+			return nil
+		}
+		// Server did not return moved files in response (current behavior)
+		return nil
+	}
+	return nil
+}
+
 func (c *recordClient) ListAllFiles(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.File, error) {
 	return c.listAllFilesWithFilter(ctx, recordName, "")
 }
@@ -208,37 +261,7 @@ func (c *recordClient) ListAllFilesWithFilter(ctx context.Context, recordName *n
 }
 
 func (c *recordClient) listAllFilesWithFilter(ctx context.Context, recordName *name.Record, additionalFilter string) ([]*openv1alpha1resource.File, error) {
-	var (
-		skip = 0
-		ret  []*openv1alpha1resource.File
-	)
-
-	filter := "recursive=\"true\""
-	if additionalFilter != "" {
-		filter += " AND " + additionalFilter
-	}
-
-	for {
-		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
-			Parent:   recordName.String(),
-			PageSize: constants.MaxPageSize,
-			Skip:     int32(skip),
-			Filter:   filter,
-		})
-		res, err := c.fileServiceClient.ListFiles(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list files at skip %d: %w", skip, err)
-		}
-		if len(res.Msg.Files) == 0 {
-			break
-		}
-		ret = append(ret, res.Msg.Files...)
-		skip += constants.MaxPageSize
-	}
-
-	return lo.Filter(ret, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return c.listFilesCore(ctx, recordName, 0, 0, additionalFilter, true)
 }
 
 func (c *recordClient) ListFilesWithPagination(ctx context.Context, recordName *name.Record, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
@@ -250,9 +273,42 @@ func (c *recordClient) ListFilesWithPaginationAndFilter(ctx context.Context, rec
 }
 
 func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesCore(ctx, recordName, pageSize, skip, additionalFilter, false)
+}
+
+// listFilesCore is an internal helper that lists files either across all pages
+// (all=true) or a single page (all=false). It returns raw results including
+// directories. Callers can filter directories as needed.
+func (c *recordClient) listFilesCore(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string, all bool) ([]*openv1alpha1resource.File, error) {
 	filter := "recursive=\"true\""
 	if additionalFilter != "" {
 		filter += " AND " + additionalFilter
+	}
+
+	if all {
+		var (
+			ret  []*openv1alpha1resource.File
+			offs = skip
+		)
+		for {
+			req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+				Parent:   recordName.String(),
+				PageSize: constants.MaxPageSize,
+				Skip:     int32(offs),
+				Filter:   filter,
+			})
+			res, err := c.fileServiceClient.ListFiles(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list files at skip %d: %w", offs, err)
+			}
+
+			ret = append(ret, res.Msg.Files...)
+			offs += constants.MaxPageSize
+			if offs >= int(res.Msg.TotalSize) {
+				break
+			}
+		}
+		return ret, nil
 	}
 
 	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
@@ -265,10 +321,7 @@ func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, rec
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
-
-	return lo.Filter(res.Msg.Files, func(file *openv1alpha1resource.File, _ int) bool {
-		return !strings.HasSuffix(file.Filename, "/")
-	}), nil
+	return res.Msg.Files, nil
 }
 
 func (c *recordClient) Delete(ctx context.Context, recordName *name.Record) error {

@@ -155,7 +155,9 @@ func SaveMomentsJson(moments []*api.Moment, dir string) error {
 		log.Fatalf("unable to create moments file %s: %v", momentPath, err)
 		return err
 	}
-	defer momentFile.Close() // Ensure the file is closed
+	defer func() {
+		_ = momentFile.Close()
+	}()
 
 	type Moments struct {
 		Moments []*api.Moment `json:"moments"`

@@ -77,6 +77,11 @@ func (pm *ProfileManager) GetRecordUrl(recordName *name.Record) (string, error) 
 	return pm.GetCurrentProfile().GetRecordUrl(recordName)
 }
 
+// GetProjectUrl gets the url of the project in the corresponding coScene website.
+func (pm *ProfileManager) GetProjectUrl(projectName *name.Project) (string, error) {
+	return pm.GetCurrentProfile().GetProjectUrl(projectName)
+}
+
 // GetBaseUrl returns the base url of the corresponding coScene website.
 func (pm *ProfileManager) GetBaseUrl() string {
 	return pm.GetCurrentProfile().GetBaseUrl()
@@ -143,6 +148,11 @@ func (pm *ProfileManager) EventCli() api.EventInterface {
 // TaskCli return task client of current profile.
 func (pm *ProfileManager) TaskCli() api.TaskInterface {
 	return pm.GetCurrentProfile().TaskCli()
+}
+
+// ContainerRegistryCli return container registry client of current profile.
+func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface {
+	return pm.GetCurrentProfile().ContainerRegistryCli()
 }
 
 // GetCurrentProfile return current profile of profile manager.

@@ -17,8 +17,10 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	"buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -35,18 +37,60 @@ type ProjectInterface interface {
 
 	// ListAllUserProjects lists all projects in the current organization.
 	ListAllUserProjects(ctx context.Context, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error)
+
+	// ListProjectsWithPagination lists projects with pagination.
+	ListProjectsWithPagination(ctx context.Context, pageSize int, skip int, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error)
+
+	// CreateProject creates a project.
+	CreateProject(ctx context.Context, opts *CreateProjectOptions) (*openv1alpha1resource.Project, error)
+
+	// CreateProjectUsingTemplate creates a project using a template.
+	CreateProjectUsingTemplate(ctx context.Context, opts *CreateProjectUsingTemplateOptions) (*openv1alpha1resource.Project, error)
+
+	// ListAllFiles lists all files in a project.
+	ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error)
+
+	// ListAllFilesWithFilter lists all files in a project with additional filter.
+	ListAllFilesWithFilter(ctx context.Context, projectName *name.Project, additionalFilter string) ([]*openv1alpha1resource.File, error)
+
+	// ListFilesWithPagination lists files in a project with pagination support.
+	ListFilesWithPagination(ctx context.Context, projectName *name.Project, pageSize int, skip int) ([]*openv1alpha1resource.File, error)
+
+	// ListFilesWithPaginationAndFilter lists files in a project with pagination support and additional filter.
+	ListFilesWithPaginationAndFilter(ctx context.Context, projectName *name.Project, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error)
 }
 
 type ListProjectsOptions struct {
+	DisplayNames   []string
+	IncludeArchive bool
 }
 
 type projectClient struct {
 	projectServiceClient openv1alpha1connect.ProjectServiceClient
+	fileServiceClient    openv1alpha1connect.FileServiceClient
 }
 
-func NewProjectClient(projectServiceClient openv1alpha1connect.ProjectServiceClient) ProjectInterface {
+type CreateProjectOptions struct {
+	Slug        string
+	DisplayName string
+	Visibility  enums.ProjectVisibilityEnum_ProjectVisibility
+	Description string
+}
+
+type CreateProjectUsingTemplateOptions struct {
+	Parent          string
+	Slug            string
+	DisplayName     string
+	ProjectTemplate string
+	TemplateScopes  []openv1alpha1service.CreateProjectUsingTemplateRequest_TemplateScope
+	Visibility      enums.ProjectVisibilityEnum_ProjectVisibility
+	Description     string
+}
+
+func NewProjectClient(projectServiceClient openv1alpha1connect.ProjectServiceClient, fileServiceClient openv1alpha1connect.FileServiceClient) ProjectInterface {
 	return &projectClient{
 		projectServiceClient: projectServiceClient,
+		fileServiceClient:    fileServiceClient,
 	}
 }
 
@@ -103,6 +147,168 @@ func (c *projectClient) ListAllUserProjects(ctx context.Context, listOpts *ListP
 	return ret, nil
 }
 
+func (c *projectClient) ListProjectsWithPagination(ctx context.Context, pageSize int, skip int, listOpts *ListProjectsOptions) ([]*openv1alpha1resource.Project, error) {
+	filter := c.filter(listOpts)
+	req := connect.NewRequest(&openv1alpha1service.ListProjectsRequest{
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.projectServiceClient.ListProjects(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+	return res.Msg.Projects, nil
+}
+
 func (c *projectClient) filter(opts *ListProjectsOptions) string {
-	return ""
+	if opts == nil {
+		return ""
+	}
+
+	var filters []string
+
+	if !opts.IncludeArchive {
+		filters = append(filters, "is_archived=\"false\"")
+	}
+
+	if len(opts.DisplayNames) > 0 {
+		keywordFilters := make([]string, len(opts.DisplayNames))
+		for i, name := range opts.DisplayNames {
+			keywordFilters[i] = fmt.Sprintf("displayName:\"%s\"", name)
+		}
+		filters = append(filters, "("+strings.Join(keywordFilters, " OR ")+")")
+	}
+
+	return strings.Join(filters, " AND ")
+}
+
+// CreateProject creates a project with the given slug in the current organization.
+func (c *projectClient) CreateProject(ctx context.Context, opts *CreateProjectOptions) (*openv1alpha1resource.Project, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("options cannot be nil")
+	}
+	if opts.Slug == "" {
+		return nil, fmt.Errorf("invalid slug: %v", opts.Slug)
+	}
+	if opts.DisplayName == "" {
+		return nil, fmt.Errorf("invalid display name: %v", opts.DisplayName)
+	}
+
+	var descPtr *string
+	if opts.Description != "" {
+		descPtr = &opts.Description
+	}
+
+	req := connect.NewRequest(&openv1alpha1service.CreateProjectRequest{
+		Project: &openv1alpha1resource.Project{
+			Slug:        opts.Slug,
+			DisplayName: opts.DisplayName,
+			Visibility:  opts.Visibility,
+			Description: descPtr,
+		},
+	})
+	res, err := c.projectServiceClient.CreateProject(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create project: %w", err)
+	}
+	return res.Msg, nil
+}
+
+// CreateProjectUsingTemplate creates a project using a template under the provided parent.
+func (c *projectClient) CreateProjectUsingTemplate(
+	ctx context.Context,
+	opts *CreateProjectUsingTemplateOptions,
+) (*openv1alpha1resource.Project, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("options cannot be nil")
+	}
+	if opts.Slug == "" {
+		return nil, fmt.Errorf("invalid slug: %v", opts.Slug)
+	}
+	if opts.DisplayName == "" {
+		return nil, fmt.Errorf("invalid display name: %v", opts.DisplayName)
+	}
+
+	var descPtr *string
+	if opts.Description != "" {
+		descPtr = &opts.Description
+	}
+
+	req := connect.NewRequest(&openv1alpha1service.CreateProjectUsingTemplateRequest{
+		Project: &openv1alpha1resource.Project{
+			Slug:        opts.Slug,
+			DisplayName: opts.DisplayName,
+			Visibility:  opts.Visibility,
+			Description: descPtr,
+		},
+		ProjectTemplate: opts.ProjectTemplate,
+		TemplateScopes:  opts.TemplateScopes,
+	})
+	res, err := c.projectServiceClient.CreateProjectUsingTemplate(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create project using template: %w", err)
+	}
+	return res.Msg, nil
+}
+
+// ListAllFiles lists all files in a project recursively (default behavior for backward compatibility).
+func (c *projectClient) ListAllFiles(ctx context.Context, projectName *name.Project) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, projectName, "recursive=\"true\"")
+}
+
+func (c *projectClient) ListAllFilesWithFilter(ctx context.Context, projectName *name.Project, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listAllFilesWithFilter(ctx, projectName, additionalFilter)
+}
+
+func (c *projectClient) ListFilesWithPagination(ctx context.Context, projectName *name.Project, pageSize int, skip int) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesPage(ctx, projectName, pageSize, skip, "")
+}
+
+func (c *projectClient) ListFilesWithPaginationAndFilter(ctx context.Context, projectName *name.Project, pageSize int, skip int, additionalFilter string) ([]*openv1alpha1resource.File, error) {
+	return c.listFilesPage(ctx, projectName, pageSize, skip, additionalFilter)
+}
+
+func (c *projectClient) listAllFilesWithFilter(ctx context.Context, projectName *name.Project, filter string) ([]*openv1alpha1resource.File, error) {
+	var (
+		ret  []*openv1alpha1resource.File
+		offs = 0
+	)
+
+	for {
+		req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+			Parent:   projectName.String(),
+			PageSize: constants.MaxPageSize,
+			Skip:     int32(offs),
+			Filter:   filter,
+		})
+		res, err := c.fileServiceClient.ListFiles(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list project files at skip %d: %w", offs, err)
+		}
+		if len(res.Msg.Files) == 0 {
+			break
+		}
+		ret = append(ret, res.Msg.Files...)
+		offs += constants.MaxPageSize
+		if offs >= int(res.Msg.TotalSize) {
+			break
+		}
+	}
+
+	return ret, nil
+}
+
+func (c *projectClient) listFilesPage(ctx context.Context, projectName *name.Project, pageSize int, skip int, filter string) ([]*openv1alpha1resource.File, error) {
+	req := connect.NewRequest(&openv1alpha1service.ListFilesRequest{
+		Parent:   projectName.String(),
+		PageSize: int32(pageSize),
+		Skip:     int32(skip),
+		Filter:   filter,
+	})
+	res, err := c.fileServiceClient.ListFiles(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files: %w", err)
+	}
+	return res.Msg.Files, nil
 }

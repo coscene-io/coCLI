@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -37,11 +38,13 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 		projectSlug    = ""
 		maxRetries     = 0
 		includeMoments = false
+		dir            = ""
+		fileNames      []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>",
-		Short:                 "Download files from record to directory.",
+		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>] [--dir <path>] [--files <file1,file2,...>]",
+		Short:                 "Download files or directory from record.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -70,10 +73,32 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Destination directory is not a directory: %s", dirPath)
 			}
 
-			// List all files in the record.
-			files, err := pm.RecordCli().ListAllFiles(context.TODO(), recordName)
-			if err != nil {
-				log.Fatalf("unable to list files: %v", err)
+			// List files based on filters
+			var files []*openv1alpha1resource.File
+			if dir != "" {
+				// Download specific directory
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, fmt.Sprintf("dir=\"%s\"", normalizedDir))
+				if err != nil {
+					log.Fatalf("unable to list record files: %v", err)
+				}
+			} else if len(fileNames) > 0 {
+				// Download specific files - fetch each file info
+				for _, fileName := range fileNames {
+					resourceName := name.File{ProjectID: recordName.ProjectID, RecordID: recordName.RecordID, Filename: fileName}.String()
+					fileInfo, err := pm.FileCli().GetFile(context.TODO(), resourceName)
+					if err != nil {
+						log.Warnf("unable to get file %s: %v, skipping", fileName, err)
+						continue
+					}
+					files = append(files, fileInfo)
+				}
+			} else {
+				// Download all files (default)
+				files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+				if err != nil {
+					log.Fatalf("unable to list files: %v", err)
+				}
 			}
 
 			dstDir := filepath.Join(dirPath, recordName.RecordID)
@@ -151,6 +176,10 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().IntVarP(&maxRetries, "max-retries", "r", 3, "maximum number of retries for downloading a file")
 	cmd.Flags().BoolVarP(&includeMoments, "include-moments", "m", false, "include moments in the download")
+	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download specific directory")
+	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "download specific files (comma-separated)")
+
+	cmd.MarkFlagsMutuallyExclusive("dir", "files")
 
 	return cmd
 }

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -120,10 +121,8 @@ func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1
 		Parent: record.Project().String(),
 		ActionRun: &openv1alpha1resource.ActionRun{
 			Action: action,
-			Records: []*openv1alpha1resource.Record{
-				{
-					Name: record.String(),
-				},
+			Match: &openv1alpha1commons.TriggerMatch{
+				Records: []string{record.String()},
 			},
 		},
 	})

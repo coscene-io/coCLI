@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	projectIdTrimSize   = 36
-	projectSlugTrimSize = 30
+	projectIdTrimSize          = 36
+	projectSlugTrimSize        = 30
+	projectDisplayNameTrimSize = 40
 )
 
 type Project struct {
@@ -68,6 +69,13 @@ func (p *Project) ToTable(opts *table.PrintOpts) table.Table {
 				return p.Slug
 			},
 			TrimSize: projectSlugTrimSize,
+		},
+		{
+			FieldName: "DISPLAY NAME",
+			FieldValueFunc: func(p *openv1alpha1resource.Project, opts *table.PrintOpts) string {
+				return p.DisplayName
+			},
+			TrimSize: projectDisplayNameTrimSize,
 		},
 	}
 

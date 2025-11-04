@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2025 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCopyCommand(cfgPath *string) *cobra.Command {
+func NewMoveCommand(cfgPath *string) *cobra.Command {
 	var (
 		projectSlug = ""
 		dstProject  = ""
@@ -35,8 +35,8 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "copy <record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [-f]",
-		Short:                 "Copy a record to target project",
+		Use:                   "move <record-resource-name/id> [-p <working-project-slug>] [-P <dst-project-slug>] [-f]",
+		Short:                 "Move a record to target project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -76,42 +76,42 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 
 			// Show operation and confirm
 			if len(dstProject) != 0 {
-				fmt.Printf("Will copy entire record %s to project %s\n", recordName.RecordID, dstProject)
+				fmt.Printf("Will move entire record %s to project %s\n", recordName.RecordID, dstProject)
 			} else {
-				fmt.Printf("Will copy entire record %s to current project %s\n", recordName.RecordID, dstProject)
+				fmt.Printf("Will move entire record %s to current project %s\n", recordName.RecordID, dstProject)
 			}
 
 			if !force {
-				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this copy operation?"); !confirmed {
-					fmt.Println("Copy operation aborted.")
+				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this move operation?"); !confirmed {
+					fmt.Println("Move operation aborted.")
 					return
 				}
 			}
 
-			// Copy record.
-			var copiedRecordName *name.Record
+			// Move record.
+			var movedRecordName *name.Record
 			if len(dstProject) != 0 {
-				copied, err := pm.RecordCli().Copy(context.TODO(), recordName, dstProjectName)
+				moved, err := pm.RecordCli().Move(context.TODO(), recordName, dstProjectName)
 				if err != nil {
-					log.Fatalf("failed to copy record: %v", err)
+					log.Fatalf("failed to move record: %v", err)
 				}
 
-				fmt.Printf("Record successfully copied to %s.\n", copied.Name)
-				copiedRecordName, _ = name.NewRecord(copied.Name)
+				fmt.Printf("Record successfully moved to %s.\n", moved.Name)
+				movedRecordName, _ = name.NewRecord(moved.Name)
 			}
 
-			copiedRecordUrl, err := pm.GetRecordUrl(copiedRecordName)
+			movedRecordUrl, err := pm.GetRecordUrl(movedRecordName)
 			if err != nil {
 				log.Errorf("unable to get record url: %v", err)
 			} else {
-				fmt.Println("View copied record at:", copiedRecordUrl)
+				fmt.Println("View moved record at:", movedRecordUrl)
 			}
 		},
 	}
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&dstProject, "dst-project", "P", "", "destination project slug")
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "force copy without confirmation")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force move without confirmation")
 
 	return cmd
 }
