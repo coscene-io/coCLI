@@ -45,7 +45,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>] [--dir <path>] [--files <file1,file2,...>] [--flat]",
-		Short:                 "Download files or directory from record.",
+		Short:                 "Download all files from a record to directory",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {

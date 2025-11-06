@@ -65,7 +65,7 @@ func NewMomentCreateCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "create <record-resource-name/id> [-p <working-project-slug>]",
-		Short:                 "Create moment in the record",
+		Short:                 "Create a moment in a record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -227,7 +227,7 @@ func NewMomentListCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "list <record-resource-name/id> [-v] [-p <working-project-slug>]",
-		Short:                 "List moments in the record",
+		Short:                 "List moments in a record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {

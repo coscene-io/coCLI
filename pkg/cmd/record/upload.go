@@ -39,7 +39,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--dir <target-dir>] [-H]",
-		Short:                 "Upload files or directory to a record. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
+		Short:                 "Upload files or directory to a record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {

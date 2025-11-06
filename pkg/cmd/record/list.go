@@ -45,7 +45,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [--page-size <size>] [--page <number>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
-		Short:                 "List records in the project.",
+		Short:                 "List records in a project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
