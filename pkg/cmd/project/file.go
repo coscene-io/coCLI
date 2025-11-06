@@ -182,10 +182,11 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 		maxRetries = 0
 		dir        = ""
 		fileNames  []string
+		flat       = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "download <project-resource-name/slug> <dst-dir> [--dir <path>] [--files <file1,file2,...>]",
+		Use:                   "download <project-resource-name/slug> <dst-dir> [--dir <path>] [--files <file1,file2,...>] [--flat]",
 		Short:                 "Download files or directory from project.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -260,7 +261,12 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				return
 			}
 
-			dstDir := filepath.Join(dirPath, projectName.ProjectID)
+			var dstDir string
+			if flat {
+				dstDir = dirPath
+			} else {
+				dstDir = filepath.Join(dirPath, projectName.ProjectID)
+			}
 
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Downloading project files from %s\n", projectName.ProjectID)
@@ -326,6 +332,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().IntVarP(&maxRetries, "max-retries", "r", 3, "maximum number of retries for downloading a file")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download specific directory")
 	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "download specific files (comma-separated)")
+	cmd.Flags().BoolVar(&flat, "flat", false, "download directly to the specified directory without creating a subdirectory named with project-id")
 
 	cmd.MarkFlagsMutuallyExclusive("dir", "files")
 

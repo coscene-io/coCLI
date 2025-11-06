@@ -40,10 +40,11 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 		includeMoments = false
 		dir            = ""
 		fileNames      []string
+		flat           = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>] [--dir <path>] [--files <file1,file2,...>]",
+		Use:                   "download <record-resource-name/id> <dst-dir> [-m] [-p <working-project-slug>] [--dir <path>] [--files <file1,file2,...>] [--flat]",
 		Short:                 "Download files or directory from record.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
@@ -101,7 +102,12 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			dstDir := filepath.Join(dirPath, recordName.RecordID)
+			var dstDir string
+			if flat {
+				dstDir = dirPath
+			} else {
+				dstDir = filepath.Join(dirPath, recordName.RecordID)
+			}
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Downloading record %s\n", recordName.RecordID)
 			recordUrl, err := pm.GetRecordUrl(recordName)
@@ -178,6 +184,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().BoolVarP(&includeMoments, "include-moments", "m", false, "include moments in the download")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download specific directory")
 	cmd.Flags().StringSliceVar(&fileNames, "files", []string{}, "download specific files (comma-separated)")
+	cmd.Flags().BoolVar(&flat, "flat", false, "download directly to the specified directory without creating a subdirectory named with record-id")
 
 	cmd.MarkFlagsMutuallyExclusive("dir", "files")
 
