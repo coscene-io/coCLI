@@ -39,7 +39,7 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "describe <record-resource-name/id> [-p <working-project-slug>] [-o <output-format>]",
-		Short:                 "Describe record metadata.",
+		Short:                 "Describe record metadata",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {

@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2025 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	openv1alpha1enum "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/printer"
+	"github.com/coscene-io/cocli/internal/printer/printable"
+	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -31,7 +35,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
+func NewMomentCommand(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "moment",
+		Short: "Manage moments in records",
+	}
+
+	cmd.AddCommand(NewMomentCreateCommand(cfgPath))
+	cmd.AddCommand(NewMomentListCommand(cfgPath))
+
+	return cmd
+}
+
+func NewMomentCreateCommand(cfgPath *string) *cobra.Command {
 	var (
 		projectSlug                           = ""
 		displayName                           = ""
@@ -48,19 +64,17 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "create-moment <record-resource-name/id>",
-		Short:                 "Create moment in the record",
+		Use:                   "create <record-resource-name/id> [-p <working-project-slug>]",
+		Short:                 "Create a moment in a record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			// Get current profile.
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(context.TODO(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
@@ -187,7 +201,6 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
-
 	cmd.Flags().StringVarP(&displayName, "display-name", "n", "", "The name of the moment.")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "The description of the moment.")
 	cmd.Flags().StringVarP(&customizedFieldsRaw, "customized-fields", "j", "{}", "The customized fields of the moment.")
@@ -196,12 +209,60 @@ func NewCreateMomentCmd(cfgPath *string) *cobra.Command {
 	cmd.Flags().StringVarP(&assigner, "assigner", "a", "", "The assigner of task.")
 	cmd.Flags().StringVarP(&assignee, "assignee", "e", "", "The assignee of task.")
 	cmd.Flags().StringVarP(&ruleName, "rule-name", "R", "", "The name of the rule to create moment.")
-
 	cmd.Flags().BoolVarP(&skipCreateTask, "skip-create-task", "s", false, "Create task or not.")
 	cmd.Flags().BoolVarP(&syncTask, "sync-task", "S", false, "Sync task or not.")
 
 	_ = cmd.MarkFlagRequired("display-name")
 	_ = cmd.MarkFlagRequired("duration")
 	_ = cmd.MarkFlagRequired("trigger-time")
+	return cmd
+}
+
+func NewMomentListCommand(cfgPath *string) *cobra.Command {
+	var (
+		verbose      = false
+		outputFormat = ""
+		projectSlug  = ""
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "list <record-resource-name/id> [-v] [-p <working-project-slug>]",
+		Short:                 "List moments in a record",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get record name from %s: %v", args[0], err)
+			}
+
+			moments, err := pm.RecordCli().ListAllEvents(cmd.Context(), recordName)
+			if err != nil {
+				moments = []*openv1alpha1resource.Event{}
+				log.Errorf("unable to list moments: %v", err)
+			}
+
+			if err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+				Verbose: verbose,
+			}}).PrintObj(printable.NewEvent(moments), os.Stdout); err != nil {
+				log.Fatalf("unable to print moments: %v", err)
+			}
+
+		},
+	}
+
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
+	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+
 	return cmd
 }

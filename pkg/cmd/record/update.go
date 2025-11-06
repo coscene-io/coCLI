@@ -39,7 +39,7 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "update <record-resource-name/id> [-p <working-project-slug>] [-t <title>] [-d <description>] [-l <append-labels>...] [--update-labels <update-labels>...] [--delete-labels <delete-labels>...]",
-		Short:                 "Update record.",
+		Short:                 "Update record metadata",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		PreRun: func(cmd *cobra.Command, args []string) {
