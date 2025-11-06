@@ -66,7 +66,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
-		Short:                 "List files and directories in the record",
+		Short:                 "List files and directories in a record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -199,7 +199,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "download <record-resource-name/id> <dst-dir> [-p <working-project-slug>] [--dir <path>] [--files <file1,file2,...>] [--flat]",
-		Short:                 "Download files or directory from record.",
+		Short:                 "Download files or directory from a record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {

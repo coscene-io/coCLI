@@ -48,7 +48,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:                   "create -p <project-slug> -n <display-name> -b <visibility> [--template <template-slug-or-name>] [--scope <scopes>] [--description <description>]",
-		Short:                 "Create a project.",
+		Short:                 "Create a project",
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.

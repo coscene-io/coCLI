@@ -34,7 +34,7 @@ func NewViewCommand(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "view <record-resource-name/id> [-p <working-project-slug>] [-w]",
 		Aliases:               []string{"open"},
-		Short:                 "View record.",
+		Short:                 "View record details",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
