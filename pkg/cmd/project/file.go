@@ -63,7 +63,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "list <project-resource-name/slug> [-R] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
-		Short:                 "List files and directories in the project",
+		Short:                 "List files and directories in a project",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -187,7 +187,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "download <project-resource-name/slug> <dst-dir> [--dir <path>] [--files <file1,file2,...>] [--flat]",
-		Short:                 "Download files or directory from project.",
+		Short:                 "Download files or directory from a project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -348,7 +348,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:                   "upload <project-resource-name/slug> <path> [--dir <target-dir>] [-H]",
-		Short:                 "Upload files or directory to a project. Use glob patterns (e.g., 'dir/*') to upload directory contents without the parent folder.",
+		Short:                 "Upload files or directory to a project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
