@@ -212,9 +212,9 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			// List files based on filters
 			var files []*openv1alpha1resource.File
 			if dir != "" {
-				// Download specific directory
+				// Download specific directory recursively
 				normalizedDir := strings.TrimSuffix(dir, "/")
-				files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, fmt.Sprintf("dir=\"%s\"", normalizedDir))
+				files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
 				if err != nil {
 					log.Fatalf("unable to list project files: %v", err)
 				}
@@ -242,7 +242,26 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				return
 			}
 
+			// Filter out directory markers before downloading
+			var filesToDownload []*openv1alpha1resource.File
+			for _, f := range files {
+				fileName, err := name.NewProjectFile(f.Name)
+				if err != nil {
+					log.Warnf("unable to parse file name %s: %v, skipping", f.Name, err)
+					continue
+				}
+				if !strings.HasSuffix(fileName.Filename, "/") {
+					filesToDownload = append(filesToDownload, f)
+				}
+			}
+
+			if len(filesToDownload) == 0 {
+				fmt.Println("No files to download (only directories found).")
+				return
+			}
+
 			dstDir := filepath.Join(dirPath, projectName.ProjectID)
+
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Downloading project files from %s\n", projectName.ProjectID)
 			projectUrl, err := pm.GetProjectUrl(projectName)
@@ -253,10 +272,9 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 			fmt.Printf("Saving to %s\n", dstDir)
 
-			totalFiles := len(files)
+			totalFiles := len(filesToDownload)
 			successCount := 0
-			for fIdx, f := range files {
-				// For project files, we need to parse the file name
+			for fIdx, f := range filesToDownload {
 				fileName, err := name.NewProjectFile(f.Name)
 				if err != nil {
 					log.Errorf("unable to parse file name %s: %v", f.Name, err)
