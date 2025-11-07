@@ -280,10 +280,7 @@ func (c *recordClient) listFilesWithPaginationAndFilter(ctx context.Context, rec
 // (all=true) or a single page (all=false). It returns raw results including
 // directories. Callers can filter directories as needed.
 func (c *recordClient) listFilesCore(ctx context.Context, recordName *name.Record, pageSize int, skip int, additionalFilter string, all bool) ([]*openv1alpha1resource.File, error) {
-	filter := "recursive=\"true\""
-	if additionalFilter != "" {
-		filter += " AND " + additionalFilter
-	}
+	filter := additionalFilter
 
 	if all {
 		var (
