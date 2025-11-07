@@ -1,4 +1,4 @@
-# coScene CLI (cocli)
+# coScene CLI (coCLI)
 
 `cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。
 
