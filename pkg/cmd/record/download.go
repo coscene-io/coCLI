@@ -69,8 +69,8 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Destination directory is not a directory: %s", dirPath)
 			}
 
-			// Download all files
-			files, err := pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+			// Download all files recursively
+			files, err := pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, "recursive=\"true\"")
 			if err != nil {
 				log.Fatalf("unable to list files: %v", err)
 			}

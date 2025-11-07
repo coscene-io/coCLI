@@ -62,10 +62,11 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 		page         = 0
 		all          = false
 		dir          = ""
+		recursive    = false
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
+		Use:                   "list <record-resource-name/id> [-p <working-project-slug>] [-v] [-R] [--page-size <size>] [--page <number>] [--all] [--dir <path>]",
 		Short:                 "List files and directories in a record",
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
@@ -97,12 +98,15 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			var files []*openv1alpha1resource.File
 
 			// Build filter
-			var filterStr string
-			if dir != "" {
-				// Normalize: ensure no trailing slash for filter consistency
-				normalizedDir := strings.TrimSuffix(dir, "/")
-				filterStr = fmt.Sprintf("dir=\"%s\"", normalizedDir)
+			var filterParts []string
+			if recursive {
+				filterParts = append(filterParts, "recursive=\"true\"")
 			}
+			if dir != "" {
+				normalizedDir := strings.TrimSuffix(dir, "/")
+				filterParts = append(filterParts, fmt.Sprintf("dir=\"%s\"", normalizedDir))
+			}
+			filterStr := strings.Join(filterParts, " AND ")
 
 			if all {
 				if filterStr != "" {
@@ -176,6 +180,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "list files recursively")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all files (overrides default page size)")
@@ -248,8 +253,8 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 					files = append(files, fileInfo)
 				}
 			} else {
-				// Download all files
-				files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+				// Download all files recursively
+				files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, "recursive=\"true\"")
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
