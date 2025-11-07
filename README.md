@@ -1,57 +1,193 @@
-# coScene CLI (coCLI)
+# coScene CLI (cocli)
 
 `cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。
 
-`cocli` 所有的命令都可以通过添加 `-h` 参数查看帮助。
-
-详细的图文操作指南和常见操作实例方法请参考 [刻行时空 coCli 文档](https://docs.coscene.cn/docs/category/cocli)。
+---
 
 ## 安装
 
-```shell
-# 通过 curl 安装
+```bash
 curl -fL https://download.coscene.cn/cocli/install.sh | sh
-
-# 安装具体版本
-curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y
-curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.x.y-rc6
 ```
 
-## 环境变量配置
+验证安装：
 
-当没有配置文件或配置文件为空时，`cocli` 可以通过环境变量进行配置。这对于 Docker 容器、CI/CD 环境或自动化部署场景特别有用。
+```bash
+cocli version
+```
 
-### 支持的环境变量
+安装指定版本：
 
-| 环境变量       | 描述                 | 必需 | 示例                         |
-| -------------- | -------------------- | ---- | ---------------------------- |
-| `COS_ENDPOINT` | coScene API 端点地址 | ✅   | `https://openapi.coscene.cn` |
-| `COS_TOKEN`    | API 认证令牌         | ✅   | `your-api-token`             |
-| `COS_PROJECT`  | 默认项目 slug        | ✅   | `your-project-slug`          |
+```bash
+curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.4.2
+```
 
-## 本地安装
+---
 
-### 克隆代码
+## 快速开始
 
-```shell
+### 1. 登录认证
+
+```bash
+cocli login add
+```
+
+根据提示输入 API endpoint 和 token，或使用已有的 profile。
+
+### 2. 列出项目
+
+```bash
+cocli project list
+```
+
+### 3. 上传文件到 record
+
+```bash
+cocli record upload <record-id> ./data/ -p <project-slug>
+```
+
+### 4. 下载 record 的所有文件
+
+```bash
+cocli record download <record-id> ./output/ -p <project-slug>
+```
+
+---
+
+## 核心场景
+
+### 数据上传工作流
+
+```bash
+# 1. 列出可用 projects
+cocli project list
+
+# 2. 创建新 record
+cocli record create -t <record-title> [-p <project>]
+
+# 3. 上传数据到 record（支持目录、glob 模式）
+cocli record upload <record-id> ./data/ [-p <project>]
+
+# 4. 验证上传
+cocli record file list <record-id> [-p <project>]
+```
+
+### 数据下载工作流
+
+```bash
+# 下载整个 record
+cocli record download <record-id> ./output/ [-p <project>]
+
+# 或选择性下载
+cocli record file download <record-id> ./output/ --dir logs/ [-p <project>]
+```
+
+### 项目级文件管理
+
+```bash
+# 上传资源文件到 project
+cocli project file upload <project> ./shared-data/
+
+# 列出和下载
+cocli project file list <project>
+cocli project file download <project> ./output/
+```
+
+---
+
+## Shell 补全
+
+启用 shell 补全可以自动完成命令、flag 和参数，大幅提升使用体验。
+
+### Bash
+
+```bash
+cocli completion bash | sudo tee /etc/bash_completion.d/cocli
+source ~/.bashrc
+```
+
+### Zsh
+
+```bash
+cocli completion zsh > "${fpath[1]}/_cocli"
+# 或
+cocli completion zsh > ~/.zsh/completions/_cocli
+```
+
+重新加载：
+
+```bash
+autoload -U compinit && compinit
+```
+
+### Fish
+
+```bash
+cocli completion fish > ~/.config/fish/completions/cocli.fish
+```
+
+---
+
+## 高级功能
+
+### 环境变量配置（适用于 CI/CD）
+
+对于 Docker 容器或 CI/CD 环境，可以通过环境变量配置，无需交互式登录：
+
+| 环境变量       | 描述             | 必需 |
+| -------------- | ---------------- | ---- |
+| `COS_ENDPOINT` | API 端点地址     | ✅   |
+| `COS_TOKEN`    | 认证令牌         | ✅   |
+| `COS_PROJECT`  | 默认项目 slug    | ✅   |
+
+示例：
+
+```bash
+export COS_ENDPOINT=https://openapi.coscene.cn
+export COS_TOKEN=your-api-token
+export COS_PROJECT=your-project-slug
+
+cocli record list
+```
+
+### Glob 模式上传
+
+使用 glob 模式选择性上传文件：
+
+```bash
+# 上传目录（保留目录名）
+cocli project file upload <project> data/
+
+# 只上传目录内容（不含目录名）
+cocli project file upload <project> "data/*"
+
+# 上传特定类型文件
+cocli project file upload <project> "logs/*.log"
+```
+
+---
+
+## 开发
+
+### 本地构建
+
+```bash
 git clone https://github.com/coscene-io/cocli.git
-```
-
-### 本地快速测试
-
-```shell
-go run cmd/cocli/main.go [具体命令]
-```
-
-### 本地构建可执行文件
-
-```shell
-# 构建可执行文件, 生成的可执行文件在 `./bin` 目录下
+cd cocli
 make build-binary
-
-# 将可执行文件移动到任意系统路径 PATH 下以便全局使用，当前示例移动到 `/usr/local/bin/` 目录下
-mv bin/cocli /usr/local/bin/
-
-# 运行 cocli 命令, 查看帮助文档, 确认安装成功
-cocli -h
+./bin/cocli version
 ```
+
+### 快速测试
+
+```bash
+go run cmd/cocli/main.go [command]
+```
+
+---
+
+## 帮助与文档
+
+- 所有命令支持 `-h` 查看帮助：`cocli <command> -h`
+- 详细文档：[coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)
+- 问题反馈：[GitHub Issues](https://github.com/coscene-io/cocli/issues)
