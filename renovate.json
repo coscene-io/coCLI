@@ -3,5 +3,8 @@
   "baseBranchPatterns": ["dev"],
   "extends": [
     "config:recommended"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy"
   ]
 }
