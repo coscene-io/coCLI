@@ -21,7 +21,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.61
 	github.com/minio/sha256-simd v1.0.1
 	github.com/muesli/reflow v0.3.0
-	github.com/oriser/regroup v0.0.0-20210730155327-fca8d7531263
+	github.com/oriser/regroup v0.0.0-20240925165441-f6bb0e08289e
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.46.0
 	github.com/sanbornm/go-selfupdate v0.0.0-20230714125711-e1c03e3d6ac7
