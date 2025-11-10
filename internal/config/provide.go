@@ -42,6 +42,10 @@ type globalConfig struct {
 }
 
 func Provide(path string) Provider {
+	// Check for test override
+	if providerOverride != nil {
+		return providerOverride
+	}
 	return &globalConfig{path: path}
 }
 

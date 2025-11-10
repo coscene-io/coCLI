@@ -25,6 +25,7 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -34,7 +35,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCommand(cfgPath *string) *cobra.Command {
+func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug  string
 		displayName  string

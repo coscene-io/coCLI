@@ -22,6 +22,7 @@ import (
 	"github.com/coscene-io/cocli"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/pkg/cmd/action"
 	"github.com/coscene-io/cocli/pkg/cmd/login"
 	"github.com/coscene-io/cocli/pkg/cmd/project"
@@ -88,7 +89,7 @@ func NewCommand() *cobra.Command {
 					os.Exit(0)
 				}
 				if !pm.CheckAuth() {
-					if err = pm.Auth(); err != nil {
+					if err = pm.Auth(cmd.Context()); err != nil {
 						log.Fatalf("Failed to authenticate current login profile: %v", err)
 					}
 
@@ -103,12 +104,15 @@ func NewCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&cfgPath, "config", constants.DefaultConfigPath, "config file path")
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level, one of: trace|debug|info|warn|error")
 
+	// Create IOStreams for all commands
+	io := iostreams.System()
+
 	cmd.AddCommand(NewCompletionCommand())
-	cmd.AddCommand(action.NewRootCommand(&cfgPath))
-	cmd.AddCommand(login.NewRootCommand(&cfgPath))
-	cmd.AddCommand(project.NewRootCommand(&cfgPath))
-	cmd.AddCommand(registry.NewRootCommand(&cfgPath))
-	cmd.AddCommand(record.NewRootCommand(&cfgPath))
+	cmd.AddCommand(action.NewRootCommand(&cfgPath, io))
+	cmd.AddCommand(login.NewRootCommand(&cfgPath, io))
+	cmd.AddCommand(project.NewRootCommand(&cfgPath, io))
+	cmd.AddCommand(registry.NewRootCommand(&cfgPath, io))
+	cmd.AddCommand(record.NewRootCommand(&cfgPath, io))
 	cmd.AddCommand(NewUpdateCommand())
 
 	return cmd

@@ -451,7 +451,7 @@ func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions)
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(options)
+	filter := c.filter(ctx, options)
 
 	var (
 		skip = 0
@@ -484,7 +484,7 @@ func (c *recordClient) ListWithPagination(ctx context.Context, options *ListReco
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(options)
+	filter := c.filter(ctx, options)
 
 	req := connect.NewRequest(&openv1alpha1service.ListRecordsRequest{
 		Parent:   options.Project.String(),
@@ -500,7 +500,7 @@ func (c *recordClient) ListWithPagination(ctx context.Context, options *ListReco
 	return res.Msg.Records, nil
 }
 
-func (c *recordClient) filter(opts *ListRecordsOptions) string {
+func (c *recordClient) filter(ctx context.Context, opts *ListRecordsOptions) string {
 	var filters []string
 	if !opts.IncludeArchive {
 		filters = append(filters, "is_archived=false")
@@ -513,7 +513,7 @@ func (c *recordClient) filter(opts *ListRecordsOptions) string {
 	}
 	if len(opts.Labels) > 0 {
 		// Transform label display names to label IDs, following backend implementation
-		labelFilters, err := c.transformLabels(context.TODO(), opts.Project.String(), opts.Labels)
+		labelFilters, err := c.transformLabels(ctx, opts.Project.String(), opts.Labels)
 		if err != nil {
 			// If label lookup fails, log warning but don't fail the entire request
 			fmt.Printf("Warning: failed to lookup labels: %v\n", err)

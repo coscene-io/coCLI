@@ -15,7 +15,6 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		verbose        = false
@@ -75,7 +75,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if all {
-				records, err = pm.RecordCli().ListAll(context.TODO(), listOptions)
+				records, err = pm.RecordCli().ListAll(cmd.Context(), listOptions)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}
@@ -90,7 +90,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 					skip = (page - 1) * effectivePageSize
 				}
 
-				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, effectivePageSize, skip)
+				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, effectivePageSize, skip)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}
@@ -102,7 +102,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, defaultPageSize, 0)
+				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, defaultPageSize, 0)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}

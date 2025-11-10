@@ -16,13 +16,13 @@ package action
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListRunCommand(cfgPath *string) *cobra.Command {
+func NewListRunCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		verbose        = false
@@ -59,9 +59,9 @@ func NewListRunCommand(cfgPath *string) *cobra.Command {
 				Parent: proj.String(),
 			}
 			if recordNameOrId != "" {
-				recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), recordNameOrId, proj)
+				recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), recordNameOrId, proj)
 				if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-					fmt.Printf("failed to find record: %s in project: %s\n", recordNameOrId, proj)
+					io.Printf("failed to find record: %s in project: %s\n", recordNameOrId, proj)
 					return
 				} else if err != nil {
 					log.Fatalf("unable to get record name from %s: %v", recordNameOrId, err)
@@ -70,13 +70,13 @@ func NewListRunCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// List all actionRuns.
-			actionRuns, err := pm.ActionCli().ListAllActionRuns(context.TODO(), listRunOpts)
+			actionRuns, err := pm.ActionCli().ListAllActionRuns(cmd.Context(), listRunOpts)
 			if err != nil {
 				log.Fatalf("unable to list action runs: %v", err)
 			}
 
 			// Convert users to nicknames.
-			convertActionRunUsers(actionRuns, pm)
+			convertActionRunUsers(cmd.Context(), actionRuns, pm)
 
 			// Print listed actions.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
@@ -96,7 +96,7 @@ func NewListRunCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func convertActionRunUsers(actionRuns []*openv1alpha1resource.ActionRun, pm *config.ProfileManager) {
+func convertActionRunUsers(ctx context.Context, actionRuns []*openv1alpha1resource.ActionRun, pm *config.ProfileManager) {
 	// Search for all users in actionRuns creators.
 	usersSet := mapset.NewSet[name.User]()
 	for _, a := range actionRuns {
@@ -109,7 +109,7 @@ func convertActionRunUsers(actionRuns []*openv1alpha1resource.ActionRun, pm *con
 	}
 
 	// Batch get users
-	usersMap, err := pm.UserCli().BatchGetUsers(context.TODO(), usersSet)
+	usersMap, err := pm.UserCli().BatchGetUsers(ctx, usersSet)
 	if err != nil {
 		log.Fatalf("unable to batch get users: %v", err)
 	}

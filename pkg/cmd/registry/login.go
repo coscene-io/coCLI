@@ -16,18 +16,18 @@ package registry
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/url"
 	"os/exec"
 	"strings"
 
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewLoginCommand(cfgPath *string) *cobra.Command {
+func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var registry string
 
 	cmd := &cobra.Command{
@@ -47,7 +47,7 @@ func NewLoginCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("%v", err)
 			}
 
-			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(context.TODO())
+			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
 			if err != nil {
 				log.Fatalf("failed to create basic credential: %v", err)
 			}

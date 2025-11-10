@@ -15,11 +15,11 @@
 package record
 
 import (
-	"context"
 	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewMoveCommand(cfgPath *string) *cobra.Command {
+func NewMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug = ""
 		dstProject  = ""
@@ -44,13 +44,13 @@ func NewMoveCommand(cfgPath *string) *cobra.Command {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
 			// Get working project.
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
@@ -61,7 +61,7 @@ func NewMoveCommand(cfgPath *string) *cobra.Command {
 				dstProjectName *name.Project
 			)
 			if len(dstProject) != 0 {
-				dstProjectName, err = pm.ProjectName(context.TODO(), dstProject)
+				dstProjectName, err = pm.ProjectName(cmd.Context(), dstProject)
 				if err != nil {
 					log.Fatalf("failed to get destination project name: %v", err)
 				}
@@ -91,7 +91,7 @@ func NewMoveCommand(cfgPath *string) *cobra.Command {
 			// Move record.
 			var movedRecordName *name.Record
 			if len(dstProject) != 0 {
-				moved, err := pm.RecordCli().Move(context.TODO(), recordName, dstProjectName)
+				moved, err := pm.RecordCli().Move(cmd.Context(), recordName, dstProjectName)
 				if err != nil {
 					log.Fatalf("failed to move record: %v", err)
 				}
@@ -100,7 +100,7 @@ func NewMoveCommand(cfgPath *string) *cobra.Command {
 				movedRecordName, _ = name.NewRecord(moved.Name)
 			}
 
-			movedRecordUrl, err := pm.GetRecordUrl(movedRecordName)
+			movedRecordUrl, err := pm.GetRecordUrl(cmd.Context(), movedRecordName)
 			if err != nil {
 				log.Errorf("unable to get record url: %v", err)
 			} else {

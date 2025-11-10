@@ -15,11 +15,9 @@
 package record
 
 import (
-	"context"
-	"fmt"
-
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
@@ -27,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCopyCommand(cfgPath *string) *cobra.Command {
+func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug = ""
 		dstProject  = ""
@@ -44,15 +42,15 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
 			// Get working project.
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -61,7 +59,7 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 				dstProjectName *name.Project
 			)
 			if len(dstProject) != 0 {
-				dstProjectName, err = pm.ProjectName(context.TODO(), dstProject)
+				dstProjectName, err = pm.ProjectName(cmd.Context(), dstProject)
 				if err != nil {
 					log.Fatalf("failed to get destination project name: %v", err)
 				}
@@ -76,14 +74,14 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 
 			// Show operation and confirm
 			if len(dstProject) != 0 {
-				fmt.Printf("Will copy entire record %s to project %s\n", recordName.RecordID, dstProject)
+				io.Printf("Will copy entire record %s to project %s\n", recordName.RecordID, dstProject)
 			} else {
-				fmt.Printf("Will copy entire record %s to current project %s\n", recordName.RecordID, dstProject)
+				io.Printf("Will copy entire record %s to current project %s\n", recordName.RecordID, dstProject)
 			}
 
 			if !force {
 				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this copy operation?"); !confirmed {
-					fmt.Println("Copy operation aborted.")
+					io.Println("Copy operation aborted.")
 					return
 				}
 			}
@@ -91,20 +89,20 @@ func NewCopyCommand(cfgPath *string) *cobra.Command {
 			// Copy record.
 			var copiedRecordName *name.Record
 			if len(dstProject) != 0 {
-				copied, err := pm.RecordCli().Copy(context.TODO(), recordName, dstProjectName)
+				copied, err := pm.RecordCli().Copy(cmd.Context(), recordName, dstProjectName)
 				if err != nil {
 					log.Fatalf("failed to copy record: %v", err)
 				}
 
-				fmt.Printf("Record successfully copied to %s.\n", copied.Name)
+				io.Printf("Record successfully copied to %s.\n", copied.Name)
 				copiedRecordName, _ = name.NewRecord(copied.Name)
 			}
 
-			copiedRecordUrl, err := pm.GetRecordUrl(copiedRecordName)
+			copiedRecordUrl, err := pm.GetRecordUrl(cmd.Context(), copiedRecordName)
 			if err != nil {
 				log.Errorf("unable to get record url: %v", err)
 			} else {
-				fmt.Println("View copied record at:", copiedRecordUrl)
+				io.Println("View copied record at:", copiedRecordUrl)
 			}
 		},
 	}

@@ -15,7 +15,6 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
@@ -32,7 +32,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDownloadCommand(cfgPath *string) *cobra.Command {
+func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		maxRetries     = 0
@@ -52,7 +52,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
@@ -70,7 +70,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Download all files recursively
-			files, err := pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, "recursive=\"true\"")
+			files, err := pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, "recursive=\"true\"")
 			if err != nil {
 				log.Fatalf("unable to list files: %v", err)
 			}
@@ -83,7 +83,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 			fmt.Println("-------------------------------------------------------------")
 			fmt.Printf("Downloading record %s\n", recordName.RecordID)
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
 				fmt.Println("View record at:", recordUrl)
 			} else {
@@ -118,7 +118,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 
 				// Get download file pre-signed URL
-				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(context.TODO(), f.Name)
+				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(cmd.Context(), f.Name)
 				if err != nil {
 					log.Errorf("unable to get download URL for file %s: %v", fileName.Filename, err)
 					continue

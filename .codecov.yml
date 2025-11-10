@@ -1,0 +1,27 @@
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        if_ci_failed: error
+    patch:
+      default:
+        target: 80%
+        threshold: 10%
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+
+ignore:
+  - "**/vendor/**"
+  - "**/*_test.go"
+  - "**/*_mock.go"
+  - "internal/testutil/**"
+  - "scripts/**"
