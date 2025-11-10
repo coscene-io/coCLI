@@ -36,9 +36,6 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Generate mocks
-        run: make test-setup
-
       - name: Run tests with coverage
         run: |
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...

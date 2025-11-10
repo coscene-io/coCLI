@@ -27,7 +27,5 @@ jobs:
         run: make lint
       - name: Build
         run: make build
-      - name: Test Setup
-        run: make test-setup
       - name: Run Tests
         run: make test
