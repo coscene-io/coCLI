@@ -341,13 +341,13 @@ func setupTestConfigWithProfile(t *testing.T) string {
 	cfgPath := setupTestConfig(t)
 
 	// Write a minimal config with auth
-	configContent := `endpoint: https://test.api.com
+	configContent := `endpoint: https://openapi.mock.coscene.com
 token: test-token
 project: test-project
 profiles:
   - name: test-profile
     current: true
-    endpoint: https://test.api.com
+    endpoint: https://openapi.mock.coscene.com
     token: test-token
     project: test-project`
 

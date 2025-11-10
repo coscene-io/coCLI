@@ -131,13 +131,13 @@ func TestLoginConfigInteraction(t *testing.T) {
 		mockProvider.ProfileManager().ProfileManager.Profiles = []*config.Profile{
 			{
 				Name:        "profile1",
-				EndPoint:    "https://openapi.test1.com",
+				EndPoint:    "https://openapi.mock1.coscene.com",
 				Token:       "test-token-1",
 				ProjectSlug: "test-project-1",
 			},
 			{
 				Name:        "profile2",
-				EndPoint:    "https://openapi.test2.com",
+				EndPoint:    "https://openapi.mock2.coscene.com",
 				Token:       "test-token-2",
 				ProjectSlug: "test-project-2",
 			},
@@ -169,18 +169,18 @@ func TestLoginConfigInteraction(t *testing.T) {
 	t.Run("Delete profile", func(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 
-		configContent := `endpoint: https://test.api.com
+		configContent := `endpoint: https://openapi.mock1.coscene.com
 token: test-token
 project: test-project
 profiles:
   - name: test-profile
     current: true
-    endpoint: https://test.api.com
+    endpoint: https://openapi.mock1.coscene.com
     token: test-token
     project: test-project
   - name: profile-to-delete
     current: false
-    endpoint: https://test2.api.com
+    endpoint: https://openapi.mock2.coscene.com
     token: test-token-2
     project: test-project-2`
 
@@ -249,7 +249,7 @@ func TestLoginCommandValidation(t *testing.T) {
 					mockProvider.ProfileManager().ProfileManager.Profiles,
 					&config.Profile{
 						Name:        "profile-name",
-						EndPoint:    "https://openapi.test.com",
+						EndPoint:    "https://openapi.mock.coscene.com",
 						Token:       "test-token2",
 						ProjectSlug: "test-project2",
 					},

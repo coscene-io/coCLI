@@ -167,7 +167,7 @@ func TestRootCommand(t *testing.T) {
 func TestEnvironmentVariables(t *testing.T) {
 	t.Run("Environment variables override config", func(t *testing.T) {
 		// Set environment variables
-		os.Setenv("COS_ENDPOINT", "https://openapi.test.com")
+		os.Setenv("COS_ENDPOINT", "https://openapi.mock.coscene.com")
 		os.Setenv("COS_TOKEN", "test-token")
 		os.Setenv("COS_PROJECT", "test-project")
 		t.Cleanup(func() {

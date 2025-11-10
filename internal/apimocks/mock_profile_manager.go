@@ -45,7 +45,7 @@ func NewMockProfileManager(t *testing.T) *MockProfileManager {
 	// Create a minimal valid profile that passes validation
 	profile := &config.Profile{
 		Name:        "test-profile",
-		EndPoint:    "https://openapi.test.com",
+		EndPoint:    "https://openapi.mock.coscene.com",
 		Token:       "test-token",
 		ProjectSlug: "test-project",
 	}
@@ -147,7 +147,7 @@ func (m *MockProfileManager) ProjectName(ctx context.Context, projectSlug string
 
 // GetRecordUrl returns a test URL
 func (m *MockProfileManager) GetRecordUrl(ctx context.Context, recordName *name.Record) (string, error) {
-	return "https://test.coscene.io/records/" + recordName.RecordID, nil
+	return "https://openapi.mock.coscene.com/records/" + recordName.RecordID, nil
 }
 
 // CheckAuth always returns true for tests
@@ -162,7 +162,7 @@ func (m *MockProfileManager) Auth(ctx context.Context) error {
 
 // GetProjectUrl returns a test URL
 func (m *MockProfileManager) GetProjectUrl(ctx context.Context, projectName *name.Project) (string, error) {
-	return "https://test.coscene.io/projects/" + projectName.ProjectID, nil
+	return "https://openapi.mock.coscene.com/projects/" + projectName.ProjectID, nil
 }
 
 // MockProvider implements config.Provider for testing
