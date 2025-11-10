@@ -9,7 +9,7 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/charmbracelet/bubbletea v0.25.0
-	github.com/deckarep/golang-set/v2 v2.6.0
+	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/getsentry/sentry-go v0.28.1
 	github.com/knadh/koanf/parsers/yaml v0.1.0
