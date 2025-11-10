@@ -26,7 +26,7 @@ require (
 	github.com/samber/lo v1.52.0
 	github.com/sanbornm/go-selfupdate v0.0.0-20230714125711-e1c03e3d6ac7
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/cobra v1.8.1
+	github.com/spf13/cobra v1.10.1
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
 	golang.org/x/net v0.44.0
@@ -72,7 +72,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/crypto v0.42.0 // indirect
