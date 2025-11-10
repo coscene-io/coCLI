@@ -42,7 +42,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Set up go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
       - name: Build cocli
         run: |
           CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} make build-binary
