@@ -51,14 +51,14 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// List all actions.
-			actions, err := pm.ActionCli().ListAllActions(context.TODO(), &api.ListActionsOptions{
+			actions, err := pm.ActionCli().ListAllActions(cmd.Context(), &api.ListActionsOptions{
 				Parent: proj.String(),
 			})
 			if err != nil {
 				log.Fatalf("unable to list actions: %v", err)
 			}
 
-			systemActions, err := pm.ActionCli().ListAllActions(context.TODO(), &api.ListActionsOptions{
+			systemActions, err := pm.ActionCli().ListAllActions(cmd.Context(), &api.ListActionsOptions{
 				Parent: "",
 			})
 			if err != nil {
@@ -68,7 +68,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			allActions := append(actions, systemActions...)
 
 			// Convert users to nicknames.
-			convertActionUsers(allActions, pm)
+			convertActionUsers(cmd.Context(), allActions, pm)
 
 			// Print listed actions.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
@@ -87,7 +87,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func convertActionUsers(actions []*openv1alpha1resource.Action, pm *config.ProfileManager) {
+func convertActionUsers(ctx context.Context, actions []*openv1alpha1resource.Action, pm *config.ProfileManager) {
 	// Search for all users in actions authors.
 	usersSet := mapset.NewSet[name.User]()
 	for _, a := range actions {
@@ -97,7 +97,7 @@ func convertActionUsers(actions []*openv1alpha1resource.Action, pm *config.Profi
 	}
 
 	// Batch get users
-	usersMap, err := pm.UserCli().BatchGetUsers(context.TODO(), usersSet)
+	usersMap, err := pm.UserCli().BatchGetUsers(ctx, usersSet)
 	if err != nil {
 		log.Fatalf("failed to batch get users: %v", err)
 	}

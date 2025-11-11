@@ -15,7 +15,6 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +25,7 @@ import (
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -38,22 +38,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewFileCommand(cfgPath *string) *cobra.Command {
+func NewFileCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file",
 		Short: "Manage files in records",
 	}
 
-	cmd.AddCommand(NewFileListCommand(cfgPath))
-	cmd.AddCommand(NewFileDownloadCommand(cfgPath))
-	cmd.AddCommand(NewFileDeleteCommand(cfgPath))
-	cmd.AddCommand(NewFileCopyCommand(cfgPath))
-	cmd.AddCommand(NewFileMoveCommand(cfgPath))
+	cmd.AddCommand(NewFileListCommand(cfgPath, io))
+	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io))
+	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io))
+	cmd.AddCommand(NewFileCopyCommand(cfgPath, io))
+	cmd.AddCommand(NewFileMoveCommand(cfgPath, io))
 
 	return cmd
 }
 
-func NewFileListCommand(cfgPath *string) *cobra.Command {
+func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -87,9 +87,9 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -110,9 +110,9 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 			if all {
 				if filterStr != "" {
-					files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, filterStr)
+					files, err = pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, filterStr)
 				} else {
-					files, err = pm.RecordCli().ListAllFiles(context.TODO(), recordName)
+					files, err = pm.RecordCli().ListAllFiles(cmd.Context(), recordName)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
@@ -129,9 +129,9 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 
 				if filterStr != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, effectivePageSize, skip, filterStr)
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(cmd.Context(), recordName, effectivePageSize, skip, filterStr)
 				} else {
-					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, effectivePageSize, skip)
+					files, err = pm.RecordCli().ListFilesWithPagination(cmd.Context(), recordName, effectivePageSize, skip)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
@@ -145,9 +145,9 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
 				if filterStr != "" {
-					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(context.TODO(), recordName, defaultPageSize, 0, filterStr)
+					files, err = pm.RecordCli().ListFilesWithPaginationAndFilter(cmd.Context(), recordName, defaultPageSize, 0, filterStr)
 				} else {
-					files, err = pm.RecordCli().ListFilesWithPagination(context.TODO(), recordName, defaultPageSize, 0)
+					files, err = pm.RecordCli().ListFilesWithPagination(cmd.Context(), recordName, defaultPageSize, 0)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
@@ -193,7 +193,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
+func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug = ""
 		maxRetries  = 0
@@ -214,9 +214,9 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -237,7 +237,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			if dir != "" {
 				// Download specific directory recursively
 				normalizedDir := strings.TrimSuffix(dir, "/")
-				files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
+				files, err = pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
 				if err != nil {
 					log.Fatalf("unable to list record files: %v", err)
 				}
@@ -245,7 +245,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				// Download specific files
 				for _, fileName := range fileNames {
 					resourceName := name.File{ProjectID: recordName.ProjectID, RecordID: recordName.RecordID, Filename: fileName}.String()
-					fileInfo, err := pm.FileCli().GetFile(context.TODO(), resourceName)
+					fileInfo, err := pm.FileCli().GetFile(cmd.Context(), resourceName)
 					if err != nil {
 						log.Warnf("unable to get file %s: %v, skipping", fileName, err)
 						continue
@@ -254,14 +254,14 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 			} else {
 				// Download all files recursively
-				files, err = pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, "recursive=\"true\"")
+				files, err = pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, "recursive=\"true\"")
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
 			}
 
 			if len(files) == 0 {
-				fmt.Println("No files found to download.")
+				io.Println("No files found to download.")
 				return
 			}
 
@@ -279,7 +279,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if len(filesToDownload) == 0 {
-				fmt.Println("No files to download (only directories found).")
+				io.Println("No files to download (only directories found).")
 				return
 			}
 
@@ -289,11 +289,11 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			} else {
 				dstDir = filepath.Join(dirPath, recordName.RecordID)
 			}
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Downloading record files from %s\n", recordName.RecordID)
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Downloading record files from %s\n", recordName.RecordID)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
-				fmt.Println("View record at:", recordUrl)
+				io.Println("View record at:", recordUrl)
 			} else {
 				log.Errorf("unable to get record url: %v", err)
 			}
@@ -331,7 +331,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 
 				// Get download file pre-signed URL
-				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(context.TODO(), f.Name)
+				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(cmd.Context(), f.Name)
 				if err != nil {
 					log.Errorf("unable to get download URL for file %s: %v", fileName.Filename, err)
 					continue
@@ -361,7 +361,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
+func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		force       = false
 		projectSlug = ""
@@ -380,9 +380,9 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -428,7 +428,7 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Always use batch delete for consistency
-			if err := pm.FileCli().BatchDeleteFiles(context.TODO(), recordName.String(), resourceNames); err != nil {
+			if err := pm.FileCli().BatchDeleteFiles(cmd.Context(), recordName.String(), resourceNames); err != nil {
 				log.Fatalf("failed to delete files: %v", err)
 			}
 
@@ -443,7 +443,7 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileCopyCommand(cfgPath *string) *cobra.Command {
+func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		dstProjectSlug = ""
@@ -461,13 +461,13 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
 			// Get working project.
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			sourceRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			sourceRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
 				return
@@ -478,13 +478,13 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 			// Determine destination project - use dst project if specified, otherwise use source project
 			destProject := proj
 			if dstProjectSlug != "" {
-				destProject, err = pm.ProjectName(context.TODO(), dstProjectSlug)
+				destProject, err = pm.ProjectName(cmd.Context(), dstProjectSlug)
 				if err != nil {
 					log.Fatalf("unable to get destination project name: %v", err)
 				}
 			}
 
-			destRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[1], destProject)
+			destRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], destProject)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
 				return
@@ -524,7 +524,7 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Perform the copy operation (server will handle authorization)
-			err = pm.RecordCli().CopyFiles(context.TODO(), sourceRecordName, destRecordName, allFiles)
+			err = pm.RecordCli().CopyFiles(cmd.Context(), sourceRecordName, destRecordName, allFiles)
 			if err != nil {
 				log.Fatalf("failed to copy files: %v", err)
 			}
@@ -532,7 +532,7 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 			fmt.Printf("Successfully copied %d files to %s.\n", len(allFiles), destRecordName)
 
 			// Display destination record URL
-			destRecordUrl, err := pm.GetRecordUrl(destRecordName)
+			destRecordUrl, err := pm.GetRecordUrl(cmd.Context(), destRecordName)
 			if err != nil {
 				log.Errorf("unable to get destination record url: %v", err)
 			} else {
@@ -549,7 +549,7 @@ func NewFileCopyCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileMoveCommand(cfgPath *string) *cobra.Command {
+func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		dstProjectSlug = ""
@@ -567,12 +567,12 @@ func NewFileMoveCommand(cfgPath *string) *cobra.Command {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
 
 			// Get working project.
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			sourceRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			sourceRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
 				return
@@ -583,13 +583,13 @@ func NewFileMoveCommand(cfgPath *string) *cobra.Command {
 			// Determine destination project - use dst project if specified, otherwise use source project
 			destProject := proj
 			if dstProjectSlug != "" {
-				destProject, err = pm.ProjectName(context.TODO(), dstProjectSlug)
+				destProject, err = pm.ProjectName(cmd.Context(), dstProjectSlug)
 				if err != nil {
 					log.Fatalf("unable to get destination project name: %v", err)
 				}
 			}
 
-			destRecordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[1], destProject)
+			destRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], destProject)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
 				return
@@ -626,14 +626,14 @@ func NewFileMoveCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			err = pm.RecordCli().MoveFiles(context.TODO(), sourceRecordName, destRecordName, allFiles)
+			err = pm.RecordCli().MoveFiles(cmd.Context(), sourceRecordName, destRecordName, allFiles)
 			if err != nil {
 				log.Fatalf("failed to move files: %v", err)
 			}
 
 			fmt.Printf("Successfully moved %d files to %s.\n", len(allFiles), destRecordName)
 
-			destRecordUrl, err := pm.GetRecordUrl(destRecordName)
+			destRecordUrl, err := pm.GetRecordUrl(cmd.Context(), destRecordName)
 			if err != nil {
 				log.Errorf("unable to get destination record url: %v", err)
 			} else {

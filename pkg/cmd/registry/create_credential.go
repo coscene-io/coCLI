@@ -15,11 +15,11 @@
 package registry
 
 import (
-	"context"
 	"fmt"
 	"os"
 
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCredentialCommand(cfgPath *string) *cobra.Command {
+func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var outputFormat string
 
 	cmd := &cobra.Command{
@@ -41,7 +41,7 @@ func NewCreateCredentialCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}
 
-			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(context.TODO())
+			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
 			if err != nil {
 				log.Fatalf("failed to create basic credential: %v", err)
 			}

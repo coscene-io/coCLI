@@ -15,19 +15,19 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCommand(cfgPath *string) *cobra.Command {
+func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		title             = ""
 		description       = ""
@@ -55,14 +55,14 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 			// Create record.
 			labelEntities := make([]*openv1alpha1resource.Label, 0)
 			for _, labelDisplayName := range labelDisplayNames {
-				labelEntity, err := pm.LabelCli().GetByDisplayNameOrCreate(context.TODO(), labelDisplayName, proj)
+				labelEntity, err := pm.LabelCli().GetByDisplayNameOrCreate(cmd.Context(), labelDisplayName, proj)
 				if err != nil {
 					log.Errorf("Failed to get or create label %s: %v", labelDisplayName, err)
 				} else {
 					labelEntities = append(labelEntities, labelEntity)
 				}
 			}
-			res, err := pm.RecordCli().Create(context.TODO(), proj, title, "", description, labelEntities)
+			res, err := pm.RecordCli().Create(cmd.Context(), proj, title, "", description, labelEntities)
 			if err != nil {
 				log.Fatalf("Failed to create record: %v", err)
 			}
@@ -70,11 +70,11 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 			recordName, _ := name.NewRecord(res.Name)
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(res, pm, outputFormat, true)
+			DisplayRecordWithFormat(cmd.Context(), res, pm, outputFormat, true)
 
 			if thumbnail != "" {
 				// Upload thumbnail.
-				thumbnailUploadUrl, err := pm.RecordCli().GenerateRecordThumbnailUploadUrl(context.TODO(), recordName)
+				thumbnailUploadUrl, err := pm.RecordCli().GenerateRecordThumbnailUploadUrl(cmd.Context(), recordName)
 				if err != nil {
 					log.Fatalf("Failed to generate record thumbnail upload url: %v", err)
 				}
@@ -86,7 +86,7 @@ func NewCreateCommand(cfgPath *string) *cobra.Command {
 					log.Fatalf("unable to create upload manager: %v", err)
 				}
 
-				err = um.Run(context.TODO(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
+				err = um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
 					thumbnail: thumbnailUploadUrl,
 				}})
 				if err != nil {

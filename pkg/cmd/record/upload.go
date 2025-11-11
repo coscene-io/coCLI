@@ -15,20 +15,20 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewUploadCommand(cfgPath *string) *cobra.Command {
+func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		includeHidden     = false
 		projectSlug       = ""
@@ -51,7 +51,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
 				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
@@ -86,7 +86,7 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
 
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
 				fmt.Println("View record at:", recordUrl)
 			} else {

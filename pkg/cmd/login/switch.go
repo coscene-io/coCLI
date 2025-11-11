@@ -19,13 +19,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 )
 
-func NewSwitchCommand(cfgPath *string) *cobra.Command {
+func NewSwitchCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "switch",
 		Short:                 "Switch to another login profile.",
@@ -35,7 +36,11 @@ func NewSwitchCommand(cfgPath *string) *cobra.Command {
 			cfg := config.Provide(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
-			profile, err := promptForProfile(pm.GetProfiles(), pm.GetCurrentProfile().Name)
+			currentProfileName := ""
+			if current := pm.GetCurrentProfile(); current != nil {
+				currentProfileName = current.Name
+			}
+			profile, err := promptForProfile(pm.GetProfiles(), currentProfileName)
 			if err != nil {
 				log.Fatalf("Failed to prompt for select profile: %v", err)
 			}
@@ -50,7 +55,7 @@ func NewSwitchCommand(cfgPath *string) *cobra.Command {
 			}
 
 			curProfile := pm.GetCurrentProfile()
-			fmt.Printf("Successfully switched to profile:\n%s\n", curProfile)
+			io.Printf("Successfully switched to profile:\n%s\n", curProfile)
 		},
 	}
 

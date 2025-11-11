@@ -25,6 +25,7 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -35,19 +36,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func NewMomentCommand(cfgPath *string) *cobra.Command {
+func NewMomentCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "moment",
 		Short: "Manage moments in records",
 	}
 
-	cmd.AddCommand(NewMomentCreateCommand(cfgPath))
-	cmd.AddCommand(NewMomentListCommand(cfgPath))
+	cmd.AddCommand(NewMomentCreateCommand(cfgPath, io))
+	cmd.AddCommand(NewMomentListCommand(cfgPath, io))
 
 	return cmd
 }
 
-func NewMomentCreateCommand(cfgPath *string) *cobra.Command {
+func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug                           = ""
 		displayName                           = ""
@@ -70,14 +71,14 @@ func NewMomentCreateCommand(cfgPath *string) *cobra.Command {
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -218,7 +219,7 @@ func NewMomentCreateCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewMomentListCommand(cfgPath *string) *cobra.Command {
+func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -232,14 +233,14 @@ func NewMomentListCommand(cfgPath *string) *cobra.Command {
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			pm, _ := config.Provide(*cfgPath).GetProfileManager()
-			proj, err := pm.ProjectName(context.TODO(), projectSlug)
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
