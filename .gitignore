@@ -6,4 +6,4 @@
 /.vscode/
 /bin/
 /cmd/cocli/cocli
-coverage.txt
+/coverage.txt

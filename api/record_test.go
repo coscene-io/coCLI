@@ -150,20 +150,6 @@ func (m *mockFileServiceClient) MoveFiles(ctx context.Context, req *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
 
-// mockUserServiceClient is a simplified mock
-type mockUserServiceClient struct {
-	openv1alpha1connect.UserServiceClient
-	ctrl              *gomock.Controller
-	batchGetUsersFunc func(context.Context, *connect.Request[openv1alpha1service.BatchGetUsersRequest]) (*connect.Response[openv1alpha1service.BatchGetUsersResponse], error)
-}
-
-func (m *mockUserServiceClient) BatchGetUsers(ctx context.Context, req *connect.Request[openv1alpha1service.BatchGetUsersRequest]) (*connect.Response[openv1alpha1service.BatchGetUsersResponse], error) {
-	if m.batchGetUsersFunc != nil {
-		return m.batchGetUsersFunc(ctx, req)
-	}
-	return nil, connect.NewError(connect.CodeUnimplemented, nil)
-}
-
 // mockLabelServiceClient is a simplified mock
 type mockLabelServiceClient struct {
 	openv1alpha1connect.LabelServiceClient

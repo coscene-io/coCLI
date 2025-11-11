@@ -48,20 +48,20 @@ func Test(in io.ReadCloser, out, errOut io.Writer) *IOStreams {
 
 // Println prints to Out with a newline
 func (s *IOStreams) Println(a ...interface{}) {
-	fmt.Fprintln(s.Out, a...)
+	_, _ = fmt.Fprintln(s.Out, a...)
 }
 
 // Printf prints formatted to Out
 func (s *IOStreams) Printf(format string, a ...interface{}) {
-	fmt.Fprintf(s.Out, format, a...)
+	_, _ = fmt.Fprintf(s.Out, format, a...)
 }
 
 // Eprintln prints to ErrOut with a newline
 func (s *IOStreams) Eprintln(a ...interface{}) {
-	fmt.Fprintln(s.ErrOut, a...)
+	_, _ = fmt.Fprintln(s.ErrOut, a...)
 }
 
 // Eprintf prints formatted to ErrOut
 func (s *IOStreams) Eprintf(format string, a ...interface{}) {
-	fmt.Fprintf(s.ErrOut, format, a...)
+	_, _ = fmt.Fprintf(s.ErrOut, format, a...)
 }

@@ -22,7 +22,6 @@ import (
 
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/coscene-io/cocli/pkg/cmd"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,13 +166,13 @@ func TestRootCommand(t *testing.T) {
 func TestEnvironmentVariables(t *testing.T) {
 	t.Run("Environment variables override config", func(t *testing.T) {
 		// Set environment variables
-		os.Setenv("COS_ENDPOINT", "https://openapi.mock.coscene.com")
-		os.Setenv("COS_TOKEN", "test-token")
-		os.Setenv("COS_PROJECT", "test-project")
+		_ = os.Setenv("COS_ENDPOINT", "https://openapi.mock.coscene.com")
+		_ = os.Setenv("COS_TOKEN", "test-token")
+		_ = os.Setenv("COS_PROJECT", "test-project")
 		t.Cleanup(func() {
-			os.Unsetenv("COS_ENDPOINT")
-			os.Unsetenv("COS_TOKEN")
-			os.Unsetenv("COS_PROJECT")
+			_ = os.Unsetenv("COS_ENDPOINT")
+			_ = os.Unsetenv("COS_TOKEN")
+			_ = os.Unsetenv("COS_PROJECT")
 		})
 
 		tmpDir := testutil.TempDir(t)
@@ -222,17 +221,6 @@ func TestCommandStructure(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to capture command output
-func executeCommand(root *cobra.Command, args ...string) (output string, err error) {
-	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs(args)
-
-	err = root.Execute()
-	return buf.String(), err
 }
 
 // TestPersistentFlags tests that persistent flags work across subcommands

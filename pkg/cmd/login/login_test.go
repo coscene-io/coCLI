@@ -57,8 +57,8 @@ func TestLoginCommand(t *testing.T) {
 		// Create a mock provider with empty profiles
 		mockProvider := apimocks.NewMockProvider(t)
 		// Clear the default profile to simulate empty config
-		mockProvider.ProfileManager().ProfileManager.CurrentProfile = ""
-		mockProvider.ProfileManager().ProfileManager.Profiles = []*config.Profile{}
+		mockProvider.ProfileManager().CurrentProfile = ""
+		mockProvider.ProfileManager().Profiles = []*config.Profile{}
 
 		config.SetProviderOverride(mockProvider)
 		defer config.ClearProviderOverride()
@@ -80,8 +80,8 @@ func TestLoginCommand(t *testing.T) {
 	t.Run("Current command with no profile", func(t *testing.T) {
 		// Create a mock provider with empty profiles
 		mockProvider := apimocks.NewMockProvider(t)
-		mockProvider.ProfileManager().ProfileManager.CurrentProfile = ""
-		mockProvider.ProfileManager().ProfileManager.Profiles = []*config.Profile{}
+		mockProvider.ProfileManager().CurrentProfile = ""
+		mockProvider.ProfileManager().Profiles = []*config.Profile{}
 
 		config.SetProviderOverride(mockProvider)
 		defer config.ClearProviderOverride()
@@ -128,7 +128,7 @@ func TestLoginConfigInteraction(t *testing.T) {
 
 		// Create mock provider with multiple profiles
 		mockProvider := apimocks.NewMockProvider(t)
-		mockProvider.ProfileManager().ProfileManager.Profiles = []*config.Profile{
+		mockProvider.ProfileManager().Profiles = []*config.Profile{
 			{
 				Name:        "profile1",
 				EndPoint:    "https://openapi.mock1.coscene.com",
@@ -142,7 +142,7 @@ func TestLoginConfigInteraction(t *testing.T) {
 				ProjectSlug: "test-project-2",
 			},
 		}
-		mockProvider.ProfileManager().ProfileManager.CurrentProfile = "profile1"
+		mockProvider.ProfileManager().CurrentProfile = "profile1"
 
 		config.SetProviderOverride(mockProvider)
 		defer config.ClearProviderOverride()
@@ -245,8 +245,8 @@ func TestLoginCommandValidation(t *testing.T) {
 			if tc.args[0] == "delete" || tc.args[0] == "switch" {
 				mockProvider := apimocks.NewMockProvider(t)
 				// Add another profile so we have more than one
-				mockProvider.ProfileManager().ProfileManager.Profiles = append(
-					mockProvider.ProfileManager().ProfileManager.Profiles,
+				mockProvider.ProfileManager().Profiles = append(
+					mockProvider.ProfileManager().Profiles,
 					&config.Profile{
 						Name:        "profile-name",
 						EndPoint:    "https://openapi.mock.coscene.com",

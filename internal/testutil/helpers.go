@@ -39,7 +39,7 @@ func TempDir(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "cocli-test-*")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	})
 	return dir
 }
@@ -49,7 +49,7 @@ func CreateTempFile(t *testing.T, dir, pattern string, content []byte) string {
 	t.Helper()
 	file, err := os.CreateTemp(dir, pattern)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if len(content) > 0 {
 		_, err = file.Write(content)
@@ -64,11 +64,11 @@ func CopyFile(t *testing.T, src, dst string) {
 	t.Helper()
 	srcFile, err := os.Open(src)
 	require.NoError(t, err)
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.Create(dst)
 	require.NoError(t, err)
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	_, err = io.Copy(dstFile, srcFile)
 	require.NoError(t, err)
@@ -145,8 +145,8 @@ func CaptureOutput(t *testing.T, fn func()) (stdout, stderr string) {
 
 	fn()
 
-	wOut.Close()
-	wErr.Close()
+	_ = wOut.Close()
+	_ = wErr.Close()
 
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
