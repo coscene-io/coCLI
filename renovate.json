@@ -1,18 +1,24 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "baseBranchPatterns": ["dev"],
+  "baseBranchPatterns": [
+    "dev"
+  ],
   "extends": [
-    "config:base",
+    "config:recommended",
     "group:allNonMajor",
     ":semanticCommitTypeAll(chore)"
   ],
-  "schedule": ["before 3am on Monday"],
+  "schedule": [
+    "before 3am on Monday"
+  ],
   "postUpdateOptions": [
     "gomodTidy"
   ],
   "prConcurrentLimit": 3,
   "vulnerabilityAlerts": {
-    "labels": ["security"],
+    "labels": [
+      "security"
+    ],
     "automerge": true
   }
 }
