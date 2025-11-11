@@ -19,7 +19,7 @@ cocli version
 安装指定版本：
 
 ```bash
-curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.4.2
+curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.4.4
 ```
 
 ---
