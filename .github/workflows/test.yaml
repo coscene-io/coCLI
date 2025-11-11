@@ -44,6 +44,7 @@ jobs:
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.txt
           flags: unittests
           name: codecov-${{ matrix.os }}-${{ matrix.go }}
