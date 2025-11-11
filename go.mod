@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.19.1-20251022104251-e332bf32b04f.2
-	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.10-20251022104251-e332bf32b04f.1
+	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.10-20251111051611-8e315641d805.1
 	connectrpc.com/connect v1.19.1
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
