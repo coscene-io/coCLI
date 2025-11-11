@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -28,6 +29,7 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
+	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -74,6 +76,9 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			if err != nil {
 				log.Fatalf("unable to list files: %v", err)
 			}
+			files = lo.Filter(files, func(f *openv1alpha1resource.File, _ int) bool {
+				return !strings.HasSuffix(f.Name, "/")
+			})
 
 			var dstDir string
 			if flat {
