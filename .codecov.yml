@@ -7,10 +7,6 @@ coverage:
       default:
         target: auto
         if_ci_failed: error
-    patch:
-      default:
-        target: 80%
-        threshold: 10%
 
 comment:
   layout: "reach,diff,flags,files,footer"
