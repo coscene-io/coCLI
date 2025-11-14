@@ -67,7 +67,7 @@ func NewRunCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if !skipParams {
-   if act.Spec.Parameters == nil {
+				if act.Spec.Parameters == nil {
 					act.Spec.Parameters = make(map[string]string)
 				}
 				if cmd.Flags().Changed("param") {
