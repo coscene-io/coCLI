@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	openv1alpha1enum "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -29,6 +30,7 @@ import (
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -43,6 +45,7 @@ func NewMomentCommand(cfgPath *string) *cobra.Command {
 
 	cmd.AddCommand(NewMomentCreateCommand(cfgPath))
 	cmd.AddCommand(NewMomentListCommand(cfgPath))
+	cmd.AddCommand(NewMomentDownloadCommand(cfgPath))
 
 	return cmd
 }
@@ -263,6 +266,78 @@ func NewMomentListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+
+	return cmd
+}
+
+func NewMomentDownloadCommand(cfgPath *string) *cobra.Command {
+	var (
+		projectSlug = ""
+		flat        = false
+	)
+
+	cmd := &cobra.Command{
+		Use:                   "download <record-resource-name/id> <dst-dir> [-p <working-project-slug>] [--flat]",
+		Short:                 "Download moments.json from a record",
+		DisableFlagsInUseLine: true,
+		Args:                  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
+			if err != nil {
+				log.Fatalf("unable to get project name: %v", err)
+			}
+
+			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				return
+			} else if err != nil {
+				log.Fatalf("unable to get record name from %s: %v", args[0], err)
+			}
+
+			dirPath, err := filepath.Abs(args[1])
+			if err != nil {
+				log.Fatalf("unable to get absolute path: %v", err)
+			}
+			if dirInfo, err := os.Stat(dirPath); err != nil {
+				log.Fatalf("Error checking destination directory: %v", err)
+			} else if !dirInfo.IsDir() {
+				log.Fatalf("Destination directory is not a directory: %s", dirPath)
+			}
+
+			var dstDir string
+			if flat {
+				dstDir = dirPath
+			} else {
+				dstDir = filepath.Join(dirPath, recordName.RecordID)
+			}
+
+			fmt.Println("-------------------------------------------------------------")
+			fmt.Printf("Downloading moments for record %s\n", recordName.RecordID)
+			recordUrl, err := pm.GetRecordUrl(recordName)
+			if err == nil {
+				fmt.Println("View record at:", recordUrl)
+			} else {
+				log.Errorf("unable to get record url: %v", err)
+			}
+			fmt.Printf("Saving to %s\n", dstDir)
+
+			moments, err := pm.RecordCli().ListAllMoments(cmd.Context(), recordName)
+			if err != nil {
+				log.Fatalf("unable to list moments: %v", err)
+			}
+
+			if err = cmd_utils.SaveMomentsJson(moments, dstDir); err != nil {
+				log.Fatalf("unable to save moments: %v", err)
+			}
+
+			fmt.Printf("\nDownload completed! moments.json saved to %s\n", filepath.Join(dstDir, "moments.json"))
+		},
+	}
+
+	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().BoolVar(&flat, "flat", false, "download directly to the specified directory without creating a subdirectory named with record-id")
 
 	return cmd
 }
