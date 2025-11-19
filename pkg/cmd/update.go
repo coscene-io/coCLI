@@ -15,11 +15,11 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/coscene-io/cocli"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/pkg/errors"
 	"github.com/sanbornm/go-selfupdate/selfupdate"
@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewUpdateCommand() *cobra.Command {
+func NewUpdateCommand(io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "update",
 		Short:                 "Update cocli version",
@@ -41,7 +41,7 @@ func NewUpdateCommand() *cobra.Command {
 				CmdName:        constants.CLIName,
 				ForceCheck:     true,
 				OnSuccessfulUpdate: func() {
-					fmt.Println("Successfully updated to the latest version")
+					io.Println("Successfully updated to the latest version")
 				},
 			}
 
@@ -51,7 +51,7 @@ func NewUpdateCommand() *cobra.Command {
 			}
 
 			updater.OnSuccessfulUpdate = func() {
-				fmt.Println("Successfully updated to version", newVersion)
+				io.Println("Successfully updated to version", newVersion)
 			}
 
 			err = updater.Update()

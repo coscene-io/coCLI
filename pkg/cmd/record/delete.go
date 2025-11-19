@@ -15,18 +15,16 @@
 package record
 
 import (
-	"context"
-	"fmt"
-
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewDeleteCommand(cfgPath *string) *cobra.Command {
+func NewDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		force       = false
 		projectSlug = ""
@@ -46,9 +44,9 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -56,18 +54,18 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 
 			// Confirm deletion.
 			if !force {
-				if confirmed := prompts.PromptYN("Are you sure you want to delete the record?"); !confirmed {
-					fmt.Println("Delete record aborted.")
+				if confirmed := prompts.PromptYN("Are you sure you want to delete the record?", io); !confirmed {
+					io.Println("Delete record aborted.")
 					return
 				}
 			}
 
 			// Delete record.
-			if err = pm.RecordCli().Delete(context.TODO(), recordName); err != nil {
+			if err = pm.RecordCli().Delete(cmd.Context(), recordName); err != nil {
 				log.Fatalf("failed to delete record: %v", err)
 			}
 
-			fmt.Printf("Record successfully deleted.\n")
+			io.Printf("Record successfully deleted.\n")
 		},
 	}
 

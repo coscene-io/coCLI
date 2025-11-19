@@ -16,12 +16,12 @@ package record
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -31,7 +31,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDescribeCommand(cfgPath *string) *cobra.Command {
+func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug  = ""
 		outputFormat = ""
@@ -51,22 +51,22 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
 			}
 
 			// Get record details.
-			record, err := pm.RecordCli().Get(context.TODO(), recordName)
+			record, err := pm.RecordCli().Get(cmd.Context(), recordName)
 			if err != nil {
 				log.Fatalf("unable to get record: %v", err)
 			}
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(record, pm, outputFormat, false)
+			DisplayRecordWithFormat(cmd.Context(), record, pm, outputFormat, false, io)
 		},
 	}
 
@@ -76,13 +76,8 @@ func NewDescribeCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-// DisplayRecord displays record details with URL, handling URL fetching internally
-func DisplayRecord(record *openv1alpha1resource.Record, pm *config.ProfileManager) {
-	DisplayRecordWithFormat(record, pm, "table", false)
-}
-
 // DisplayRecordWithFormat displays record details in the specified format
-func DisplayRecordWithFormat(record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool) {
+func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool, io *iostreams.IOStreams) {
 	// Parse record name
 	recordName, err := name.NewRecord(record.Name)
 	if err != nil {
@@ -93,7 +88,7 @@ func DisplayRecordWithFormat(record *openv1alpha1resource.Record, pm *config.Pro
 	// Get record URL
 	recordUrl := ""
 	if recordName != nil {
-		recordUrl, err = pm.GetRecordUrl(recordName)
+		recordUrl, err = pm.GetRecordUrl(ctx, recordName)
 		if err != nil {
 			log.Warnf("unable to get record url: %v", err)
 			recordUrl = ""
@@ -105,8 +100,8 @@ func DisplayRecordWithFormat(record *openv1alpha1resource.Record, pm *config.Pro
 
 	// Handle success message for table format
 	if showSuccessMessage && format == "table" {
-		fmt.Println("\nRecord created successfully!")
-		fmt.Println("-------------------------------------------------------------")
+		io.Println("\nRecord created successfully!")
+		io.Println("-------------------------------------------------------------")
 	}
 
 	// Use the printer pattern
@@ -121,6 +116,6 @@ func DisplayRecordWithFormat(record *openv1alpha1resource.Record, pm *config.Pro
 	}
 
 	if showSuccessMessage && format == "table" {
-		fmt.Println("-------------------------------------------------------------")
+		io.Println("-------------------------------------------------------------")
 	}
 }

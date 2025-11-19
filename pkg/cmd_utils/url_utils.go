@@ -25,6 +25,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/coscene-io/cocli/api"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -55,12 +56,13 @@ func (pr *Progress) Write(p []byte) (n int, err error) {
 // Print displays the current progress of the file upload
 // each time Write is called
 func (pr *Progress) Print() {
+	iostream := iostreams.System()
 	if pr.BytesRead == pr.TotalSize {
 		postFix := ""
 		if pr.Retry > 0 {
 			postFix = fmt.Sprintf("on %d retries", pr.Retry)
 		}
-		fmt.Printf("\r\033[KFile successfully downloaded %s\n", postFix)
+		iostream.Printf("\r\033[KFile successfully downloaded %s\n", postFix)
 		return
 	}
 
@@ -68,7 +70,7 @@ func (pr *Progress) Print() {
 	if pr.Retry > 0 {
 		retryHint = fmt.Sprintf("(Retry #%d) ", pr.Retry)
 	}
-	fmt.Printf("\r\033[K%s%s: %d/%d %d%%", retryHint, pr.PrintPrefix, pr.BytesRead, pr.TotalSize, 100*pr.BytesRead/pr.TotalSize)
+	iostream.Printf("\r\033[K%s%s: %d/%d %d%%", retryHint, pr.PrintPrefix, pr.BytesRead, pr.TotalSize, 100*pr.BytesRead/pr.TotalSize)
 }
 
 // DownloadFileThroughUrl downloads a single file from the given downloadUrl.
@@ -144,6 +146,7 @@ func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) 
 
 func SaveMomentsJson(moments []*api.Moment, dir string) error {
 	err := os.MkdirAll(dir, 0755)
+	iostream := iostreams.System()
 	if err != nil {
 		log.Errorf("unable to create directories for file %v", dir)
 		return err
@@ -172,6 +175,6 @@ func SaveMomentsJson(moments []*api.Moment, dir string) error {
 		log.Fatalf("unable to write moments to file %s: %v", momentPath, err)
 		return err
 	}
-	fmt.Printf("Moments saved to %s\n", momentPath)
+	iostream.Printf("Moments saved to %s\n", momentPath)
 	return nil
 }

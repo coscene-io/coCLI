@@ -15,17 +15,18 @@
 package project
 
 import (
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
 		Short: "Work with coScene project.",
 	}
 
-	cmd.AddCommand(NewListCommand(cfgPath))
-	cmd.AddCommand(NewCreateCommand(cfgPath))
-	cmd.AddCommand(NewFileCommand(cfgPath))
+	cmd.AddCommand(NewListCommand(cfgPath, io))
+	cmd.AddCommand(NewCreateCommand(cfgPath, io))
+	cmd.AddCommand(NewFileCommand(cfgPath, io))
 	return cmd
 }
