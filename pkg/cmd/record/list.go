@@ -75,7 +75,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			}
 
 			if all {
-				records, err = pm.RecordCli().ListAll(cmd.Context(), listOptions)
+				records, err = pm.RecordCli().ListAll(cmd.Context(), listOptions, io)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}
@@ -90,7 +90,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 					skip = (page - 1) * effectivePageSize
 				}
 
-				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, effectivePageSize, skip)
+				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, effectivePageSize, skip, io)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}
@@ -102,7 +102,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, defaultPageSize, 0)
+				records, err = pm.RecordCli().ListWithPagination(cmd.Context(), listOptions, defaultPageSize, 0, io)
 				if err != nil {
 					log.Fatalf("unable to list records: %v", err)
 				}

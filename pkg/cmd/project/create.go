@@ -124,7 +124,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				}
 				summary += "  visibility: " + visibility + "\n"
 
-				if !prompts.PromptYN(summary + "Proceed?") {
+				if !prompts.PromptYN(summary+"Proceed?", io) {
 					log.Fatalf("aborted by user")
 				}
 			}

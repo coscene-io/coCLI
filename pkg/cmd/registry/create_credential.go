@@ -15,7 +15,6 @@
 package registry
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/coscene-io/cocli/internal/config"
@@ -47,8 +46,8 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams) *cobra
 			}
 
 			if outputFormat == "" {
-				fmt.Printf("username: %s\n", cred.GetUsername())
-				fmt.Printf("password: %s\n", cred.GetPassword())
+				io.Printf("username: %s\n", cred.GetUsername())
+				io.Printf("password: %s\n", cred.GetPassword())
 				return
 			}
 

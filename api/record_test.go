@@ -23,6 +23,7 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/golang/mock/gomock"
@@ -418,7 +419,7 @@ func TestRecordClient_ListAll(t *testing.T) {
 
 	client := NewRecordClient(mockRecordService, nil, nil, mockLabelService)
 
-	records, err := client.ListAll(ctx, options)
+	records, err := client.ListAll(ctx, options, iostreams.System())
 	require.NoError(t, err)
 	assert.Len(t, records, 2)
 }

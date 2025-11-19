@@ -453,7 +453,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 						io.Printf("  - %s\n", f)
 					}
 				}
-				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
+				if confirmed := prompts.PromptYN("Do you want to continue?", io); !confirmed {
 					io.Println("Delete aborted.")
 					return
 				}

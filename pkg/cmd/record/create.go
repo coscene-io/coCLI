@@ -15,7 +15,6 @@
 package record
 
 import (
-	"fmt"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -70,7 +69,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			recordName, _ := name.NewRecord(res.Name)
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(cmd.Context(), res, pm, outputFormat, true)
+			DisplayRecordWithFormat(cmd.Context(), res, pm, outputFormat, true, io)
 
 			if thumbnail != "" {
 				// Upload thumbnail.
@@ -79,7 +78,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 					log.Fatalf("Failed to generate record thumbnail upload url: %v", err)
 				}
 
-				fmt.Println("Uploading thumbnail to pre-signed url...")
+				io.Println("Uploading thumbnail to pre-signed url...")
 				um, err := upload_utils.NewUploadManagerFromConfig(proj, timeout,
 					&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, multiOpts)
 				if err != nil {

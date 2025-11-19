@@ -25,11 +25,11 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		Short: "Login to coScene",
 	}
 
-	cmd.AddCommand(NewAddCommand(cfgPath))
+	cmd.AddCommand(NewAddCommand(cfgPath, io))
 	cmd.AddCommand(NewCurrentCommand(cfgPath, io))
 	cmd.AddCommand(NewDeleteCommand(cfgPath, io))
 	cmd.AddCommand(NewListCommand(cfgPath, io))
-	cmd.AddCommand(NewSetCommand(cfgPath))
+	cmd.AddCommand(NewSetCommand(cfgPath, io))
 	cmd.AddCommand(NewSwitchCommand(cfgPath, io))
 
 	return cmd

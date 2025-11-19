@@ -80,7 +80,7 @@ func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			}
 
 			if !force {
-				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this copy operation?"); !confirmed {
+				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this copy operation?", io); !confirmed {
 					io.Println("Copy operation aborted.")
 					return
 				}

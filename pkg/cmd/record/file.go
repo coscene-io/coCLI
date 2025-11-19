@@ -297,7 +297,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 			} else {
 				log.Errorf("unable to get record url: %v", err)
 			}
-			fmt.Printf("Saving to %s\n", dstDir)
+			io.Printf("Saving to %s\n", dstDir)
 
 			totalFiles := len(filesToDownload)
 			successCount := 0
@@ -309,7 +309,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 				}
 
 				localPath := filepath.Join(dstDir, fileName.Filename)
-				fmt.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
+				io.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
 
 				if !strings.HasPrefix(localPath, dstDir+string(os.PathSeparator)) {
 					log.Errorf("illegal file name: %s", fileName.Filename)
@@ -325,7 +325,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 					}
 					if checksum == f.Sha256 && size == f.Size {
 						successCount++
-						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
+						io.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
 				}
@@ -346,7 +346,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 				successCount++
 			}
 
-			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
+			io.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
 		},
 	}
 
@@ -402,16 +402,16 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 
 			// Confirm deletion
 			if !force {
-				fmt.Printf("About to delete %d item(s) from record:\n", len(filesToDelete))
+				io.Printf("About to delete %d item(s) from record:\n", len(filesToDelete))
 				for _, f := range filesToDelete {
 					if strings.HasSuffix(f, "/") {
-						fmt.Printf("  - %s (directory - all contents will be deleted)\n", f)
+						io.Printf("  - %s (directory - all contents will be deleted)\n", f)
 					} else {
-						fmt.Printf("  - %s\n", f)
+						io.Printf("  - %s\n", f)
 					}
 				}
-				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
-					fmt.Println("Delete aborted.")
+				if confirmed := prompts.PromptYN("Do you want to continue?", io); !confirmed {
+					io.Println("Delete aborted.")
 					return
 				}
 			}
@@ -432,7 +432,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 				log.Fatalf("failed to delete files: %v", err)
 			}
 
-			fmt.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
+			io.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
 		},
 	}
 
@@ -469,7 +469,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			// Handle args and flags.
 			sourceRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get source record name from %s: %v", args[0], err)
@@ -486,7 +486,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 			destRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], destProject)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
+				io.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get destination record name from %s: %v", args[1], err)
@@ -505,20 +505,20 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			}
 
 			if len(allFiles) == 0 {
-				fmt.Println("No files found to copy.")
+				io.Println("No files found to copy.")
 				return
 			}
 
 			// Show confirmation
 			if !force {
-				fmt.Printf("About to copy %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
+				io.Printf("About to copy %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
 				for _, file := range allFiles {
-					fmt.Printf("  - %s\n", file.Filename)
+					io.Printf("  - %s\n", file.Filename)
 				}
 
-				yn := prompts.PromptYN("Do you want to continue?")
+				yn := prompts.PromptYN("Do you want to continue?", io)
 				if !yn {
-					fmt.Println("Copy operation cancelled.")
+					io.Println("Copy operation cancelled.")
 					return
 				}
 			}
@@ -529,14 +529,14 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 				log.Fatalf("failed to copy files: %v", err)
 			}
 
-			fmt.Printf("Successfully copied %d files to %s.\n", len(allFiles), destRecordName)
+			io.Printf("Successfully copied %d files to %s.\n", len(allFiles), destRecordName)
 
 			// Display destination record URL
 			destRecordUrl, err := pm.GetRecordUrl(cmd.Context(), destRecordName)
 			if err != nil {
 				log.Errorf("unable to get destination record url: %v", err)
 			} else {
-				fmt.Printf("View copied files at: %s\n", destRecordUrl)
+				io.Printf("View copied files at: %s\n", destRecordUrl)
 			}
 		},
 	}
@@ -574,7 +574,7 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 			sourceRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find source record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get source record name from %s: %v", args[0], err)
@@ -591,7 +591,7 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 			destRecordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], destProject)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
+				io.Printf("failed to find destination record: %s in project: %s\n", args[1], destProject)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get destination record name from %s: %v", args[1], err)
@@ -609,19 +609,19 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			}
 
 			if len(allFiles) == 0 {
-				fmt.Println("No files found to move.")
+				io.Println("No files found to move.")
 				return
 			}
 
 			if !force {
-				fmt.Printf("About to move %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
+				io.Printf("About to move %d files from %s to %s.\n", len(allFiles), sourceRecordName, destRecordName)
 				for _, file := range allFiles {
-					fmt.Printf("  - %s\n", file.Filename)
+					io.Printf("  - %s\n", file.Filename)
 				}
 
-				yn := prompts.PromptYN("Do you want to continue?")
+				yn := prompts.PromptYN("Do you want to continue?", io)
 				if !yn {
-					fmt.Println("Move operation cancelled.")
+					io.Println("Move operation cancelled.")
 					return
 				}
 			}
@@ -631,13 +631,13 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 				log.Fatalf("failed to move files: %v", err)
 			}
 
-			fmt.Printf("Successfully moved %d files to %s.\n", len(allFiles), destRecordName)
+			io.Printf("Successfully moved %d files to %s.\n", len(allFiles), destRecordName)
 
 			destRecordUrl, err := pm.GetRecordUrl(cmd.Context(), destRecordName)
 			if err != nil {
 				log.Errorf("unable to get destination record url: %v", err)
 			} else {
-				fmt.Printf("View moved files at: %s\n", destRecordUrl)
+				io.Printf("View moved files at: %s\n", destRecordUrl)
 			}
 		},
 	}

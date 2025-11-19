@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/coscene-io/cocli/pkg/cmd"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ import (
 
 func TestRootCommand(t *testing.T) {
 	t.Run("Version flag", func(t *testing.T) {
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -42,7 +43,7 @@ func TestRootCommand(t *testing.T) {
 	})
 
 	t.Run("Help flag", func(t *testing.T) {
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -57,7 +58,7 @@ func TestRootCommand(t *testing.T) {
 	})
 
 	t.Run("Invalid command", func(t *testing.T) {
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -80,7 +81,7 @@ func TestRootCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Run command with custom config path
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -113,7 +114,7 @@ func TestRootCommand(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.level, func(t *testing.T) {
-				cmd := cmd.NewCommand()
+				cmd := cmd.NewCommand(iostreams.System())
 				buf := new(bytes.Buffer)
 				cmd.SetOut(buf)
 				cmd.SetErr(buf)
@@ -135,7 +136,7 @@ func TestRootCommand(t *testing.T) {
 	})
 
 	t.Run("Subcommands exist", func(t *testing.T) {
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 
 		expectedCommands := []string{
 			"completion",
@@ -182,7 +183,7 @@ func TestEnvironmentVariables(t *testing.T) {
 		err := os.WriteFile(configPath, []byte{}, 0644)
 		require.NoError(t, err)
 
-		cmd := cmd.NewCommand()
+		cmd := cmd.NewCommand(iostreams.System())
 		buf := new(bytes.Buffer)
 		cmd.SetOut(buf)
 		cmd.SetErr(buf)
@@ -203,7 +204,7 @@ func TestEnvironmentVariables(t *testing.T) {
 
 // TestCommandStructure tests that commands follow consistent patterns
 func TestCommandStructure(t *testing.T) {
-	cmd := cmd.NewCommand()
+	cmd := cmd.NewCommand(iostreams.System())
 
 	// Check all subcommands have proper descriptions
 	for _, sub := range cmd.Commands() {
@@ -233,7 +234,7 @@ func TestPersistentFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that --config flag works on subcommands
-	cmd := cmd.NewCommand()
+	cmd := cmd.NewCommand(iostreams.System())
 	buf := new(bytes.Buffer)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)

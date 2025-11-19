@@ -15,8 +15,6 @@
 package record
 
 import (
-	"fmt"
-
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
@@ -58,7 +56,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -129,7 +127,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				log.Fatalf("Failed to update record: %v", err)
 			}
 
-			fmt.Printf("Successfully updated record %s\n", recordName)
+			io.Printf("Successfully updated record %s\n", recordName)
 		},
 	}
 

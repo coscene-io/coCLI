@@ -66,6 +66,9 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			}
 
 			if !skipParams {
+				if act.Spec.Parameters == nil {
+					act.Spec.Parameters = make(map[string]string)
+				}
 				if cmd.Flags().Changed("param") {
 					for k, v := range params {
 						act.Spec.Parameters[k] = v
@@ -86,7 +89,7 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 
 			// Prompt user for confirmation
 			if !force {
-				if !prompts.PromptYN("Confirm to run action?") {
+				if !prompts.PromptYN("Confirm to run action?", io) {
 					io.Println("Action run creation aborted.")
 					return
 				}

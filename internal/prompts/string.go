@@ -19,6 +19,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/muesli/reflow/wordwrap"
 	log "github.com/sirupsen/logrus"
 )
@@ -30,6 +31,7 @@ type stringModel struct {
 	defaultValue  string
 	windowWidth   int
 	quit          bool
+	io            *iostreams.IOStreams
 }
 
 func (m stringModel) Init() tea.Cmd {
@@ -52,7 +54,7 @@ func (m stringModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		case tea.KeyCtrlC, tea.KeyEscape, tea.KeyCtrlD:
-			fmt.Println("Quitting...")
+			m.io.Println("Quitting...")
 			m.quit = true
 			return m, tea.Quit
 		default:

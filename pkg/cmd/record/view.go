@@ -15,7 +15,6 @@
 package record
 
 import (
-	"fmt"
 	"os/exec"
 
 	"connectrpc.com/connect"
@@ -48,7 +47,7 @@ func NewViewCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -60,7 +59,7 @@ func NewViewCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				log.Fatalf("unable to get record url: %v", err)
 			}
 
-			fmt.Println("The record url is:", recordUrl)
+			io.Println("The record url is:", recordUrl)
 			if goToWeb {
 				err = exec.Command("open", recordUrl).Start()
 				if err != nil {

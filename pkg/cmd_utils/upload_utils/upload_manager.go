@@ -32,6 +32,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
@@ -848,10 +849,11 @@ func (um *UploadManager) addErr(path string, err error) {
 
 // printErrs prints all errors.
 func (um *UploadManager) printErrs() {
+	iostream := iostreams.System()
 	if len(um.errs) > 0 {
-		fmt.Printf("\n%d files failed to upload\n", len(um.errs))
+		iostream.Printf("\n%d files failed to upload\n", len(um.errs))
 		for kPath, vErr := range um.errs {
-			fmt.Printf("Upload %v failed with: \n%v\n\n", kPath, vErr)
+			iostream.Printf("Upload %v failed with: \n%v\n\n", kPath, vErr)
 		}
 		return
 	}

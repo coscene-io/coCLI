@@ -26,6 +26,7 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -79,10 +80,10 @@ type RecordInterface interface {
 	ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error)
 
 	// ListAll lists all records in a project.
-	ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error)
+	ListAll(ctx context.Context, options *ListRecordsOptions, io *iostreams.IOStreams) ([]*openv1alpha1resource.Record, error)
 
 	// ListWithPagination lists records in a project with pagination support.
-	ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error)
+	ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int, io *iostreams.IOStreams) ([]*openv1alpha1resource.Record, error)
 
 	// GenerateRecordThumbnailUploadUrl generates a pre-signed URL for uploading a record thumbnail.
 	GenerateRecordThumbnailUploadUrl(ctx context.Context, recordName *name.Record) (string, error)
@@ -446,12 +447,12 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 	}), nil
 }
 
-func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error) {
+func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions, io *iostreams.IOStreams) ([]*openv1alpha1resource.Record, error) {
 	if options.Project.ProjectID == "" {
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(ctx, options)
+	filter := c.filter(ctx, options, io)
 
 	var (
 		skip = 0
@@ -479,12 +480,12 @@ func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions)
 	return ret, nil
 }
 
-func (c *recordClient) ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error) {
+func (c *recordClient) ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int, io *iostreams.IOStreams) ([]*openv1alpha1resource.Record, error) {
 	if options.Project.ProjectID == "" {
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(ctx, options)
+	filter := c.filter(ctx, options, io)
 
 	req := connect.NewRequest(&openv1alpha1service.ListRecordsRequest{
 		Parent:   options.Project.String(),
@@ -500,7 +501,7 @@ func (c *recordClient) ListWithPagination(ctx context.Context, options *ListReco
 	return res.Msg.Records, nil
 }
 
-func (c *recordClient) filter(ctx context.Context, opts *ListRecordsOptions) string {
+func (c *recordClient) filter(ctx context.Context, opts *ListRecordsOptions, io *iostreams.IOStreams) string {
 	var filters []string
 	if !opts.IncludeArchive {
 		filters = append(filters, "is_archived=false")
@@ -516,7 +517,7 @@ func (c *recordClient) filter(ctx context.Context, opts *ListRecordsOptions) str
 		labelFilters, err := c.transformLabels(ctx, opts.Project.String(), opts.Labels)
 		if err != nil {
 			// If label lookup fails, log warning but don't fail the entire request
-			fmt.Printf("Warning: failed to lookup labels: %v\n", err)
+			io.Printf("Warning: failed to lookup labels: %v\n", err)
 		} else if len(labelFilters) > 0 {
 			filters = append(filters, "("+strings.Join(labelFilters, ` OR `)+")")
 		}

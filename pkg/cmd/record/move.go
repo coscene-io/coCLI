@@ -15,8 +15,6 @@
 package record
 
 import (
-	"fmt"
-
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
@@ -52,7 +50,7 @@ func NewMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -76,14 +74,14 @@ func NewMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 
 			// Show operation and confirm
 			if len(dstProject) != 0 {
-				fmt.Printf("Will move entire record %s to project %s\n", recordName.RecordID, dstProject)
+				io.Printf("Will move entire record %s to project %s\n", recordName.RecordID, dstProject)
 			} else {
-				fmt.Printf("Will move entire record %s to current project %s\n", recordName.RecordID, dstProject)
+				io.Printf("Will move entire record %s to current project %s\n", recordName.RecordID, dstProject)
 			}
 
 			if !force {
-				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this move operation?"); !confirmed {
-					fmt.Println("Move operation aborted.")
+				if confirmed := prompts.PromptYN("Are you sure you want to proceed with this move operation?", io); !confirmed {
+					io.Println("Move operation aborted.")
 					return
 				}
 			}
@@ -96,7 +94,7 @@ func NewMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 					log.Fatalf("failed to move record: %v", err)
 				}
 
-				fmt.Printf("Record successfully moved to %s.\n", moved.Name)
+				io.Printf("Record successfully moved to %s.\n", moved.Name)
 				movedRecordName, _ = name.NewRecord(moved.Name)
 			}
 
@@ -104,7 +102,7 @@ func NewMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			if err != nil {
 				log.Errorf("unable to get record url: %v", err)
 			} else {
-				fmt.Println("View moved record at:", movedRecordUrl)
+				io.Println("View moved record at:", movedRecordUrl)
 			}
 		},
 	}

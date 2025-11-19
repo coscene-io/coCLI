@@ -16,7 +16,6 @@ package record
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -54,7 +53,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			// Handle args and flags.
 			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -67,7 +66,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			}
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(cmd.Context(), record, pm, outputFormat, false)
+			DisplayRecordWithFormat(cmd.Context(), record, pm, outputFormat, false, io)
 		},
 	}
 
@@ -78,7 +77,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 }
 
 // DisplayRecordWithFormat displays record details in the specified format
-func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool) {
+func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool, io *iostreams.IOStreams) {
 	// Parse record name
 	recordName, err := name.NewRecord(record.Name)
 	if err != nil {
@@ -101,8 +100,8 @@ func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.R
 
 	// Handle success message for table format
 	if showSuccessMessage && format == "table" {
-		fmt.Println("\nRecord created successfully!")
-		fmt.Println("-------------------------------------------------------------")
+		io.Println("\nRecord created successfully!")
+		io.Println("-------------------------------------------------------------")
 	}
 
 	// Use the printer pattern
@@ -117,6 +116,6 @@ func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.R
 	}
 
 	if showSuccessMessage && format == "table" {
-		fmt.Println("-------------------------------------------------------------")
+		io.Println("-------------------------------------------------------------")
 	}
 }

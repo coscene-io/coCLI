@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCommand() *cobra.Command {
+func NewCommand(io *iostreams.IOStreams) *cobra.Command {
 	var (
 		cfgPath  string
 		logLevel string
@@ -104,16 +104,13 @@ func NewCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&cfgPath, "config", constants.DefaultConfigPath, "config file path")
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level, one of: trace|debug|info|warn|error")
 
-	// Create IOStreams for all commands
-	io := iostreams.System()
-
 	cmd.AddCommand(NewCompletionCommand())
 	cmd.AddCommand(action.NewRootCommand(&cfgPath, io))
 	cmd.AddCommand(login.NewRootCommand(&cfgPath, io))
 	cmd.AddCommand(project.NewRootCommand(&cfgPath, io))
 	cmd.AddCommand(registry.NewRootCommand(&cfgPath, io))
 	cmd.AddCommand(record.NewRootCommand(&cfgPath, io))
-	cmd.AddCommand(NewUpdateCommand())
+	cmd.AddCommand(NewUpdateCommand(io))
 
 	return cmd
 }

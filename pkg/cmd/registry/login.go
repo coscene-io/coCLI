@@ -56,7 +56,7 @@ func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				log.Fatalf("docker login failed: %v", err)
 			}
 
-			fmt.Printf("Logged in to %s as %s\n", host, cred.GetUsername())
+			io.Printf("Logged in to %s as %s\n", host, cred.GetUsername())
 		},
 	}
 

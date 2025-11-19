@@ -15,11 +15,11 @@
 package record
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -28,6 +28,7 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
+	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -54,7 +55,7 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -74,6 +75,9 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			if err != nil {
 				log.Fatalf("unable to list files: %v", err)
 			}
+			files = lo.Filter(files, func(f *openv1alpha1resource.File, _ int) bool {
+				return !strings.HasSuffix(f.Name, "/")
+			})
 
 			var dstDir string
 			if flat {
@@ -81,22 +85,22 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			} else {
 				dstDir = filepath.Join(dirPath, recordName.RecordID)
 			}
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Downloading record %s\n", recordName.RecordID)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Downloading record %s\n", recordName.RecordID)
 			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
-				fmt.Println("View record at:", recordUrl)
+				io.Println("View record at:", recordUrl)
 			} else {
 				log.Errorf("unable to get record url: %v", err)
 			}
-			fmt.Printf("Saving to %s\n", dstDir)
+			io.Printf("Saving to %s\n", dstDir)
 
 			totalFiles := len(files)
 			successCount := 0
 			for fIdx, f := range files {
 				fileName, _ := name.NewFile(f.Name)
 				localPath := filepath.Join(dstDir, fileName.Filename)
-				fmt.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
+				io.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
 
 				if !strings.HasPrefix(localPath, dstDir+string(os.PathSeparator)) {
 					log.Errorf("illegal file name: %s", fileName.Filename)
@@ -112,7 +116,7 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 					}
 					if checksum == f.Sha256 && size == f.Size {
 						successCount++
-						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
+						io.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
 				}
@@ -148,7 +152,7 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 				}
 			}
 
-			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
+			io.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
 		},
 	}
 
