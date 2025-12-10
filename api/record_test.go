@@ -23,7 +23,6 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/constants"
-	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/golang/mock/gomock"
@@ -44,7 +43,7 @@ type mockRecordServiceClient struct {
 	moveRecordsFunc          func(context.Context, *connect.Request[openv1alpha1service.MoveRecordsRequest]) (*connect.Response[openv1alpha1service.MoveRecordsResponse], error)
 	deleteRecordFunc         func(context.Context, *connect.Request[openv1alpha1service.DeleteRecordRequest]) (*connect.Response[emptypb.Empty], error)
 	updateRecordFunc         func(context.Context, *connect.Request[openv1alpha1service.UpdateRecordRequest]) (*connect.Response[openv1alpha1resource.Record], error)
-	listRecordsFunc          func(context.Context, *connect.Request[openv1alpha1service.ListRecordsRequest]) (*connect.Response[openv1alpha1service.ListRecordsResponse], error)
+	searchRecordsFunc        func(context.Context, *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error)
 	listRecordEventsFunc     func(context.Context, *connect.Request[openv1alpha1service.ListRecordEventsRequest]) (*connect.Response[openv1alpha1service.ListRecordEventsResponse], error)
 	generateThumbnailUrlFunc func(context.Context, *connect.Request[openv1alpha1service.GenerateRecordThumbnailUploadUrlRequest]) (*connect.Response[openv1alpha1service.GenerateRecordThumbnailUploadUrlResponse], error)
 }
@@ -91,9 +90,9 @@ func (m *mockRecordServiceClient) UpdateRecord(ctx context.Context, req *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
 
-func (m *mockRecordServiceClient) ListRecords(ctx context.Context, req *connect.Request[openv1alpha1service.ListRecordsRequest]) (*connect.Response[openv1alpha1service.ListRecordsResponse], error) {
-	if m.listRecordsFunc != nil {
-		return m.listRecordsFunc(ctx, req)
+func (m *mockRecordServiceClient) SearchRecords(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+	if m.searchRecordsFunc != nil {
+		return m.searchRecordsFunc(ctx, req)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
@@ -365,13 +364,13 @@ func TestRecordClient_CopyFiles(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRecordClient_ListAll(t *testing.T) {
+func TestRecordClient_SearchAll(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	project := &name.Project{ProjectID: "test-project"}
-	options := &ListRecordsOptions{
+	options := &SearchRecordsOptions{
 		Project:        project,
 		Titles:         []string{"Record 1", "Record 2"},
 		Labels:         []string{"label1", "label2"},
@@ -398,20 +397,17 @@ func TestRecordClient_ListAll(t *testing.T) {
 	callCount := 0
 	mockRecordService := &mockRecordServiceClient{
 		ctrl: ctrl,
-		listRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListRecordsRequest]) (*connect.Response[openv1alpha1service.ListRecordsResponse], error) {
+		searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
 			assert.Equal(t, project.String(), req.Msg.Parent)
-			assert.Contains(t, req.Msg.Filter, "is_archived=false")
-			assert.Contains(t, req.Msg.Filter, `title:"Record 1"`)
-			assert.Contains(t, req.Msg.Filter, `title:"Record 2"`)
 
 			callCount++
 			if callCount == 1 {
-				return connect.NewResponse(&openv1alpha1service.ListRecordsResponse{
+				return connect.NewResponse(&openv1alpha1service.SearchRecordsResponse{
 					Records:   []*openv1alpha1resource.Record{record1, record2},
 					TotalSize: 2,
 				}), nil
 			}
-			return connect.NewResponse(&openv1alpha1service.ListRecordsResponse{
+			return connect.NewResponse(&openv1alpha1service.SearchRecordsResponse{
 				Records: []*openv1alpha1resource.Record{},
 			}), nil
 		},
@@ -419,7 +415,7 @@ func TestRecordClient_ListAll(t *testing.T) {
 
 	client := NewRecordClient(mockRecordService, nil, nil, mockLabelService)
 
-	records, err := client.ListAll(ctx, options, iostreams.System())
+	records, err := client.SearchAll(ctx, options)
 	require.NoError(t, err)
 	assert.Len(t, records, 2)
 }
