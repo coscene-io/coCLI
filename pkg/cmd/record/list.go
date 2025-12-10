@@ -38,13 +38,14 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 		outputFormat   = ""
 		pageSize       = 0
 		page           = 0
+		pageToken      = ""
 		all            = false
 		labels         []string
 		titles         []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [--page-size <size>] [--page <number>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
+		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [--page-size <size>] [--page-token <token>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
 		Short:                 "List records in a project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
@@ -52,9 +53,6 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			// Validate pagination flags
 			if pageSize > 0 && (pageSize < 10 || pageSize > 100) {
 				log.Fatalf("--page-size must be between 10 and 100")
-			}
-			if page < 1 {
-				log.Fatalf("--page must be >= 1")
 			}
 
 			// Get current profile.
@@ -65,55 +63,94 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			}
 
 			var records []*openv1alpha1resource.Record
+			var nextPageToken string
 
-			// Prepare list options with filters
-			listOptions := &api.ListRecordsOptions{
+			searchOptions := &api.SearchRecordsOptions{
 				Project:        proj,
 				IncludeArchive: includeArchive,
 				Labels:         labels,
 				Titles:         titles,
+				OrderBy:        "",
 			}
 
 			if all {
-				records, err = pm.RecordCli().ListAll(context.TODO(), listOptions)
+				records, err = pm.RecordCli().SearchAll(context.TODO(), searchOptions)
 				if err != nil {
-					log.Fatalf("unable to list records: %v", err)
+					log.Fatalf("unable to search records: %v", err)
 				}
-			} else if pageSize > 0 || page > 1 {
+			} else if page > 1 {
+				fmt.Fprintf(os.Stderr, "Warning: --page is deprecated due to backend changes. Use --page-token for pagination.\n")
+				fmt.Fprintf(os.Stderr, "Note: Fetching pages 1-%d sequentially (this may be slow)...\n\n", page)
+
+				effectivePageSize := pageSize
+				if effectivePageSize <= 0 {
+					effectivePageSize = constants.MaxPageSize
+				}
+				searchOptions.PageSize = int32(effectivePageSize)
+
+				currentPageToken := ""
+				for i := 1; i <= page; i++ {
+					searchOptions.PageToken = currentPageToken
+					result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
+					if err != nil {
+						log.Fatalf("unable to search records: %v", err)
+					}
+
+					isEmpty := len(result.Records) == 0
+					isLastPage := isEmpty || len(result.Records) < effectivePageSize || result.NextPageToken == ""
+
+					if i == page {
+						if isEmpty {
+							log.Fatalf("page %d does not exist (only %d pages available)", page, i-1)
+						}
+						records = result.Records
+						nextPageToken = result.NextPageToken
+						break
+					}
+
+					if isLastPage {
+						availablePages := i
+						if isEmpty {
+							availablePages = i - 1
+						}
+						log.Fatalf("page %d does not exist (only %d pages available)", page, availablePages)
+					}
+
+					currentPageToken = result.NextPageToken
+				}
+			} else if pageToken != "" || pageSize > 0 {
 				effectivePageSize := pageSize
 				if effectivePageSize <= 0 {
 					effectivePageSize = constants.MaxPageSize
 				}
 
-				skip := 0
-				if page > 1 {
-					skip = (page - 1) * effectivePageSize
-				}
+				searchOptions.PageSize = int32(effectivePageSize)
+				searchOptions.PageToken = pageToken
 
-				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, effectivePageSize, skip)
+				result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
 				if err != nil {
-					log.Fatalf("unable to list records: %v", err)
+					log.Fatalf("unable to search records: %v", err)
 				}
 
-				// Show note when using default page size with --page
-				if pageSize <= 0 && page > 1 {
-					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d records for page %d.\n\n", effectivePageSize, page)
+				records = result.Records
+				nextPageToken = result.NextPageToken
+
+				if pageToken != "" && len(records) == 0 {
+					fmt.Fprintf(os.Stderr, "No more records. You've reached the end of results.\n")
 				}
 			} else {
-				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
-				records, err = pm.RecordCli().ListWithPagination(context.TODO(), listOptions, defaultPageSize, 0)
+				searchOptions.PageSize = int32(defaultPageSize)
+
+				result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
 				if err != nil {
-					log.Fatalf("unable to list records: %v", err)
+					log.Fatalf("unable to search records: %v", err)
 				}
 
-				// Show note about default behavior
-				if len(records) == defaultPageSize {
-					fmt.Fprintf(os.Stderr, "Note: Showing first %d records (default page size). Use --all to list all records or --page-size to specify page size.\n\n", defaultPageSize)
-				}
+				records = result.Records
+				nextPageToken = result.NextPageToken
 			}
 
-			// Print listed records.
 			var omitFields []string
 			if !includeArchive {
 				omitFields = append(omitFields, "ARCHIVED")
@@ -121,9 +158,21 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecord(records), os.Stdout)
+			}}).PrintObj(printable.NewRecord(records, nextPageToken), os.Stdout)
 			if err != nil {
 				log.Fatalf("unable to print records: %v", err)
+			}
+
+			effectivePageSize := pageSize
+			if effectivePageSize <= 0 {
+				effectivePageSize = constants.MaxPageSize
+			}
+
+			hasMorePages := nextPageToken != "" && len(records) >= effectivePageSize
+
+			if !all && hasMorePages {
+				fmt.Fprintf(os.Stderr, "\n")
+				fmt.Fprintf(os.Stderr, "Next page available. To continue, add: --page-token \"%s\"\n", nextPageToken)
 			}
 		},
 	}
@@ -133,14 +182,16 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
-	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based, requires --page-size)")
-	cmd.Flags().BoolVar(&all, "all", false, "list all records (overrides default page size)")
+	cmd.Flags().IntVar(&page, "page", 1, "[DEPRECATED] page number (use --page-token instead)")
+	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
+	cmd.Flags().BoolVar(&all, "all", false, "list all records (overrides pagination)")
 	cmd.Flags().StringSliceVar(&labels, "labels", []string{}, "filter by labels (comma-separated)")
 	cmd.Flags().StringSliceVar(&titles, "keywords", []string{}, "filter by keywords in titles (comma-separated)")
 
-	// Mark mutually exclusive flags
 	cmd.MarkFlagsMutuallyExclusive("all", "page-size")
 	cmd.MarkFlagsMutuallyExclusive("all", "page")
+	cmd.MarkFlagsMutuallyExclusive("all", "page-token")
+	cmd.MarkFlagsMutuallyExclusive("page", "page-token")
 
 	return cmd
 }
