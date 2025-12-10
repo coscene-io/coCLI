@@ -15,18 +15,19 @@
 package action
 
 import (
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "action",
 		Short: "Work with coScene action.",
 	}
 
 	cmd.AddCommand(NewListCommand(cfgPath))
-	cmd.AddCommand(NewListRunCommand(cfgPath))
-	cmd.AddCommand(NewRunCommand(cfgPath))
+	cmd.AddCommand(NewListRunCommand(cfgPath, io))
+	cmd.AddCommand(NewRunCommand(cfgPath, io))
 
 	return cmd
 }

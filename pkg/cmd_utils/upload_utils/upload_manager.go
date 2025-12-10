@@ -32,6 +32,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
@@ -288,7 +289,7 @@ func (um *UploadManager) Run(ctx context.Context, parent UploadParent, fileOpts 
 	}
 	um.uploadWg.Add(len(filesToUpload) + len(fileOpts.AdditionalUploads))
 
-	fileToUploadUrls := um.findAllUploadUrls(filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.TargetDir)
+	fileToUploadUrls := um.findAllUploadUrls(ctx, filesToUpload, newParentContextFrom(parent), fileOpts.RelDir(), fileOpts.TargetDir)
 	for f, v := range fileOpts.AdditionalUploads {
 		fileToUploadUrls[f] = v
 		um.addFile(f)
@@ -848,17 +849,18 @@ func (um *UploadManager) addErr(path string, err error) {
 
 // printErrs prints all errors.
 func (um *UploadManager) printErrs() {
+	iostream := iostreams.System()
 	if len(um.errs) > 0 {
-		fmt.Printf("\n%d files failed to upload\n", len(um.errs))
+		iostream.Printf("\n%d files failed to upload\n", len(um.errs))
 		for kPath, vErr := range um.errs {
-			fmt.Printf("Upload %v failed with: \n%v\n\n", kPath, vErr)
+			iostream.Printf("Upload %v failed with: \n%v\n\n", kPath, vErr)
 		}
 		return
 	}
 }
 
 // findAllUploadUrls prepares upload URLs for either record or project parent using parentContext.
-func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentContext, relativeDir string, targetDir string) map[string]string {
+func (um *UploadManager) findAllUploadUrls(ctx context.Context, filesToUpload []string, pCtx parentContext, relativeDir string, targetDir string) map[string]string {
 	ret := make(map[string]string)
 	var files []*openv1alpha1resource.File
 	resourceToRel := make(map[string]string)
@@ -892,7 +894,7 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentCo
 
 		// Existence check
 		resourceName := pCtx.buildResourceName(remotePath)
-		getFileRes, err := um.apiOpts.GetFile(context.TODO(), resourceName)
+		getFileRes, err := um.apiOpts.GetFile(ctx, resourceName)
 		if err == nil && getFileRes.Sha256 == checksum && getFileRes.Size == size {
 			um.fileInfos[f].Status = PreviouslyUploaded
 			um.uploadWg.Done()
@@ -914,7 +916,7 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentCo
 
 		if len(files) == processBatchSize {
 			um.debugF("Generating upload urls for %d files", len(files))
-			res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), pCtx.parentString, files)
+			res, err := um.apiOpts.GenerateFileUploadUrls(ctx, pCtx.parentString, files)
 			if err != nil {
 				for _, file := range files {
 					um.addErr(filepath.Join(relativeDir, file.Filename), errors.Wrapf(err, "unable to generate upload urls"))
@@ -932,7 +934,7 @@ func (um *UploadManager) findAllUploadUrls(filesToUpload []string, pCtx parentCo
 
 	if len(files) > 0 {
 		um.debugF("Generating upload urls for %d files", len(files))
-		res, err := um.apiOpts.GenerateFileUploadUrls(context.TODO(), pCtx.parentString, files)
+		res, err := um.apiOpts.GenerateFileUploadUrls(ctx, pCtx.parentString, files)
 		if err != nil {
 			for _, file := range files {
 				um.addErr(filepath.Join(relativeDir, file.Filename), errors.Wrapf(err, "unable to generate upload urls"))

@@ -15,13 +15,12 @@
 package login
 
 import (
-	"fmt"
-
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewCurrentCommand(cfgPath *string) *cobra.Command {
+func NewCurrentCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "current",
 		Short:                 "Show the current login profile.",
@@ -33,7 +32,11 @@ func NewCurrentCommand(cfgPath *string) *cobra.Command {
 
 			curProfile := pm.GetCurrentProfile()
 
-			fmt.Printf("Current Profile:\n%s\n", curProfile)
+			if curProfile == nil {
+				io.Println("No current profile")
+			} else {
+				io.Printf("Current Profile:\n%s\n", curProfile)
+			}
 		},
 	}
 

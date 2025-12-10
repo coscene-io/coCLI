@@ -29,6 +29,7 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/genproto/protobuf/field_mask"
 )
 
@@ -460,7 +461,7 @@ func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOpti
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(options)
+	filter := c.buildSearchFilter(ctx, options)
 	var (
 		pageToken = ""
 		ret       []*openv1alpha1resource.Record
@@ -503,7 +504,7 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(options)
+	filter := c.buildSearchFilter(ctx, options)
 
 	req := connect.NewRequest(&openv1alpha1service.SearchRecordsRequest{
 		Parent:    options.Project.String(),
@@ -531,7 +532,7 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 }
 
 // buildSearchFilter builds the filter string for the SearchRecords API using AIP-160 syntax.
-func (c *recordClient) buildSearchFilter(opts *SearchRecordsOptions) string {
+func (c *recordClient) buildSearchFilter(ctx context.Context, opts *SearchRecordsOptions) string {
 	var filters []string
 	if !opts.IncludeArchive {
 		filters = append(filters, "isArchived = false")
@@ -543,9 +544,10 @@ func (c *recordClient) buildSearchFilter(opts *SearchRecordsOptions) string {
 		filters = append(filters, fmt.Sprintf("title in [%s]", strings.Join(quotedTitles, ", ")))
 	}
 	if len(opts.Labels) > 0 {
-		labelIDs, err := c.transformLabelsToIDs(context.TODO(), opts.Project.String(), opts.Labels)
+		labelIDs, err := c.transformLabelsToIDs(ctx, opts.Project.String(), opts.Labels)
 		if err != nil {
-			fmt.Printf("Warning: failed to lookup labels: %v\n", err)
+			// Log warning using logrus, don't fail the entire request
+			log.Warnf("failed to lookup labels: %v", err)
 		} else if len(labelIDs) > 0 {
 			quotedIDs := lo.Map(labelIDs, func(id string, _ int) string {
 				return fmt.Sprintf(`"%s"`, id)

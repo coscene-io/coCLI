@@ -15,7 +15,6 @@
 package record
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		projectSlug    = ""
 		verbose        = false
@@ -74,7 +74,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if all {
-				records, err = pm.RecordCli().SearchAll(context.TODO(), searchOptions)
+				records, err = pm.RecordCli().SearchAll(cmd.Context(), searchOptions)
 				if err != nil {
 					log.Fatalf("unable to search records: %v", err)
 				}
@@ -91,7 +91,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				currentPageToken := ""
 				for i := 1; i <= page; i++ {
 					searchOptions.PageToken = currentPageToken
-					result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
+					result, err := pm.RecordCli().SearchWithPageToken(cmd.Context(), searchOptions)
 					if err != nil {
 						log.Fatalf("unable to search records: %v", err)
 					}
@@ -127,7 +127,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				searchOptions.PageSize = int32(effectivePageSize)
 				searchOptions.PageToken = pageToken
 
-				result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
+				result, err := pm.RecordCli().SearchWithPageToken(cmd.Context(), searchOptions)
 				if err != nil {
 					log.Fatalf("unable to search records: %v", err)
 				}
@@ -142,7 +142,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				defaultPageSize := constants.MaxPageSize
 				searchOptions.PageSize = int32(defaultPageSize)
 
-				result, err := pm.RecordCli().SearchWithPageToken(context.TODO(), searchOptions)
+				result, err := pm.RecordCli().SearchWithPageToken(cmd.Context(), searchOptions)
 				if err != nil {
 					log.Fatalf("unable to search records: %v", err)
 				}

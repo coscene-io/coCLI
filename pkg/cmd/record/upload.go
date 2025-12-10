@@ -15,20 +15,19 @@
 package record
 
 import (
-	"context"
-	"fmt"
 	"path/filepath"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewUploadCommand(cfgPath *string) *cobra.Command {
+func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	var (
 		includeHidden     = false
 		projectSlug       = ""
@@ -51,9 +50,9 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -63,10 +62,10 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("unable to get absolute path: %v", err)
 			}
 
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Uploading files to record: %s\n", recordName.RecordID)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Uploading files to record: %s\n", recordName.RecordID)
 			if targetDir != "" {
-				fmt.Printf("Target directory: %s\n", targetDir)
+				io.Printf("Target directory: %s\n", targetDir)
 			}
 
 			// create minio client and upload manager first.
@@ -86,9 +85,9 @@ func NewUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
 
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
-				fmt.Println("View record at:", recordUrl)
+				io.Println("View record at:", recordUrl)
 			} else {
 				log.Errorf("unable to get record url: %v", err)
 			}

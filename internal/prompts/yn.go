@@ -19,6 +19,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/muesli/reflow/wordwrap"
 	log "github.com/sirupsen/logrus"
 )
@@ -30,6 +31,7 @@ type ynModel struct {
 	enteredKey  string
 	windowWidth int
 	quit        bool
+	io          *iostreams.IOStreams
 }
 
 func (m ynModel) Init() tea.Cmd {
@@ -41,7 +43,7 @@ func (m ynModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "ctrl+d":
-			fmt.Println("Quitting...")
+			m.io.Println("Quitting...")
 			m.quit = true
 			return m, tea.Quit
 		case "y":
@@ -63,8 +65,8 @@ func (m ynModel) View() string {
 	return wordwrap.String(fmt.Sprintf("%s (y/n) %s\n", m.promptMsg, m.enteredKey), m.windowWidth)
 }
 
-func PromptYN(promptMsg string) bool {
-	p := tea.NewProgram(ynModel{promptMsg: promptMsg})
+func PromptYN(promptMsg string, io *iostreams.IOStreams) bool {
+	p := tea.NewProgram(ynModel{promptMsg: promptMsg, io: io})
 	finalModel, err := p.Run()
 	if err != nil {
 		log.Fatalf("Error running y/n prompt: %v", err)
