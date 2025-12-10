@@ -158,7 +158,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecord(records), os.Stdout)
+			}}).PrintObj(printable.NewRecord(records, nextPageToken), os.Stdout)
 			if err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
