@@ -62,7 +62,10 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				Parent: "",
 			})
 			if err != nil {
-				log.Fatalf("unable to list system actions: %v", err)
+				// If user doesn't have permission to list system actions, just skip them
+				// System actions are organization-level templates that not all users can access
+				log.Debugf("unable to list system actions (skipping): %v", err)
+				systemActions = []*openv1alpha1resource.Action{}
 			}
 
 			allActions := append(actions, systemActions...)
