@@ -78,11 +78,11 @@ type RecordInterface interface {
 	// ListAllMoments lists all moments in a record.
 	ListAllMoments(ctx context.Context, recordName *name.Record) ([]*Moment, error)
 
-	// ListAll lists all records in a project.
-	ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error)
+	// SearchAll searches all records in a project using the new SearchRecords API.
+	SearchAll(ctx context.Context, options *SearchRecordsOptions) ([]*openv1alpha1resource.Record, error)
 
-	// ListWithPagination lists records in a project with pagination support.
-	ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error)
+	// SearchWithPageToken searches records with page token support (new API).
+	SearchWithPageToken(ctx context.Context, options *SearchRecordsOptions) (*SearchRecordsResult, error)
 
 	// GenerateRecordThumbnailUploadUrl generates a pre-signed URL for uploading a record thumbnail.
 	GenerateRecordThumbnailUploadUrl(ctx context.Context, recordName *name.Record) (string, error)
@@ -91,11 +91,20 @@ type RecordInterface interface {
 	RecordId2Name(ctx context.Context, recordIdOrName string, projectNameStr *name.Project) (*name.Record, error)
 }
 
-type ListRecordsOptions struct {
+type SearchRecordsOptions struct {
 	Project        *name.Project
 	Titles         []string
 	Labels         []string
 	IncludeArchive bool
+	PageSize       int32
+	PageToken      string
+	OrderBy        string
+}
+
+type SearchRecordsResult struct {
+	Records       []*openv1alpha1resource.Record
+	NextPageToken string
+	TotalSize     int64
 }
 
 type recordClient struct {
@@ -446,79 +455,102 @@ func (c *recordClient) ListAllMoments(ctx context.Context, recordName *name.Reco
 	}), nil
 }
 
-func (c *recordClient) ListAll(ctx context.Context, options *ListRecordsOptions) ([]*openv1alpha1resource.Record, error) {
+func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOptions) ([]*openv1alpha1resource.Record, error) {
 	if options.Project.ProjectID == "" {
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(options)
-
+	filter := c.buildSearchFilter(options)
 	var (
-		skip = 0
-		ret  []*openv1alpha1resource.Record
+		pageToken = ""
+		ret       []*openv1alpha1resource.Record
 	)
 
 	for {
-		req := connect.NewRequest(&openv1alpha1service.ListRecordsRequest{
-			Parent:   options.Project.String(),
-			PageSize: constants.MaxPageSize,
-			Skip:     int32(skip),
-			Filter:   filter,
+		req := connect.NewRequest(&openv1alpha1service.SearchRecordsRequest{
+			Parent:    options.Project.String(),
+			PageSize:  constants.MaxPageSize,
+			PageToken: pageToken,
+			OrderBy:   options.OrderBy,
 		})
-		res, err := c.recordServiceClient.ListRecords(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list records at skip %d: %w", skip, err)
+
+		if filter != "" {
+			req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
+				Filter: filter,
+			}
 		}
-		if len(res.Msg.Records) == 0 {
+
+		res, err := c.recordServiceClient.SearchRecords(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search records: %w", err)
+		}
+
+		ret = append(ret, res.Msg.Records...)
+
+		isEmpty := len(res.Msg.Records) == 0
+		isLastPage := isEmpty || len(res.Msg.Records) < constants.MaxPageSize || res.Msg.NextPageToken == ""
+		if isLastPage {
 			break
 		}
-		ret = append(ret, res.Msg.Records...)
-		skip += constants.MaxPageSize
+		pageToken = res.Msg.NextPageToken
 	}
 
 	return ret, nil
 }
 
-func (c *recordClient) ListWithPagination(ctx context.Context, options *ListRecordsOptions, pageSize int, skip int) ([]*openv1alpha1resource.Record, error) {
+func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchRecordsOptions) (*SearchRecordsResult, error) {
 	if options.Project.ProjectID == "" {
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.filter(options)
+	filter := c.buildSearchFilter(options)
 
-	req := connect.NewRequest(&openv1alpha1service.ListRecordsRequest{
-		Parent:   options.Project.String(),
-		PageSize: int32(pageSize),
-		Skip:     int32(skip),
-		Filter:   filter,
+	req := connect.NewRequest(&openv1alpha1service.SearchRecordsRequest{
+		Parent:    options.Project.String(),
+		PageSize:  options.PageSize,
+		PageToken: options.PageToken,
+		OrderBy:   options.OrderBy,
 	})
-	res, err := c.recordServiceClient.ListRecords(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list records: %w", err)
+
+	if filter != "" {
+		req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
+			Filter: filter,
+		}
 	}
 
-	return res.Msg.Records, nil
+	res, err := c.recordServiceClient.SearchRecords(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search records: %w", err)
+	}
+
+	return &SearchRecordsResult{
+		Records:       res.Msg.Records,
+		NextPageToken: res.Msg.NextPageToken,
+		TotalSize:     res.Msg.TotalSize,
+	}, nil
 }
 
-func (c *recordClient) filter(opts *ListRecordsOptions) string {
+// buildSearchFilter builds the filter string for the SearchRecords API using AIP-160 syntax.
+func (c *recordClient) buildSearchFilter(opts *SearchRecordsOptions) string {
 	var filters []string
 	if !opts.IncludeArchive {
-		filters = append(filters, "is_archived=false")
+		filters = append(filters, "isArchived = false")
 	}
 	if len(opts.Titles) > 0 {
-		filters = append(filters, "("+strings.Join(
-			lo.Map(opts.Titles, func(title string, _ int) string { return fmt.Sprintf(`title:"%s"`, title) }),
-			` OR `,
-		)+")")
+		quotedTitles := lo.Map(opts.Titles, func(title string, _ int) string {
+			return fmt.Sprintf(`"%s"`, title)
+		})
+		filters = append(filters, fmt.Sprintf("title in [%s]", strings.Join(quotedTitles, ", ")))
 	}
 	if len(opts.Labels) > 0 {
-		// Transform label display names to label IDs, following backend implementation
-		labelFilters, err := c.transformLabels(context.TODO(), opts.Project.String(), opts.Labels)
+		labelIDs, err := c.transformLabelsToIDs(context.TODO(), opts.Project.String(), opts.Labels)
 		if err != nil {
-			// If label lookup fails, log warning but don't fail the entire request
 			fmt.Printf("Warning: failed to lookup labels: %v\n", err)
-		} else if len(labelFilters) > 0 {
-			filters = append(filters, "("+strings.Join(labelFilters, ` OR `)+")")
+		} else if len(labelIDs) > 0 {
+			quotedIDs := lo.Map(labelIDs, func(id string, _ int) string {
+				return fmt.Sprintf(`"%s"`, id)
+			})
+			filters = append(filters, fmt.Sprintf("relatedLabels.id in [%s]", strings.Join(quotedIDs, ", ")))
 		}
 	}
 	return strings.Join(filters, " AND ")
@@ -553,9 +585,8 @@ func (c *recordClient) RecordId2Name(ctx context.Context, recordIdOrName string,
 	return recordName, nil
 }
 
-// transformLabels converts label display names to label IDs for filtering
-// Based on the implementation in /x/record/client.go
-func (c *recordClient) transformLabels(ctx context.Context, parent string, labelNames []string) ([]string, error) {
+// transformLabelsToIDs converts label display names to just IDs
+func (c *recordClient) transformLabelsToIDs(ctx context.Context, parent string, labelNames []string) ([]string, error) {
 	if len(labelNames) == 0 {
 		return nil, nil
 	}
@@ -595,11 +626,11 @@ func (c *recordClient) transformLabels(ctx context.Context, parent string, label
 		return nil, fmt.Errorf("labels not found: %v", strings.Join(missedLabelNames, ","))
 	}
 
-	// Construct label filters using label IDs
+	// Return just the IDs in the same order as input
 	var ret []string
 	for _, labelName := range labelNames {
 		labelId := labelNameIdMap[labelName]
-		ret = append(ret, fmt.Sprintf("labels=[%s]", labelId))
+		ret = append(ret, labelId)
 	}
 
 	return ret, nil

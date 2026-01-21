@@ -36,19 +36,22 @@ const (
 )
 
 type Record struct {
-	Delegate []*openv1alpha1resource.Record
+	Delegate      []*openv1alpha1resource.Record
+	NextPageToken string
 }
 
-func NewRecord(records []*openv1alpha1resource.Record) *Record {
+func NewRecord(records []*openv1alpha1resource.Record, nextPageToken string) *Record {
 	return &Record{
-		Delegate: records,
+		Delegate:      records,
+		NextPageToken: nextPageToken,
 	}
 }
 
 func (p *Record) ToProtoMessage() proto.Message {
 	return &openv1alpha1service.ListRecordsResponse{
-		Records:   p.Delegate,
-		TotalSize: int64(len(p.Delegate)),
+		Records:       p.Delegate,
+		TotalSize:     int64(len(p.Delegate)),
+		NextPageToken: p.NextPageToken,
 	}
 }
 
