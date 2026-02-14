@@ -15,21 +15,20 @@
 package login
 
 import (
-	"fmt"
-
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewDeleteCommand(cfgPath *string) *cobra.Command {
+func NewDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "delete <profile-name>",
 		Short:                 "Delete a login profile.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			if len(pm.Profiles) == 1 {
@@ -44,11 +43,11 @@ func NewDeleteCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Failed to persist profile manager: %v", err)
 			}
 
-			fmt.Println("Profile deleted.")
+			io.Println("Profile deleted.")
 
 			// Print the current profile
 			curProfile := pm.GetCurrentProfile()
-			fmt.Printf("Current Profile is:\n%s\n", curProfile)
+			io.Printf("Current Profile is:\n%s\n", curProfile)
 		},
 	}
 

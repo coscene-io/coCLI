@@ -1,5 +1,9 @@
 name: CI
-on: [push]
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -23,3 +27,5 @@ jobs:
         run: make lint
       - name: Build
         run: make build
+      - name: Run Tests
+        run: make test

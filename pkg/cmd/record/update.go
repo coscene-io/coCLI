@@ -15,13 +15,12 @@
 package record
 
 import (
-	"context"
-	"fmt"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
 	mapset "github.com/deckarep/golang-set/v2"
@@ -29,7 +28,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewUpdateCommand(cfgPath *string) *cobra.Command {
+func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		title           = ""
 		description     = ""
@@ -54,16 +53,16 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -78,7 +77,7 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 				}
 
 				// Get record to get labels
-				rcd, err := pm.RecordCli().Get(context.TODO(), recordName)
+				rcd, err := pm.RecordCli().Get(cmd.Context(), recordName)
 				if err != nil {
 					log.Fatalf("Failed to get record: %v", err)
 				}
@@ -95,7 +94,7 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 					if labelSet.Contains(labelStr) {
 						continue
 					}
-					appendLabel, err := pm.LabelCli().GetByDisplayNameOrCreate(context.TODO(), labelStr, recordName.Project())
+					appendLabel, err := pm.LabelCli().GetByDisplayNameOrCreate(cmd.Context(), labelStr, recordName.Project())
 					if err != nil {
 						log.Fatalf("Failed to get or create label %s: %v", labelStr, err)
 					}
@@ -108,7 +107,7 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 				labels = make([]*openv1alpha1resource.Label, 0)
 			} else {
 				for _, lbl := range updateLabelStrs {
-					updateLabel, err := pm.LabelCli().GetByDisplayNameOrCreate(context.TODO(), lbl, recordName.Project())
+					updateLabel, err := pm.LabelCli().GetByDisplayNameOrCreate(cmd.Context(), lbl, recordName.Project())
 					if err != nil {
 						log.Fatalf("Failed to get or create label %s: %v", lbl, err)
 					}
@@ -130,26 +129,26 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 
 			// Update record.
 			if len(paths) > 0 {
-				err = pm.RecordCli().Update(context.TODO(), recordName, title, description, labels, paths)
+				err = pm.RecordCli().Update(cmd.Context(), recordName, title, description, labels, paths)
 				if err != nil {
 					log.Fatalf("Failed to update record: %v", err)
 				}
 			}
 
 			if thumbnail != "" {
-				thumbnailUploadUrl, err := pm.RecordCli().GenerateRecordThumbnailUploadUrl(context.TODO(), recordName)
+				thumbnailUploadUrl, err := pm.RecordCli().GenerateRecordThumbnailUploadUrl(cmd.Context(), recordName)
 				if err != nil {
 					log.Fatalf("Failed to generate record thumbnail upload url: %v", err)
 				}
 
-				fmt.Println("Uploading thumbnail to pre-signed url...")
+				io.Println("Uploading thumbnail to pre-signed url...")
 				um, err := upload_utils.NewUploadManagerFromConfig(proj, timeout,
 					&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, multiOpts)
 				if err != nil {
 					log.Fatalf("unable to create upload manager: %v", err)
 				}
 
-				err = um.Run(context.TODO(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
+				err = um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
 					thumbnail: thumbnailUploadUrl,
 				}})
 				if err != nil {
@@ -157,7 +156,7 @@ func NewUpdateCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Successfully updated record %s\n", recordName)
+			io.Printf("Successfully updated record %s\n", recordName)
 		},
 	}
 

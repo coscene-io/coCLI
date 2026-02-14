@@ -104,13 +104,13 @@ func (p *Profile) CheckAuth() bool {
 }
 
 // Auth fetches the org and project name from the server if they are not set.
-func (p *Profile) Auth() error {
+func (p *Profile) Auth(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
 	if p.Org == "" {
 		orgName, _ := name.NewOrganization(constants.CurrentOrgNameStr)
-		orgSlug, err := p.OrgCli().Slug(context.TODO(), orgName)
+		orgSlug, err := p.OrgCli().Slug(ctx, orgName)
 		if err != nil {
 			return errors.Wrap(err, "unable to get org slug")
 		}
@@ -118,7 +118,7 @@ func (p *Profile) Auth() error {
 	}
 
 	if p.ProjectName == "" {
-		projectName, err := p.ProjectCli().Name(context.TODO(), p.ProjectSlug)
+		projectName, err := p.ProjectCli().Name(ctx, p.ProjectSlug)
 		if err != nil {
 			return errors.Wrapf(err, "unable to name slug: %s", p.ProjectSlug)
 		}
@@ -139,8 +139,8 @@ func (p *Profile) GetBaseUrl() string {
 }
 
 // GetRecordUrl returns the url of the record in the corresponding coScene website.
-func (p *Profile) GetRecordUrl(recordName *name.Record) (string, error) {
-	proj, err := p.ProjectCli().Get(context.TODO(), recordName.Project())
+func (p *Profile) GetRecordUrl(ctx context.Context, recordName *name.Record) (string, error) {
+	proj, err := p.ProjectCli().Get(ctx, recordName.Project())
 	if err != nil {
 		return "", errors.Wrap(err, "unable to get project")
 	}
@@ -152,8 +152,8 @@ func (p *Profile) GetRecordUrl(recordName *name.Record) (string, error) {
 }
 
 // GetProjectUrl returns the url of the project in the corresponding coScene website.
-func (p *Profile) GetProjectUrl(projectName *name.Project) (string, error) {
-	proj, err := p.ProjectCli().Get(context.TODO(), projectName)
+func (p *Profile) GetProjectUrl(ctx context.Context, projectName *name.Project) (string, error) {
+	proj, err := p.ProjectCli().Get(ctx, projectName)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to get project")
 	}

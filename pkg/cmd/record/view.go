@@ -15,18 +15,17 @@
 package record
 
 import (
-	"context"
-	"fmt"
 	"os/exec"
 
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewViewCommand(cfgPath *string) *cobra.Command {
+func NewViewCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		goToWeb     = false
 		projectSlug = ""
@@ -39,28 +38,28 @@ func NewViewCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
 			}
 
 			// Get record url.
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err != nil {
 				log.Fatalf("unable to get record url: %v", err)
 			}
 
-			fmt.Println("The record url is:", recordUrl)
+			io.Println("The record url is:", recordUrl)
 			if goToWeb {
 				err = exec.Command("open", recordUrl).Start()
 				if err != nil {

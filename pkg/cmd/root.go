@@ -15,13 +15,13 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/coscene-io/cocli"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/pkg/cmd/action"
 	"github.com/coscene-io/cocli/pkg/cmd/login"
 	"github.com/coscene-io/cocli/pkg/cmd/project"
@@ -32,7 +32,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCommand() *cobra.Command {
+// ProviderGetter returns a config Provider for the given path. Used for production (config.Provide) or tests (mock).
+type ProviderGetter func(path string) config.Provider
+
+func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Command {
 	var (
 		cfgPath  string
 		logLevel string
@@ -59,7 +62,7 @@ func NewCommand() *cobra.Command {
 					log.Fatalf("Config file does not exist at %s, aborting.", cfgPath)
 				}
 
-				fmt.Fprintf(os.Stderr, "Initializing config file at %s\n", cfgPath)
+				io.Eprintf("Initializing config file at %s\n", cfgPath)
 
 				err = os.MkdirAll(filepath.Dir(cfgPath), 0755)
 				if err != nil {
@@ -75,7 +78,7 @@ func NewCommand() *cobra.Command {
 				log.Fatalf("Config file path is a directory: %s", cfgPath)
 			}
 
-			cfg := config.Provide(cfgPath)
+			cfg := getProvider(cfgPath)
 			pm, err := cfg.GetProfileManager()
 			if err != nil {
 				log.Fatalf("Failed to get profile manager from config: %v", err)
@@ -84,11 +87,11 @@ func NewCommand() *cobra.Command {
 			// Auth Check
 			if cmd_utils.IsAuthCheckEnabled(cmd) {
 				if pm.IsEmpty() {
-					fmt.Fprintf(os.Stderr, "Config file is empty, please run `cocli login set` to initialize your login profile.\n")
+					io.Eprintf("Config file is empty, please run `cocli login set` to initialize your login profile.\n")
 					os.Exit(0)
 				}
 				if !pm.CheckAuth() {
-					if err = pm.Auth(); err != nil {
+					if err = pm.Auth(cmd.Context()); err != nil {
 						log.Fatalf("Failed to authenticate current login profile: %v", err)
 					}
 
@@ -104,12 +107,12 @@ func NewCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level, one of: trace|debug|info|warn|error")
 
 	cmd.AddCommand(NewCompletionCommand())
-	cmd.AddCommand(action.NewRootCommand(&cfgPath))
-	cmd.AddCommand(login.NewRootCommand(&cfgPath))
-	cmd.AddCommand(project.NewRootCommand(&cfgPath))
-	cmd.AddCommand(registry.NewRootCommand(&cfgPath))
-	cmd.AddCommand(record.NewRootCommand(&cfgPath))
-	cmd.AddCommand(NewUpdateCommand())
+	cmd.AddCommand(action.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(login.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(project.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(registry.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(record.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(NewUpdateCommand(io))
 
 	return cmd
 }

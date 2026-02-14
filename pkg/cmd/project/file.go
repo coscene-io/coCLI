@@ -15,7 +15,6 @@
 package project
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -36,21 +36,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewFileCommand(cfgPath *string) *cobra.Command {
+func NewFileCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file",
 		Short: "Manage files in projects",
 	}
 
-	cmd.AddCommand(NewFileListCommand(cfgPath))
-	cmd.AddCommand(NewFileDownloadCommand(cfgPath))
-	cmd.AddCommand(NewFileUploadCommand(cfgPath))
-	cmd.AddCommand(NewFileDeleteCommand(cfgPath))
+	cmd.AddCommand(NewFileListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileUploadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io, getProvider))
 
 	return cmd
 }
 
-func NewFileListCommand(cfgPath *string) *cobra.Command {
+func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -75,7 +75,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -98,9 +98,9 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 
 			if all {
 				if additionalFilter != "" {
-					files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, additionalFilter)
+					files, err = pm.ProjectCli().ListAllFilesWithFilter(cmd.Context(), projectName, additionalFilter)
 				} else {
-					files, err = pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+					files, err = pm.ProjectCli().ListAllFiles(cmd.Context(), projectName)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
@@ -117,31 +117,31 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 				}
 
 				if additionalFilter != "" {
-					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(context.TODO(), projectName, effectivePageSize, skip, additionalFilter)
+					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(cmd.Context(), projectName, effectivePageSize, skip, additionalFilter)
 				} else {
-					files, err = pm.ProjectCli().ListFilesWithPagination(context.TODO(), projectName, effectivePageSize, skip)
+					files, err = pm.ProjectCli().ListFilesWithPagination(cmd.Context(), projectName, effectivePageSize, skip)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
 
 				if pageSize <= 0 && page > 1 {
-					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d files for page %d.\n\n", effectivePageSize, page)
+					io.Eprintf("Note: Using default page size of %d files for page %d.\n\n", effectivePageSize, page)
 				}
 			} else {
 				// Default behavior: use MaxPageSize and show note
 				defaultPageSize := constants.MaxPageSize
 				if additionalFilter != "" {
-					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(context.TODO(), projectName, defaultPageSize, 0, additionalFilter)
+					files, err = pm.ProjectCli().ListFilesWithPaginationAndFilter(cmd.Context(), projectName, defaultPageSize, 0, additionalFilter)
 				} else {
-					files, err = pm.ProjectCli().ListFilesWithPagination(context.TODO(), projectName, defaultPageSize, 0)
+					files, err = pm.ProjectCli().ListFilesWithPagination(cmd.Context(), projectName, defaultPageSize, 0)
 				}
 				if err != nil {
 					log.Fatalf("unable to list files: %v", err)
 				}
 
 				if len(files) == defaultPageSize {
-					fmt.Fprintf(os.Stderr, "Note: Showing first %d files (default page size). Use --all to list all files or --page-size to specify page size.\n\n", defaultPageSize)
+					io.Eprintf("Note: Showing first %d files (default page size). Use --all to list all files or --page-size to specify page size.\n\n", defaultPageSize)
 				}
 			}
 
@@ -156,7 +156,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(files), os.Stdout)
+			}}).PrintObj(printable.NewFile(files), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
@@ -177,7 +177,7 @@ func NewFileListCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
+func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		maxRetries = 0
 		dir        = ""
@@ -192,7 +192,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			// Handle args and flags.
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
@@ -215,7 +215,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			if dir != "" {
 				// Download specific directory recursively
 				normalizedDir := strings.TrimSuffix(dir, "/")
-				files, err = pm.ProjectCli().ListAllFilesWithFilter(context.TODO(), projectName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
+				files, err = pm.ProjectCli().ListAllFilesWithFilter(cmd.Context(), projectName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
 				if err != nil {
 					log.Fatalf("unable to list project files: %v", err)
 				}
@@ -223,7 +223,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				// Download specific files - fetch each file info
 				for _, fileName := range fileNames {
 					resourceName := name.ProjectFile{ProjectID: projectName.ProjectID, Filename: fileName}.String()
-					fileInfo, err := pm.FileCli().GetFile(context.TODO(), resourceName)
+					fileInfo, err := pm.FileCli().GetFile(cmd.Context(), resourceName)
 					if err != nil {
 						log.Warnf("unable to get file %s: %v, skipping", fileName, err)
 						continue
@@ -232,14 +232,14 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 			} else {
 				// Download all files (default)
-				files, err = pm.ProjectCli().ListAllFiles(context.TODO(), projectName)
+				files, err = pm.ProjectCli().ListAllFiles(cmd.Context(), projectName)
 				if err != nil {
 					log.Fatalf("unable to list project files: %v", err)
 				}
 			}
 
 			if len(files) == 0 {
-				fmt.Println("No files found to download.")
+				io.Println("No files found to download.")
 				return
 			}
 
@@ -257,7 +257,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			if len(filesToDownload) == 0 {
-				fmt.Println("No files to download (only directories found).")
+				io.Println("No files to download (only directories found).")
 				return
 			}
 
@@ -268,15 +268,15 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				dstDir = filepath.Join(dirPath, projectName.ProjectID)
 			}
 
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Downloading project files from %s\n", projectName.ProjectID)
-			projectUrl, err := pm.GetProjectUrl(projectName)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Downloading project files from %s\n", projectName.ProjectID)
+			projectUrl, err := pm.GetProjectUrl(cmd.Context(), projectName)
 			if err == nil {
-				fmt.Println("View project at:", projectUrl)
+				io.Println("View project at:", projectUrl)
 			} else {
 				log.Errorf("unable to get project url: %v", err)
 			}
-			fmt.Printf("Saving to %s\n", dstDir)
+			io.Printf("Saving to %s\n", dstDir)
 
 			totalFiles := len(filesToDownload)
 			successCount := 0
@@ -288,7 +288,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 
 				localPath := filepath.Join(dstDir, fileName.Filename)
-				fmt.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
+				io.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
 
 				if !strings.HasPrefix(localPath, dstDir+string(os.PathSeparator)) {
 					log.Errorf("illegal file name: %s", fileName.Filename)
@@ -304,13 +304,13 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 					}
 					if checksum == f.Sha256 && size == f.Size {
 						successCount++
-						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
+						io.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
 				}
 
 				// Get download file pre-signed URL
-				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(context.TODO(), f.Name)
+				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(cmd.Context(), f.Name)
 				if err != nil {
 					log.Errorf("unable to get download URL for file %s: %v", fileName.Filename, err)
 					continue
@@ -325,7 +325,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 				successCount++
 			}
 
-			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
+			io.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
 		},
 	}
 
@@ -339,7 +339,7 @@ func NewFileDownloadCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileUploadCommand(cfgPath *string) *cobra.Command {
+func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		includeHidden     = false
 		targetDir         = ""
@@ -352,7 +352,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -368,10 +368,10 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Error checking source path: %v", err)
 			}
 
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Uploading files to project: %s\n", projectName.ProjectID)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Uploading files to project: %s\n", projectName.ProjectID)
 			if targetDir != "" {
-				fmt.Printf("Target directory: %s\n", targetDir)
+				io.Printf("Target directory: %s\n", targetDir)
 			}
 
 			um, err := upload_utils.NewUploadManagerFromConfig(projectName, 0,
@@ -389,9 +389,9 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Unable to upload files: %v", err)
 			}
 
-			projectUrl, err := pm.GetProjectUrl(projectName)
+			projectUrl, err := pm.GetProjectUrl(cmd.Context(), projectName)
 			if err == nil {
-				fmt.Println("View project at:", projectUrl)
+				io.Println("View project at:", projectUrl)
 			} else {
 				log.Errorf("unable to get project url: %v", err)
 			}
@@ -410,7 +410,7 @@ func NewFileUploadCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
+func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		force     = false
 		fileNames []string
@@ -422,7 +422,7 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -445,16 +445,16 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 
 			// Confirm deletion
 			if !force {
-				fmt.Printf("About to delete %d item(s) from project:\n", len(filesToDelete))
+				io.Printf("About to delete %d item(s) from project:\n", len(filesToDelete))
 				for _, f := range filesToDelete {
 					if strings.HasSuffix(f, "/") {
-						fmt.Printf("  - %s (directory - all contents will be deleted)\n", f)
+						io.Printf("  - %s (directory - all contents will be deleted)\n", f)
 					} else {
-						fmt.Printf("  - %s\n", f)
+						io.Printf("  - %s\n", f)
 					}
 				}
-				if confirmed := prompts.PromptYN("Do you want to continue?"); !confirmed {
-					fmt.Println("Delete aborted.")
+				if confirmed := prompts.PromptYN("Do you want to continue?", io); !confirmed {
+					io.Println("Delete aborted.")
 					return
 				}
 			}
@@ -467,11 +467,11 @@ func NewFileDeleteCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Always use batch delete for consistency
-			if err := pm.FileCli().BatchDeleteFiles(context.TODO(), projectName.String(), resourceNames); err != nil {
+			if err := pm.FileCli().BatchDeleteFiles(cmd.Context(), projectName.String(), resourceNames); err != nil {
 				log.Fatalf("failed to delete files: %v", err)
 			}
 
-			fmt.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
+			io.Printf("Successfully deleted %d item(s).\n", len(filesToDelete))
 		},
 	}
 

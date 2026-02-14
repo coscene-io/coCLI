@@ -16,13 +16,12 @@ package project
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -30,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose        = false
 		outputFormat   = ""
@@ -55,7 +54,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			opts := &api.ListProjectsOptions{
 				DisplayNames:   keywords,
@@ -87,7 +86,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				}
 
 				if pageSize <= 0 && page > 1 {
-					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d projects for page %d.\n\n", effectivePageSize, page)
+					io.Eprintf("Note: Using default page size of %d projects for page %d.\n\n", effectivePageSize, page)
 				}
 			} else {
 				defaultPageSize := constants.MaxPageSize
@@ -97,14 +96,14 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 				}
 
 				if len(projects) == defaultPageSize {
-					fmt.Fprintf(os.Stderr, "Note: Showing first %d projects (default page size). Use --all to list all projects or --page-size to specify page size.\n\n", defaultPageSize)
+					io.Eprintf("Note: Showing first %d projects (default page size). Use --all to list all projects or --page-size to specify page size.\n\n", defaultPageSize)
 				}
 			}
 
 			// Print listed projects.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewProject(projects), os.Stdout)
+			}}).PrintObj(printable.NewProject(projects), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}

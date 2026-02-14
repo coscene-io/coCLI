@@ -15,18 +15,20 @@
 package action
 
 import (
+	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "action",
 		Short: "Work with coScene action.",
 	}
 
-	cmd.AddCommand(NewListCommand(cfgPath))
-	cmd.AddCommand(NewListRunCommand(cfgPath))
-	cmd.AddCommand(NewRunCommand(cfgPath))
+	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewListRunCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewRunCommand(cfgPath, io, getProvider))
 
 	return cmd
 }
