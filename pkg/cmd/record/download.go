@@ -15,8 +15,6 @@
 package record
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/fs"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
@@ -34,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDownloadCommand(cfgPath *string) *cobra.Command {
+func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug    = ""
 		maxRetries     = 0
@@ -48,15 +47,15 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[0], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[0], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
@@ -72,7 +71,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Download all files recursively
-			files, err := pm.RecordCli().ListAllFilesWithFilter(context.TODO(), recordName, "recursive=\"true\"")
+			files, err := pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, "recursive=\"true\"")
 			if err != nil {
 				log.Fatalf("unable to list files: %v", err)
 			}
@@ -86,22 +85,22 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 			} else {
 				dstDir = filepath.Join(dirPath, recordName.RecordID)
 			}
-			fmt.Println("-------------------------------------------------------------")
-			fmt.Printf("Downloading record %s\n", recordName.RecordID)
-			recordUrl, err := pm.GetRecordUrl(recordName)
+			io.Println("-------------------------------------------------------------")
+			io.Printf("Downloading record %s\n", recordName.RecordID)
+			recordUrl, err := pm.GetRecordUrl(cmd.Context(), recordName)
 			if err == nil {
-				fmt.Println("View record at:", recordUrl)
+				io.Println("View record at:", recordUrl)
 			} else {
 				log.Errorf("unable to get record url: %v", err)
 			}
-			fmt.Printf("Saving to %s\n", dstDir)
+			io.Printf("Saving to %s\n", dstDir)
 
 			totalFiles := len(files)
 			successCount := 0
 			for fIdx, f := range files {
 				fileName, _ := name.NewFile(f.Name)
 				localPath := filepath.Join(dstDir, fileName.Filename)
-				fmt.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
+				io.Printf("\nDownloading #%d file: %s\n", fIdx+1, fileName.Filename)
 
 				if !strings.HasPrefix(localPath, dstDir+string(os.PathSeparator)) {
 					log.Errorf("illegal file name: %s", fileName.Filename)
@@ -117,13 +116,13 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 					}
 					if checksum == f.Sha256 && size == f.Size {
 						successCount++
-						fmt.Printf("File %s already exists, skipping.\n", fileName.Filename)
+						io.Printf("File %s already exists, skipping.\n", fileName.Filename)
 						continue
 					}
 				}
 
 				// Get download file pre-signed URL
-				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(context.TODO(), f.Name)
+				downloadUrl, err := pm.FileCli().GenerateFileDownloadUrl(cmd.Context(), f.Name)
 				if err != nil {
 					log.Errorf("unable to get download URL for file %s: %v", fileName.Filename, err)
 					continue
@@ -153,7 +152,7 @@ func NewDownloadCommand(cfgPath *string) *cobra.Command {
 				}
 			}
 
-			fmt.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
+			io.Printf("\nDownload completed! \nAll %d / %d files are saved to %s\n", successCount, totalFiles, dstDir)
 		},
 	}
 

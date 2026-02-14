@@ -16,18 +16,18 @@ package registry
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/url"
 	"os/exec"
 	"strings"
 
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewLoginCommand(cfgPath *string) *cobra.Command {
+func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var registry string
 
 	cmd := &cobra.Command{
@@ -36,7 +36,7 @@ func NewLoginCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, err := config.Provide(*cfgPath).GetProfileManager()
+			pm, err := getProvider(*cfgPath).GetProfileManager()
 			if err != nil {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}
@@ -47,7 +47,7 @@ func NewLoginCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("%v", err)
 			}
 
-			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(context.TODO())
+			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
 			if err != nil {
 				log.Fatalf("failed to create basic credential: %v", err)
 			}
@@ -56,7 +56,7 @@ func NewLoginCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("docker login failed: %v", err)
 			}
 
-			fmt.Printf("Logged in to %s as %s\n", host, cred.GetUsername())
+			io.Printf("Logged in to %s as %s\n", host, cred.GetUsername())
 		},
 	}
 

@@ -16,11 +16,11 @@ package action
 
 import (
 	"context"
-	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug  = ""
 		verbose      = false
@@ -44,21 +44,21 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// List all actions.
-			actions, err := pm.ActionCli().ListAllActions(context.TODO(), &api.ListActionsOptions{
+			actions, err := pm.ActionCli().ListAllActions(cmd.Context(), &api.ListActionsOptions{
 				Parent: proj.String(),
 			})
 			if err != nil {
 				log.Fatalf("unable to list actions: %v", err)
 			}
 
-			systemActions, err := pm.ActionCli().ListAllActions(context.TODO(), &api.ListActionsOptions{
+			systemActions, err := pm.ActionCli().ListAllActions(cmd.Context(), &api.ListActionsOptions{
 				Parent: "",
 			})
 			if err != nil {
@@ -71,12 +71,12 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			allActions := append(actions, systemActions...)
 
 			// Convert users to nicknames.
-			convertActionUsers(allActions, pm)
+			convertActionUsers(cmd.Context(), allActions, pm)
 
 			// Print listed actions.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewAction(allActions), os.Stdout)
+			}}).PrintObj(printable.NewAction(allActions), io.Out)
 			if err != nil {
 				log.Fatalf("failed to print actions: %v", err)
 			}
@@ -90,7 +90,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
-func convertActionUsers(actions []*openv1alpha1resource.Action, pm *config.ProfileManager) {
+func convertActionUsers(ctx context.Context, actions []*openv1alpha1resource.Action, pm *config.ProfileManager) {
 	// Search for all users in actions authors.
 	usersSet := mapset.NewSet[name.User]()
 	for _, a := range actions {
@@ -100,7 +100,7 @@ func convertActionUsers(actions []*openv1alpha1resource.Action, pm *config.Profi
 	}
 
 	// Batch get users
-	usersMap, err := pm.UserCli().BatchGetUsers(context.TODO(), usersSet)
+	usersMap, err := pm.UserCli().BatchGetUsers(ctx, usersSet)
 	if err != nil {
 		log.Fatalf("failed to batch get users: %v", err)
 	}

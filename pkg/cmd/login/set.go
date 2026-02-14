@@ -15,16 +15,15 @@
 package login
 
 import (
-	"fmt"
-
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewSetCommand(cfgPath *string) *cobra.Command {
+func NewSetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		name        = ""
 		endpoint    = ""
@@ -38,7 +37,7 @@ func NewSetCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			if pm.IsEmpty() {
@@ -65,11 +64,11 @@ func NewSetCommand(cfgPath *string) *cobra.Command {
 				log.Fatalf("Failed to persist profile manager: %v", err)
 			}
 
-			fmt.Println("Profile set successful.")
+			io.Println("Profile set successful.")
 
 			// Print the current profile
 			curProfile := pm.GetCurrentProfile()
-			fmt.Printf("Current Profile is:\n%s\n", curProfile)
+			io.Printf("Current Profile is:\n%s\n", curProfile)
 		},
 	}
 

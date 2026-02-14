@@ -15,18 +15,18 @@
 package action
 
 import (
-	"context"
 	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func NewRunCommand(cfgPath *string) *cobra.Command {
+func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		params      = map[string]string{}
 		skipParams  = false
@@ -40,28 +40,27 @@ func NewRunCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
 			// Handle args and flags.
-			// TODO: currently the parsing of action name is kind of hacky, need to improve this
-			actionName, err := pm.ActionCli().ActionId2Name(context.TODO(), args[0], proj)
+			actionName, err := pm.ActionCli().ActionId2Name(cmd.Context(), args[0], proj)
 			if err != nil {
 				log.Fatalf("failed to convert action id to name: %v", err)
 			}
-			recordName, err := pm.RecordCli().RecordId2Name(context.TODO(), args[1], proj)
+			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				fmt.Printf("failed to find record: %s in project: %s\n", args[1], proj)
+				io.Printf("failed to find record: %s in project: %s\n", args[1], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("failed to convert record id to name: %v", err)
 			}
 
 			// Fetch action
-			act, err := pm.ActionCli().GetByName(context.TODO(), actionName)
+			act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
 			if err != nil {
 				log.Fatalf("failed to get action by name %s: %v", actionName, err)
 			}
@@ -83,26 +82,26 @@ func NewRunCommand(cfgPath *string) *cobra.Command {
 			}
 
 			// Print final parameters
-			fmt.Println("\nThe final parameters in the action run to be created:")
+			io.Println("\nThe final parameters in the action run to be created:")
 			for k, v := range act.Spec.Parameters {
-				fmt.Printf("%s: %s\n", k, v)
+				io.Printf("%s: %s\n", k, v)
 			}
 
 			// Prompt user for confirmation
 			if !force {
-				if !prompts.PromptYN("Confirm to run action?") {
-					fmt.Println("Action run creation aborted.")
+				if !prompts.PromptYN("Confirm to run action?", io) {
+					io.Println("Action run creation aborted.")
 					return
 				}
 			}
 
 			// Create action run
-			err = pm.ActionCli().CreateActionRun(context.TODO(), act, recordName)
+			err = pm.ActionCli().CreateActionRun(cmd.Context(), act, recordName)
 			if err != nil {
 				log.Fatalf("failed to create action run: %v", err)
 			}
 
-			fmt.Println("Action run created successfully.")
+			io.Println("Action run created successfully.")
 		},
 	}
 

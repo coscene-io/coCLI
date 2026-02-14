@@ -15,11 +15,13 @@
 package registry
 
 import (
+	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "registry",
 		Short: "Manage coScene container registry access",
@@ -28,8 +30,8 @@ func NewRootCommand(cfgPath *string) *cobra.Command {
 	// Registry operations don't require org/project auth checks
 	cmd_utils.DisableAuthCheck(cmd)
 
-	cmd.AddCommand(NewLoginCommand(cfgPath))
-	cmd.AddCommand(NewCreateCredentialCommand(cfgPath))
+	cmd.AddCommand(NewLoginCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewCreateCredentialCommand(cfgPath, io, getProvider))
 
 	return cmd
 }

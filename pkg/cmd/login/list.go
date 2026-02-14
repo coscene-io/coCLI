@@ -15,13 +15,12 @@
 package login
 
 import (
-	"fmt"
-
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose = false
 	)
@@ -31,22 +30,22 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			profiles := pm.GetProfiles()
 			if len(profiles) == 0 {
-				fmt.Println("No profiles found.")
+				io.Println("No profiles found.")
 				return
 			}
 
-			fmt.Printf("%d profiles found as the following.\n", len(profiles))
-			fmt.Println("current profile is marked with *.")
+			io.Printf("%d profiles found as the following.\n", len(profiles))
+			io.Println("current profile is marked with *.")
 			for _, profile := range profiles {
 				if profile.Name == pm.GetCurrentProfile().Name {
-					fmt.Println(profile.StringWithOpts(true, verbose))
+					io.Println(profile.StringWithOpts(true, verbose))
 				} else {
-					fmt.Println(profile.StringWithOpts(false, verbose))
+					io.Println(profile.StringWithOpts(false, verbose))
 				}
 			}
 		},

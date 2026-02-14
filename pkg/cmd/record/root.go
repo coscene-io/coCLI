@@ -15,27 +15,29 @@
 package record
 
 import (
+	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "record",
 		Short: "Work with coScene record.",
 	}
 
-	cmd.AddCommand(NewCopyCommand(cfgPath))
-	cmd.AddCommand(NewCreateCommand(cfgPath))
-	cmd.AddCommand(NewDeleteCommand(cfgPath))
-	cmd.AddCommand(NewDescribeCommand(cfgPath))
-	cmd.AddCommand(NewDownloadCommand(cfgPath))
-	cmd.AddCommand(NewFileCommand(cfgPath))
-	cmd.AddCommand(NewListCommand(cfgPath))
-	cmd.AddCommand(NewMomentCommand(cfgPath))
-	cmd.AddCommand(NewMoveCommand(cfgPath))
-	cmd.AddCommand(NewUpdateCommand(cfgPath))
-	cmd.AddCommand(NewUploadCommand(cfgPath))
-	cmd.AddCommand(NewViewCommand(cfgPath))
+	cmd.AddCommand(NewCopyCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewDeleteCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewDescribeCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewDownloadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewMomentCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewMoveCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewUpdateCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewUploadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewViewCommand(cfgPath, io, getProvider))
 
 	return cmd
 }

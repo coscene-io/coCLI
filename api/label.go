@@ -61,7 +61,7 @@ func (c *labelClient) GetByDisplayNameOrCreate(ctx context.Context, displayName 
 			DisplayName: displayName,
 		},
 	})
-	createLabelRes, err := c.labelServiceClient.CreateLabel(context.TODO(), createLabelReq)
+	createLabelRes, err := c.labelServiceClient.CreateLabel(ctx, createLabelReq)
 	if err != nil {
 		return nil, errors.Wrapf(err, "create label %s failed", displayName)
 	}

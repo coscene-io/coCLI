@@ -15,10 +15,11 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd"
 	"github.com/getsentry/sentry-go"
@@ -52,8 +53,10 @@ func main() {
 	})
 	log.AddHook(utils.NewSentryHook())
 
-	if err := cmd.NewCommand().Execute(); err != nil {
-		fmt.Println(err)
+	io := iostreams.System()
+
+	if err := cmd.NewCommand(io, config.Provide).Execute(); err != nil {
+		io.Println(err)
 		os.Exit(1)
 	}
 }

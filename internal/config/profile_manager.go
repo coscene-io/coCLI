@@ -68,18 +68,18 @@ func (pm *ProfileManager) CheckAuth() bool {
 }
 
 // Auth authenticate the current login profile and modify the profile manager
-func (pm *ProfileManager) Auth() error {
-	return pm.GetCurrentProfile().Auth()
+func (pm *ProfileManager) Auth(ctx context.Context) error {
+	return pm.GetCurrentProfile().Auth(ctx)
 }
 
 // GetRecordUrl gets the url of the record in the corresponding coScene website.
-func (pm *ProfileManager) GetRecordUrl(recordName *name.Record) (string, error) {
-	return pm.GetCurrentProfile().GetRecordUrl(recordName)
+func (pm *ProfileManager) GetRecordUrl(ctx context.Context, recordName *name.Record) (string, error) {
+	return pm.GetCurrentProfile().GetRecordUrl(ctx, recordName)
 }
 
 // GetProjectUrl gets the url of the project in the corresponding coScene website.
-func (pm *ProfileManager) GetProjectUrl(projectName *name.Project) (string, error) {
-	return pm.GetCurrentProfile().GetProjectUrl(projectName)
+func (pm *ProfileManager) GetProjectUrl(ctx context.Context, projectName *name.Project) (string, error) {
+	return pm.GetCurrentProfile().GetProjectUrl(ctx, projectName)
 }
 
 // GetBaseUrl returns the base url of the corresponding coScene website.
@@ -177,7 +177,7 @@ func (pm *ProfileManager) AddProfile(profile *Profile) error {
 	if err := profile.Validate(); err != nil {
 		return errors.Wrap(err, "added profile validation failed")
 	}
-	if err := profile.Auth(); err != nil {
+	if err := profile.Auth(context.TODO()); err != nil {
 		return errors.Wrap(err, "added profile auth failed")
 	}
 
@@ -213,7 +213,7 @@ func (pm *ProfileManager) SetProfile(profile *Profile) error {
 	// reset org and project name to re-fetch
 	pm.GetCurrentProfile().Org = ""
 	pm.GetCurrentProfile().ProjectName = ""
-	if err := pm.Auth(); err != nil {
+	if err := pm.Auth(context.TODO()); err != nil {
 		return errors.Wrap(err, "profile auth failed")
 	}
 
@@ -247,7 +247,7 @@ func (pm *ProfileManager) SwitchProfile(name string) error {
 			if err := pm.Validate(); err != nil {
 				return errors.Wrap(err, "single profile validation failed")
 			}
-			if err := pm.Auth(); err != nil {
+			if err := pm.Auth(context.TODO()); err != nil {
 				return errors.Wrap(err, "profile fetch org and project failed")
 			}
 			return nil
