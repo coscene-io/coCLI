@@ -15,11 +15,15 @@
 package record
 
 import (
+	"fmt"
+	"time"
+
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
 	mapset "github.com/deckarep/golang-set/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -33,10 +37,13 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		appendLabelStrs []string
 		deleteLabelStrs []string
 		projectSlug     = ""
+		thumbnail       = ""
+		multiOpts       = &upload_utils.UploadManagerOpts{}
+		timeout         time.Duration
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "update <record-resource-name/id> [-p <working-project-slug>] [-t <title>] [-d <description>] [-l <append-labels>...] [--update-labels <update-labels>...] [--delete-labels <delete-labels>...]",
+		Use:                   "update <record-resource-name/id> [-p <working-project-slug>] [-t <title>] [-d <description>] [-l <append-labels>...] [--update-labels <update-labels>...] [--delete-labels <delete-labels>...] [-i <thumbnail>]",
 		Short:                 "Update record metadata",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
@@ -122,9 +129,32 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			}
 
 			// Update record.
-			err = pm.RecordCli().Update(cmd.Context(), recordName, title, description, labels, paths)
-			if err != nil {
-				log.Fatalf("Failed to update record: %v", err)
+			if len(paths) > 0 {
+				err = pm.RecordCli().Update(cmd.Context(), recordName, title, description, labels, paths)
+				if err != nil {
+					log.Fatalf("Failed to update record: %v", err)
+				}
+			}
+
+			if thumbnail != "" {
+				thumbnailUploadUrl, err := pm.RecordCli().GenerateRecordThumbnailUploadUrl(cmd.Context(), recordName)
+				if err != nil {
+					log.Fatalf("Failed to generate record thumbnail upload url: %v", err)
+				}
+
+				fmt.Println("Uploading thumbnail to pre-signed url...")
+				um, err := upload_utils.NewUploadManagerFromConfig(proj, timeout,
+					&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, multiOpts)
+				if err != nil {
+					log.Fatalf("unable to create upload manager: %v", err)
+				}
+
+				err = um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{AdditionalUploads: map[string]string{
+					thumbnail: thumbnailUploadUrl,
+				}})
+				if err != nil {
+					log.Fatalf("Failed to upload thumbnail: %v", err)
+				}
 			}
 
 			io.Printf("Successfully updated record %s\n", recordName)
@@ -137,8 +167,15 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 	cmd.Flags().StringSliceVar(&deleteLabelStrs, "delete-labels", []string{}, "delete labels from the record.")
 	cmd.Flags().StringSliceVarP(&appendLabelStrs, "append-labels", "l", []string{}, "append labels to the record.")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringVarP(&thumbnail, "thumbnail", "i", "", "thumbnail path of the record.")
+	cmd.Flags().IntVarP(&multiOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
+	cmd.Flags().StringVarP(&multiOpts.PartSize, "part-size", "s", "128Mib", "each part size")
+	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
+	cmd.Flags().BoolVar(&multiOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
+	cmd.Flags().BoolVar(&multiOpts.TTY, "tty", false, "force interactive mode even in headless environments")
 
 	cmd.MarkFlagsMutuallyExclusive("append-labels", "update-labels", "delete-labels")
+	cmd.MarkFlagsMutuallyExclusive("no-tty", "tty")
 
 	return cmd
 }
