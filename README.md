@@ -1,4 +1,4 @@
-# coScene CLI (coCLI) [![Tests](https://github.com/coscene-io/cocli/actions/workflows/test.yaml/badge.svg)](https://github.com/coscene-io/cocli/actions/workflows/test.yaml) [![codecov](https://codecov.io/gh/coscene-io/cocli/graph/badge.svg)](https://codecov.io/gh/coscene-io/cocli)
+# coScene CLI (coCLI) [![Tests](https://github.com/coscene-io/cocli/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/coscene-io/cocli/actions/workflows/test.yaml) [![codecov](https://codecov.io/gh/coscene-io/cocli/graph/badge.svg?branch=main)](https://codecov.io/gh/coscene-io/cocli)
 
 `cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。完整用法与更多场景见 [coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)。
 
