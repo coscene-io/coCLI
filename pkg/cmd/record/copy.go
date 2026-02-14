@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug = ""
 		dstProject  = ""
@@ -39,7 +39,7 @@ func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)

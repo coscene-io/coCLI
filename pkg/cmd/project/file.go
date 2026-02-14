@@ -36,21 +36,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewFileCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file",
 		Short: "Manage files in projects",
 	}
 
-	cmd.AddCommand(NewFileListCommand(cfgPath, io))
-	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io))
-	cmd.AddCommand(NewFileUploadCommand(cfgPath, io))
-	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io))
+	cmd.AddCommand(NewFileListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileUploadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io, getProvider))
 
 	return cmd
 }
 
-func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -75,7 +75,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -156,7 +156,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(files), os.Stdout)
+			}}).PrintObj(printable.NewFile(files), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
@@ -177,7 +177,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 	return cmd
 }
 
-func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		maxRetries = 0
 		dir        = ""
@@ -192,7 +192,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			// Handle args and flags.
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
@@ -339,7 +339,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 	return cmd
 }
 
-func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		includeHidden     = false
 		targetDir         = ""
@@ -352,7 +352,7 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -410,7 +410,7 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 	return cmd
 }
 
-func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		force     = false
 		fileNames []string
@@ -422,7 +422,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {

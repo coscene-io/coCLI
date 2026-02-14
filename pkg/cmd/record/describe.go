@@ -16,7 +16,6 @@ package record
 
 import (
 	"context"
-	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
@@ -31,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug  = ""
 		outputFormat = ""
@@ -44,7 +43,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -111,7 +110,7 @@ func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.R
 		},
 	})
 
-	if err := p.PrintObj(recordWithMeta, os.Stdout); err != nil {
+	if err := p.PrintObj(recordWithMeta, io.Out); err != nil {
 		log.Fatalf("unable to print record: %v", err)
 	}
 

@@ -15,9 +15,6 @@
 package record
 
 import (
-	"fmt"
-	"os"
-
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -30,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug    = ""
 		verbose        = false
@@ -56,7 +53,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			}
 
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -79,8 +76,8 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 					log.Fatalf("unable to search records: %v", err)
 				}
 			} else if page > 1 {
-				fmt.Fprintf(os.Stderr, "Warning: --page is deprecated due to backend changes. Use --page-token for pagination.\n")
-				fmt.Fprintf(os.Stderr, "Note: Fetching pages 1-%d sequentially (this may be slow)...\n\n", page)
+				io.Eprintf("Warning: --page is deprecated due to backend changes. Use --page-token for pagination.\n")
+				io.Eprintf("Note: Fetching pages 1-%d sequentially (this may be slow)...\n\n", page)
 
 				effectivePageSize := pageSize
 				if effectivePageSize <= 0 {
@@ -136,7 +133,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				nextPageToken = result.NextPageToken
 
 				if pageToken != "" && len(records) == 0 {
-					fmt.Fprintf(os.Stderr, "No more records. You've reached the end of results.\n")
+					io.Eprintf("No more records. You've reached the end of results.\n")
 				}
 			} else {
 				defaultPageSize := constants.MaxPageSize
@@ -158,7 +155,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecord(records, nextPageToken), os.Stdout)
+			}}).PrintObj(printable.NewRecord(records, nextPageToken), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
@@ -171,8 +168,8 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			hasMorePages := nextPageToken != "" && len(records) >= effectivePageSize
 
 			if !all && hasMorePages {
-				fmt.Fprintf(os.Stderr, "\n")
-				fmt.Fprintf(os.Stderr, "Next page available. To continue, add: --page-token \"%s\"\n", nextPageToken)
+				io.Eprintf("\n")
+				io.Eprintf("Next page available. To continue, add: --page-token \"%s\"\n", nextPageToken)
 			}
 		},
 	}

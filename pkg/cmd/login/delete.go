@@ -21,14 +21,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "delete <profile-name>",
 		Short:                 "Delete a login profile.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			if len(pm.Profiles) == 1 {

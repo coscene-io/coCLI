@@ -38,22 +38,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewFileCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "file",
 		Short: "Manage files in records",
 	}
 
-	cmd.AddCommand(NewFileListCommand(cfgPath, io))
-	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io))
-	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io))
-	cmd.AddCommand(NewFileCopyCommand(cfgPath, io))
-	cmd.AddCommand(NewFileMoveCommand(cfgPath, io))
+	cmd.AddCommand(NewFileListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDownloadCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileDeleteCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileCopyCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileMoveCommand(cfgPath, io, getProvider))
 
 	return cmd
 }
 
-func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -80,7 +80,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			}
 
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -139,7 +139,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 				// Show note when using default page size with --page
 				if pageSize <= 0 && page > 1 {
-					fmt.Fprintf(os.Stderr, "Note: Using default page size of %d files for page %d.\n\n", effectivePageSize, page)
+					io.Eprintf("Note: Using default page size of %d files for page %d.\n\n", effectivePageSize, page)
 				}
 			} else {
 				// Default behavior: use MaxPageSize and show note
@@ -155,7 +155,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 
 				// Show note about default behavior
 				if len(files) == defaultPageSize {
-					fmt.Fprintf(os.Stderr, "Note: Showing first %d files (default page size). Use --all to list all files or --page-size to specify page size.\n\n", defaultPageSize)
+					io.Eprintf("Note: Showing first %d files (default page size). Use --all to list all files or --page-size to specify page size.\n\n", defaultPageSize)
 				}
 			}
 
@@ -170,7 +170,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 			// Print listed files and directories.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(files), os.Stdout)
+			}}).PrintObj(printable.NewFile(files), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
@@ -193,7 +193,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 	return cmd
 }
 
-func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug = ""
 		maxRetries  = 0
@@ -208,7 +208,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -361,7 +361,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 	return cmd
 }
 
-func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		force       = false
 		projectSlug = ""
@@ -374,7 +374,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -443,7 +443,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 	return cmd
 }
 
-func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug    = ""
 		dstProjectSlug = ""
@@ -458,7 +458,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
@@ -549,7 +549,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 	return cmd
 }
 
-func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug    = ""
 		dstProjectSlug = ""
@@ -564,7 +564,7 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)

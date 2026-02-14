@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose = false
 	)
@@ -30,7 +30,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			profiles := pm.GetProfiles()

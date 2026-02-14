@@ -15,18 +15,19 @@
 package project
 
 import (
+	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
 		Short: "Work with coScene project.",
 	}
 
-	cmd.AddCommand(NewListCommand(cfgPath, io))
-	cmd.AddCommand(NewCreateCommand(cfgPath, io))
-	cmd.AddCommand(NewFileCommand(cfgPath, io))
+	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewFileCommand(cfgPath, io, getProvider))
 	return cmd
 }

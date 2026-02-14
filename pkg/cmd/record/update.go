@@ -15,7 +15,6 @@
 package record
 
 import (
-	"fmt"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -29,7 +28,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		title           = ""
 		description     = ""
@@ -54,7 +53,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -142,7 +141,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 					log.Fatalf("Failed to generate record thumbnail upload url: %v", err)
 				}
 
-				fmt.Println("Uploading thumbnail to pre-signed url...")
+				io.Println("Uploading thumbnail to pre-signed url...")
 				um, err := upload_utils.NewUploadManagerFromConfig(proj, timeout,
 					&upload_utils.ApiOpts{SecurityTokenInterface: pm.SecurityTokenCli(), FileInterface: pm.FileCli()}, multiOpts)
 				if err != nil {

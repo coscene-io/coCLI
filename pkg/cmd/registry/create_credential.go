@@ -15,8 +15,6 @@
 package registry
 
 import (
-	"os"
-
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
@@ -26,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var outputFormat string
 
 	cmd := &cobra.Command{
@@ -35,7 +33,7 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams) *cobra
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, err := config.Provide(*cfgPath).GetProfileManager()
+			pm, err := getProvider(*cfgPath).GetProfileManager()
 			if err != nil {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}
@@ -54,7 +52,7 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams) *cobra
 			p := printer.Printer(outputFormat, &printer.Options{
 				TableOpts: &table.PrintOpts{},
 			})
-			if err := p.PrintObj(printable.NewRegistryCredential(cred.GetUsername(), cred.GetPassword()), os.Stdout); err != nil {
+			if err := p.PrintObj(printable.NewRegistryCredential(cred.GetUsername(), cred.GetPassword()), io.Out); err != nil {
 				log.Fatalf("failed to print credential: %v", err)
 			}
 		},

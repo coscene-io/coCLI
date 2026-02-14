@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		includeHidden     = false
 		projectSlug       = ""
@@ -43,7 +43,7 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

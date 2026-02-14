@@ -26,14 +26,14 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func NewSwitchCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewSwitchCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "switch",
 		Short:                 "Switch to another login profile.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			currentProfileName := ""

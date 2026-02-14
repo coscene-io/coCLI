@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		title             = ""
 		description       = ""
@@ -45,7 +45,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

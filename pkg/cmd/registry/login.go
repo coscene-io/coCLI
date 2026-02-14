@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var registry string
 
 	cmd := &cobra.Command{
@@ -36,7 +36,7 @@ func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, err := config.Provide(*cfgPath).GetProfileManager()
+			pm, err := getProvider(*cfgPath).GetProfileManager()
 			if err != nil {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}

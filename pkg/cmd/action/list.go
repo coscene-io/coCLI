@@ -16,11 +16,11 @@ package action
 
 import (
 	"context"
-	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug  = ""
 		verbose      = false
@@ -44,7 +44,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -76,7 +76,7 @@ func NewListCommand(cfgPath *string) *cobra.Command {
 			// Print listed actions.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewAction(allActions), os.Stdout)
+			}}).PrintObj(printable.NewAction(allActions), io.Out)
 			if err != nil {
 				log.Fatalf("failed to print actions: %v", err)
 			}

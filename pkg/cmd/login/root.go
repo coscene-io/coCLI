@@ -15,22 +15,23 @@
 package login
 
 import (
+	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Login to coScene",
 	}
 
-	cmd.AddCommand(NewAddCommand(cfgPath, io))
-	cmd.AddCommand(NewCurrentCommand(cfgPath, io))
-	cmd.AddCommand(NewDeleteCommand(cfgPath, io))
-	cmd.AddCommand(NewListCommand(cfgPath, io))
-	cmd.AddCommand(NewSetCommand(cfgPath, io))
-	cmd.AddCommand(NewSwitchCommand(cfgPath, io))
+	cmd.AddCommand(NewAddCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewCurrentCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewDeleteCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewSetCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewSwitchCommand(cfgPath, io, getProvider))
 
 	return cmd
 }

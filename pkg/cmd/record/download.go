@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug    = ""
 		maxRetries     = 0
@@ -47,7 +47,7 @@ func NewDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

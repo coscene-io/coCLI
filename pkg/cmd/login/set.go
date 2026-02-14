@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewSetCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewSetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		name        = ""
 		endpoint    = ""
@@ -37,7 +37,7 @@ func NewSetCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			cfg := config.Provide(*cfgPath)
+			cfg := getProvider(*cfgPath)
 			pm, _ := cfg.GetProfileManager()
 
 			if pm.IsEmpty() {

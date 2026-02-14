@@ -34,7 +34,7 @@ func TestLoginCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := login.NewRootCommand(&cfgPath, io)
+		cmd := login.NewRootCommand(&cfgPath, io, config.Provide)
 
 		assert.Equal(t, "login", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
@@ -56,17 +56,14 @@ func TestLoginCommand(t *testing.T) {
 	t.Run("List command with empty config", func(t *testing.T) {
 		// Create a mock provider with empty profiles
 		mockProvider := apimocks.NewMockProvider(t)
-		// Clear the default profile to simulate empty config
 		mockProvider.ProfileManager().CurrentProfile = ""
 		mockProvider.ProfileManager().Profiles = []*config.Profile{}
-
-		config.SetProviderOverride(mockProvider)
-		defer config.ClearProviderOverride()
 
 		cfgPath := setupTestConfig(t)
 		buf := new(bytes.Buffer)
 		io := iostreams.Test(nil, buf, buf)
-		cmd := login.NewRootCommand(&cfgPath, io)
+		getProvider := func(string) config.Provider { return mockProvider }
+		cmd := login.NewRootCommand(&cfgPath, io, getProvider)
 		cmd.SetArgs([]string{"list"})
 
 		err := cmd.Execute()
@@ -78,18 +75,15 @@ func TestLoginCommand(t *testing.T) {
 	})
 
 	t.Run("Current command with no profile", func(t *testing.T) {
-		// Create a mock provider with empty profiles
 		mockProvider := apimocks.NewMockProvider(t)
 		mockProvider.ProfileManager().CurrentProfile = ""
 		mockProvider.ProfileManager().Profiles = []*config.Profile{}
 
-		config.SetProviderOverride(mockProvider)
-		defer config.ClearProviderOverride()
-
 		cfgPath := setupTestConfig(t)
 		buf := new(bytes.Buffer)
 		io := iostreams.Test(nil, buf, buf)
-		cmd := login.NewRootCommand(&cfgPath, io)
+		getProvider := func(string) config.Provider { return mockProvider }
+		cmd := login.NewRootCommand(&cfgPath, io, getProvider)
 		cmd.SetArgs([]string{"current"})
 
 		err := cmd.Execute()
@@ -102,17 +96,14 @@ func TestLoginCommand(t *testing.T) {
 
 func TestLoginConfigInteraction(t *testing.T) {
 	t.Run("Set command creates profile", func(t *testing.T) {
-		// Create a mock provider with existing profile
 		mockProvider := apimocks.NewMockProvider(t)
-
-		config.SetProviderOverride(mockProvider)
-		defer config.ClearProviderOverride()
 
 		cfgPath := setupTestConfig(t)
 
 		buf := new(bytes.Buffer)
 		io := iostreams.Test(nil, buf, buf)
-		cmd := login.NewRootCommand(&cfgPath, io)
+		getProvider := func(string) config.Provider { return mockProvider }
+		cmd := login.NewRootCommand(&cfgPath, io, getProvider)
 		cmd.SetArgs([]string{"list"})
 
 		err := cmd.Execute()
@@ -144,13 +135,11 @@ func TestLoginConfigInteraction(t *testing.T) {
 		}
 		mockProvider.ProfileManager().CurrentProfile = "profile1"
 
-		config.SetProviderOverride(mockProvider)
-		defer config.ClearProviderOverride()
-
 		// Check current is profile1
 		buf := new(bytes.Buffer)
 		io := iostreams.Test(nil, buf, buf)
-		cmd := login.NewRootCommand(&cfgPath, io)
+		getProvider := func(string) config.Provider { return mockProvider }
+		cmd := login.NewRootCommand(&cfgPath, io, getProvider)
 		cmd.SetArgs([]string{"current"})
 
 		err := cmd.Execute()
@@ -160,7 +149,7 @@ func TestLoginConfigInteraction(t *testing.T) {
 		// Test switch would require interactive input or mocking
 		// For now, just verify the command exists
 		io = iostreams.Test(nil, &bytes.Buffer{}, &bytes.Buffer{})
-		cmd = login.NewRootCommand(&cfgPath, io)
+		cmd = login.NewRootCommand(&cfgPath, io, config.Provide)
 		switchCmd, _, err := cmd.Find([]string{"switch"})
 		require.NoError(t, err)
 		assert.NotNil(t, switchCmd)
@@ -190,7 +179,7 @@ profiles:
 		// Delete command would require confirmation
 		// Just verify command structure
 		io := iostreams.Test(nil, &bytes.Buffer{}, &bytes.Buffer{})
-		cmd := login.NewRootCommand(&cfgPath, io)
+		cmd := login.NewRootCommand(&cfgPath, io, config.Provide)
 		deleteCmd, _, err := cmd.Find([]string{"delete"})
 		require.NoError(t, err)
 		assert.NotNil(t, deleteCmd)
@@ -238,13 +227,9 @@ func TestLoginCommandValidation(t *testing.T) {
 			cfgPath := setupTestConfig(t)
 			buf := new(bytes.Buffer)
 			io := iostreams.Test(nil, buf, buf)
-			cmd := login.NewRootCommand(&cfgPath, io)
-			cmd.SetArgs(tc.args)
-
-			// For commands that need existing profiles, use mock provider
+			getProvider := config.Provide
 			if tc.args[0] == "delete" || tc.args[0] == "switch" {
 				mockProvider := apimocks.NewMockProvider(t)
-				// Add another profile so we have more than one
 				mockProvider.ProfileManager().Profiles = append(
 					mockProvider.ProfileManager().Profiles,
 					&config.Profile{
@@ -254,9 +239,10 @@ func TestLoginCommandValidation(t *testing.T) {
 						ProjectSlug: "test-project2",
 					},
 				)
-				config.SetProviderOverride(mockProvider)
-				defer config.ClearProviderOverride()
+				getProvider = func(string) config.Provider { return mockProvider }
 			}
+			cmd := login.NewRootCommand(&cfgPath, io, getProvider)
+			cmd.SetArgs(tc.args)
 
 			err := cmd.Execute()
 			if tc.shouldError {

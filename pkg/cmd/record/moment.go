@@ -38,20 +38,20 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func NewMomentCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewMomentCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "moment",
 		Short: "Manage moments in records",
 	}
 
-	cmd.AddCommand(NewMomentCreateCommand(cfgPath, io))
-	cmd.AddCommand(NewMomentListCommand(cfgPath, io))
-	cmd.AddCommand(NewMomentDownloadCommand(cfgPath, io))
+	cmd.AddCommand(NewMomentCreateCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewMomentListCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewMomentDownloadCommand(cfgPath, io, getProvider))
 
 	return cmd
 }
 
-func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug                           = ""
 		displayName                           = ""
@@ -73,7 +73,7 @@ func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -222,7 +222,7 @@ func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Com
 	return cmd
 }
 
-func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose      = false
 		outputFormat = ""
@@ -235,7 +235,7 @@ func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -257,7 +257,7 @@ func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 
 			if err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewEvent(moments), os.Stdout); err != nil {
+			}}).PrintObj(printable.NewEvent(moments), io.Out); err != nil {
 				log.Fatalf("unable to print moments: %v", err)
 			}
 
@@ -271,7 +271,7 @@ func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Comma
 	return cmd
 }
 
-func NewMomentDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewMomentDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug = ""
 		flat        = false
@@ -283,7 +283,7 @@ func NewMomentDownloadCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.C
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

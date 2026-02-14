@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/coscene-io/cocli/pkg/cmd/record"
@@ -32,7 +33,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		assert.Equal(t, "record", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
@@ -61,7 +62,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		listCmd, _, err := cmd.Find([]string{"list"})
 		require.NoError(t, err)
@@ -91,7 +92,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		createCmd, _, err := cmd.Find([]string{"create"})
 		require.NoError(t, err)
@@ -112,7 +113,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		uploadCmd, _, err := cmd.Find([]string{"upload"})
 		require.NoError(t, err)
@@ -138,7 +139,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		downloadCmd, _, err := cmd.Find([]string{"download"})
 		require.NoError(t, err)
@@ -158,7 +159,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		fileCmd, _, err := cmd.Find([]string{"file"})
 		require.NoError(t, err)
@@ -181,7 +182,7 @@ func TestRecordCommand(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		momentCmd, _, err := cmd.Find([]string{"moment"})
 		require.NoError(t, err)
@@ -244,7 +245,7 @@ func TestRecordCommandValidation(t *testing.T) {
 			cfgPath := setupTestConfigWithProfile(t)
 			var buf bytes.Buffer
 			io := iostreams.Test(nil, &buf, &buf)
-			cmd := record.NewRootCommand(&cfgPath, io)
+			cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 			cmd.SetArgs(tc.args)
 
 			err := cmd.Execute()
@@ -269,7 +270,7 @@ func TestRecordOutputFormats(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		listCmd, _, err := cmd.Find([]string{"list"})
 		require.NoError(t, err)
@@ -287,7 +288,7 @@ func TestFileSubcommands(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		fileListCmd, _, err := cmd.Find([]string{"file", "list"})
 		require.NoError(t, err)
@@ -311,7 +312,7 @@ func TestFileSubcommands(t *testing.T) {
 		cfgPath := setupTestConfig(t)
 		var buf bytes.Buffer
 		io := iostreams.Test(nil, &buf, &buf)
-		cmd := record.NewRootCommand(&cfgPath, io)
+		cmd := record.NewRootCommand(&cfgPath, io, config.Provide)
 
 		fileDownloadCmd, _, err := cmd.Find([]string{"file", "download"})
 		require.NoError(t, err)

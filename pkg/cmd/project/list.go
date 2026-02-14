@@ -16,7 +16,6 @@ package project
 
 import (
 	"context"
-	"os"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/api"
@@ -30,7 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		verbose        = false
 		outputFormat   = ""
@@ -55,7 +54,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			opts := &api.ListProjectsOptions{
 				DisplayNames:   keywords,
@@ -104,7 +103,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 			// Print listed projects.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewProject(projects), os.Stdout)
+			}}).PrintObj(printable.NewProject(projects), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}

@@ -124,8 +124,10 @@ func CaptureOutput(t *testing.T, fn func()) (stdout, stderr string) {
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
 
-	rOut, wOut, _ := os.Pipe()
-	rErr, wErr, _ := os.Pipe()
+	rOut, wOut, err := os.Pipe()
+	require.NoError(t, err)
+	rErr, wErr, err := os.Pipe()
+	require.NoError(t, err)
 
 	os.Stdout = wOut
 	os.Stderr = wErr

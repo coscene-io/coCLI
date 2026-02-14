@@ -17,7 +17,6 @@ package project
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -35,7 +34,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
+func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug  string
 		displayName  string
@@ -53,7 +52,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := config.Provide(*cfgPath).GetProfileManager()
+			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
 			if projectSlug == "" {
 				log.Fatalf("project name cannot be empty")
@@ -169,7 +168,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams) *cobra.Command {
 
 			// Print project.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{Verbose: verbose}}).
-				PrintObj(printable.NewProject([]*openv1alpha1resource.Project{projectRes}), os.Stdout)
+				PrintObj(printable.NewProject([]*openv1alpha1resource.Project{projectRes}), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print project: %v", err)
 			}
