@@ -1,6 +1,6 @@
 # coScene CLI (coCLI)
 
-`cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。
+`cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。完整用法与更多场景见 [coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)。
 
 ---
 
@@ -13,7 +13,7 @@ curl -fL https://download.coscene.cn/cocli/install.sh | sh
 验证安装：
 
 ```bash
-cocli version
+cocli --version
 ```
 
 安装指定版本：
@@ -39,6 +39,8 @@ cocli login add
 ```bash
 cocli project list
 ```
+
+（默认只显示第一页，最多 100 条；加 `--all` 可列出全部项目。）
 
 ### 3. 上传文件到 record
 
@@ -130,15 +132,24 @@ cocli completion fish > ~/.config/fish/completions/cocli.fish
 
 ## 高级功能
 
+### List 与分页
+
+`cocli project list`、`cocli record list` 等 list 类命令**默认只输出第一页**（每页最多 100 条），避免一次性拉取大量数据刷屏。若需全部数据：
+
+- **record list**：加 `--all` 列出所有 record；或按提示用 `--page-token` 逐页查看。
+- **project list**：加 `--all` 列出所有项目；或使用 `--page-size`、`--page` 分页。
+
+其他 list 子命令（如 `record file list`、`project file list`）同理，默认第一页，用 `--all` 或分页参数获取更多。
+
 ### 环境变量配置（适用于 CI/CD）
 
-对于 Docker 容器或 CI/CD 环境，可以通过环境变量配置，无需交互式登录：
+对于 Docker 容器或 CI/CD 环境，可以通过环境变量配置，无需交互式登录。**以下三项均需设置**，才会使用环境变量作为认证来源：
 
-| 环境变量       | 描述             | 必需 |
-| -------------- | ---------------- | ---- |
-| `COS_ENDPOINT` | API 端点地址     | ✅   |
-| `COS_TOKEN`    | 认证令牌         | ✅   |
-| `COS_PROJECT`  | 默认项目 slug    | ✅   |
+| 环境变量       | 描述             |
+| -------------- | ---------------- |
+| `COS_ENDPOINT` | API 端点地址     |
+| `COS_TOKEN`    | 认证令牌         |
+| `COS_PROJECT`  | 默认项目 slug    |
 
 示例：
 
@@ -175,7 +186,7 @@ cocli project file upload <project> "logs/*.log"
 git clone https://github.com/coscene-io/cocli.git
 cd cocli
 make build-binary
-./bin/cocli version
+./bin/cocli --version
 ```
 
 ### 快速测试
@@ -191,3 +202,7 @@ go run cmd/cocli/main.go [command]
 - 所有命令支持 `-h` 查看帮助：`cocli <command> -h`
 - 详细文档：[coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)
 - 问题反馈：[GitHub Issues](https://github.com/coscene-io/cocli/issues)
+
+## 许可证
+
+[Apache-2.0](LICENSE)
