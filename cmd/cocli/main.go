@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/coscene-io/cocli"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
@@ -28,7 +29,8 @@ import (
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn: "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
+		Dsn:     "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
+		Release: cocli.GetVersion(),
 		// Set TracesSampleRate to 1.0 to capture 100%
 		// of transactions for tracing.
 		// We recommend adjusting this value in production,
