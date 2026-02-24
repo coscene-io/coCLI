@@ -28,15 +28,7 @@ import (
 )
 
 func main() {
-	err := sentry.Init(sentry.ClientOptions{
-		Dsn:     "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
-		Release: cocli.GetVersion(),
-		// Set TracesSampleRate to 1.0 to capture 100%
-		// of transactions for tracing.
-		// We recommend adjusting this value in production,
-		TracesSampleRate: 1.0,
-		AttachStacktrace: true,
-	})
+	err := sentry.Init(newSentryClientOptions())
 	if err != nil {
 		log.Fatalf("sentry.Init: %s", err)
 	}
@@ -60,5 +52,17 @@ func main() {
 	if err := cmd.NewCommand(io, config.Provide).Execute(); err != nil {
 		io.Println(err)
 		os.Exit(1)
+	}
+}
+
+func newSentryClientOptions() sentry.ClientOptions {
+	return sentry.ClientOptions{
+		Dsn:     "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
+		Release: cocli.GetVersion(),
+		// Set TracesSampleRate to 1.0 to capture 100%
+		// of transactions for tracing.
+		// We recommend adjusting this value in production,
+		TracesSampleRate: 1.0,
+		AttachStacktrace: true,
 	}
 }
