@@ -515,6 +515,208 @@ func TestRecordClient_Get_ErrorCodePropagation(t *testing.T) {
 	}
 }
 
+func TestRecordClient_Copy(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	src := &name.Record{ProjectID: "p1", RecordID: "r1"}
+	dst := &name.Project{ProjectID: "p2"}
+	expected := testutil.NewRecordBuilder().WithName("projects/p2/records/r1-copy").Build()
+
+	t.Run("success", func(t *testing.T) {
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			copyRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CopyRecordsRequest]) (*connect.Response[openv1alpha1service.CopyRecordsResponse], error) {
+				return connect.NewResponse(&openv1alpha1service.CopyRecordsResponse{Records: []*openv1alpha1resource.Record{expected}}), nil
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		rec, err := client.Copy(ctx, src, dst)
+		require.NoError(t, err)
+		assert.Equal(t, expected, rec)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			copyRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CopyRecordsRequest]) (*connect.Response[openv1alpha1service.CopyRecordsResponse], error) {
+				return nil, connect.NewError(connect.CodeNotFound, nil)
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		_, err := client.Copy(ctx, src, dst)
+		assert.Error(t, err)
+	})
+}
+
+func TestRecordClient_Move(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	src := &name.Record{ProjectID: "p1", RecordID: "r1"}
+	dst := &name.Project{ProjectID: "p2"}
+	expected := testutil.NewRecordBuilder().WithName("projects/p2/records/r1").Build()
+
+	mock := &mockRecordServiceClient{
+		ctrl: ctrl,
+		moveRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.MoveRecordsRequest]) (*connect.Response[openv1alpha1service.MoveRecordsResponse], error) {
+			return connect.NewResponse(&openv1alpha1service.MoveRecordsResponse{Records: []*openv1alpha1resource.Record{expected}}), nil
+		},
+	}
+	client := NewRecordClient(mock, nil, nil, nil)
+	rec, err := client.Move(ctx, src, dst)
+	require.NoError(t, err)
+	assert.Equal(t, expected, rec)
+}
+
+func TestRecordClient_DeleteFile(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	rec := &name.Record{ProjectID: "p1", RecordID: "r1"}
+
+	t.Run("success", func(t *testing.T) {
+		mockFile := &mockFileServiceClient{
+			ctrl: ctrl,
+			deleteFileFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.DeleteFileRequest]) (*connect.Response[emptypb.Empty], error) {
+				assert.Equal(t, "projects/p1/records/r1/files/data.bin", req.Msg.Name)
+				return connect.NewResponse(&emptypb.Empty{}), nil
+			},
+		}
+		client := NewRecordClient(nil, mockFile, nil, nil)
+		err := client.DeleteFile(ctx, rec, "data.bin")
+		assert.NoError(t, err)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		mockFile := &mockFileServiceClient{
+			ctrl: ctrl,
+			deleteFileFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.DeleteFileRequest]) (*connect.Response[emptypb.Empty], error) {
+				return nil, connect.NewError(connect.CodeNotFound, nil)
+			},
+		}
+		client := NewRecordClient(nil, mockFile, nil, nil)
+		err := client.DeleteFile(ctx, rec, "data.bin")
+		assert.Error(t, err)
+	})
+}
+
+func TestRecordClient_ListAllEvents(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	rec := &name.Record{ProjectID: "p1", RecordID: "r1"}
+
+	t.Run("empty", func(t *testing.T) {
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			listRecordEventsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListRecordEventsRequest]) (*connect.Response[openv1alpha1service.ListRecordEventsResponse], error) {
+				return connect.NewResponse(&openv1alpha1service.ListRecordEventsResponse{}), nil
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		events, err := client.ListAllEvents(ctx, rec)
+		require.NoError(t, err)
+		assert.Empty(t, events)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			listRecordEventsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListRecordEventsRequest]) (*connect.Response[openv1alpha1service.ListRecordEventsResponse], error) {
+				return nil, connect.NewError(connect.CodeInternal, nil)
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		_, err := client.ListAllEvents(ctx, rec)
+		assert.Error(t, err)
+	})
+}
+
+func TestRecordClient_GenerateRecordThumbnailUploadUrl(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	rec := &name.Record{ProjectID: "p1", RecordID: "r1"}
+
+	mock := &mockRecordServiceClient{
+		ctrl: ctrl,
+		generateThumbnailUrlFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.GenerateRecordThumbnailUploadUrlRequest]) (*connect.Response[openv1alpha1service.GenerateRecordThumbnailUploadUrlResponse], error) {
+			return connect.NewResponse(&openv1alpha1service.GenerateRecordThumbnailUploadUrlResponse{PreSignedUri: "https://example.com/upload"}), nil
+		},
+	}
+	client := NewRecordClient(mock, nil, nil, nil)
+	url, err := client.GenerateRecordThumbnailUploadUrl(ctx, rec)
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/upload", url)
+}
+
+func TestRecordClient_SearchWithPageToken(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	t.Run("success", func(t *testing.T) {
+		expected := testutil.NewRecordBuilder().Build()
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+				return connect.NewResponse(&openv1alpha1service.SearchRecordsResponse{
+					Records:       []*openv1alpha1resource.Record{expected},
+					NextPageToken: "next",
+					TotalSize:     1,
+				}), nil
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		result, err := client.SearchWithPageToken(ctx, &SearchRecordsOptions{
+			Project:  &name.Project{ProjectID: "p1"},
+			PageSize: 10,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Records, 1)
+		assert.Equal(t, "next", result.NextPageToken)
+	})
+
+	t.Run("empty project", func(t *testing.T) {
+		client := NewRecordClient(nil, nil, nil, nil)
+		_, err := client.SearchWithPageToken(ctx, &SearchRecordsOptions{
+			Project: &name.Project{},
+		})
+		assert.Error(t, err)
+	})
+}
+
+func TestRecordClient_MoveFiles(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	src := &name.Record{ProjectID: "p1", RecordID: "r1"}
+	dst := &name.Record{ProjectID: "p1", RecordID: "r2"}
+	files := []*openv1alpha1resource.File{
+		{Filename: "a.bin"},
+		{Filename: "b.bin"},
+	}
+
+	mockFile := &mockFileServiceClient{
+		ctrl: ctrl,
+		moveFilesFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.MoveFilesRequest]) (*connect.Response[openv1alpha1service.MoveFilesResponse], error) {
+			assert.Equal(t, src.String(), req.Msg.Parent)
+			assert.Equal(t, dst.String(), req.Msg.Destination)
+			return connect.NewResponse(&openv1alpha1service.MoveFilesResponse{}), nil
+		},
+	}
+	client := NewRecordClient(nil, mockFile, nil, nil)
+	err := client.MoveFiles(ctx, src, dst, files)
+	assert.NoError(t, err)
+}
+
 func TestRecordClient_Search_ErrorCodePropagation(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
