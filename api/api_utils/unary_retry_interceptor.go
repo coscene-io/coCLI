@@ -31,6 +31,10 @@ const (
 
 // UnaryRetryInterceptor returns a UnaryInterceptorFunc that retries the request up to retryMax times.
 func UnaryRetryInterceptor(retryMax int) connect.UnaryInterceptorFunc {
+	return newUnaryRetryInterceptor(retryMax, retryWaitMin, retryWaitMax)
+}
+
+func newUnaryRetryInterceptor(retryMax int, initialInterval, maxInterval time.Duration) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(
 			ctx context.Context,
@@ -45,15 +49,14 @@ func UnaryRetryInterceptor(retryMax int) connect.UnaryInterceptorFunc {
 			}
 
 			retry := backoff.WithMaxRetries(backoff.NewExponentialBackOff(
-				backoff.WithInitialInterval(retryWaitMin),
-				backoff.WithMaxInterval(retryWaitMax),
+				backoff.WithInitialInterval(initialInterval),
+				backoff.WithMaxInterval(maxInterval),
 				backoff.WithMultiplier(2),
 				backoff.WithRandomizationFactor(0.5),
 			), uint64(retryMax))
 
 			resp, err := backoff.RetryWithData(operation, retry)
 
-			// Directly return if no error or the error is not retryable.
 			if noNeedRetry(err) {
 				return resp, err
 			}
@@ -64,7 +67,7 @@ func UnaryRetryInterceptor(retryMax int) connect.UnaryInterceptorFunc {
 }
 
 // noNeedRetry returns true if the error is not retryable.
-// Retryable: connect.Error with code UNKNOWN, INTERNAL, UNAVAILABLE, ABORTED, RESOURCE_EXHAUSTED.
+// Retryable: connect.Error with code UNKNOWN, INTERNAL, UNAVAILABLE, ABORTED, RESOURCE_EXHAUSTED (429).
 func noNeedRetry(err error) bool {
 	var connErr *connect.Error
 	if errors.As(err, &connErr) {
