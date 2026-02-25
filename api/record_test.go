@@ -474,3 +474,75 @@ func TestRecordClient_RecordId2Name(t *testing.T) {
 		assert.Contains(t, err.Error(), "unable to get record")
 	})
 }
+
+func TestRecordClient_Get_ErrorCodePropagation(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	recordName := &name.Record{
+		ProjectID: "test-project",
+		RecordID:  "test-record",
+	}
+
+	codes := []connect.Code{
+		connect.CodeNotFound,
+		connect.CodeInvalidArgument,
+		connect.CodePermissionDenied,
+		connect.CodeUnauthenticated,
+		connect.CodeUnavailable,
+		connect.CodeInternal,
+		connect.CodeResourceExhausted,
+		connect.CodeAlreadyExists,
+		connect.CodeFailedPrecondition,
+	}
+
+	for _, code := range codes {
+		t.Run(code.String(), func(t *testing.T) {
+			mockRecordService := &mockRecordServiceClient{
+				ctrl: ctrl,
+				getRecordFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.GetRecordRequest]) (*connect.Response[openv1alpha1resource.Record], error) {
+					return nil, connect.NewError(code, nil)
+				},
+			}
+
+			client := NewRecordClient(mockRecordService, nil, nil, nil)
+
+			_, err := client.Get(ctx, recordName)
+			require.Error(t, err)
+			assert.Equal(t, code, connect.CodeOf(err), "error code should be preserved through API client layer")
+		})
+	}
+}
+
+func TestRecordClient_Search_ErrorCodePropagation(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	codes := []connect.Code{
+		connect.CodeNotFound,
+		connect.CodePermissionDenied,
+		connect.CodeInternal,
+		connect.CodeUnavailable,
+	}
+
+	for _, code := range codes {
+		t.Run(code.String(), func(t *testing.T) {
+			mockRecordService := &mockRecordServiceClient{
+				ctrl: ctrl,
+				searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+					return nil, connect.NewError(code, nil)
+				},
+			}
+
+			client := NewRecordClient(mockRecordService, nil, nil, nil)
+
+			_, err := client.SearchAll(ctx, &SearchRecordsOptions{
+				Project: &name.Project{ProjectID: "test-project"},
+			})
+			require.Error(t, err)
+			assert.Equal(t, code, connect.CodeOf(err), "error code should be preserved through API client layer")
+		})
+	}
+}
