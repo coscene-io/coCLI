@@ -100,10 +100,20 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				}
 			}
 
+			// Build file system info map for human-readable output
+			fsInfo := make(map[string]*openv1alpha1resource.FileSystem)
+			if fileSystems, fsErr := pm.StorageCli().ListAllFileSystems(context.Background()); fsErr == nil {
+				for _, fs := range fileSystems {
+					fsInfo[fs.Name] = fs
+				}
+			} else {
+				log.Debugf("unable to resolve file system info: %v", fsErr)
+			}
+
 			// Print listed projects.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewProject(projects), io.Out)
+			}}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}

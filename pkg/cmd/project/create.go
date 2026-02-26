@@ -101,6 +101,33 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 				}
 			}
 
+			// Resolve file system (only for blank projects, not templates)
+			var selectedFileSystem string
+			if templateSlug == "" {
+				fileSystems, fsErr := pm.StorageCli().ListAllFileSystems(cmd.Context())
+				if fsErr != nil {
+					log.Fatalf("failed to list file systems: %v", fsErr)
+				}
+				if len(fileSystems) == 0 {
+					log.Fatalf("no file systems available")
+				}
+
+				if len(fileSystems) == 1 {
+					selectedFileSystem = fileSystems[0].Name
+					io.Printf("Auto-selected storage: %s\n", api.FormatFileSystemLabel(fileSystems[0]))
+				} else {
+					labels := make([]string, len(fileSystems))
+					for i, fs := range fileSystems {
+						labels[i] = api.FormatFileSystemLabel(fs)
+					}
+					idx := prompts.PromptSelect("Select file system:", labels, io)
+					if idx < 0 || idx >= len(fileSystems) {
+						log.Fatalf("invalid selection")
+					}
+					selectedFileSystem = fileSystems[idx].Name
+				}
+			}
+
 			// Confirm unless forced
 			if !forceYes {
 				// Build a short summary for confirmation
@@ -122,6 +149,9 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 					summary += "  description: " + description + "\n"
 				}
 				summary += "  visibility: " + visibility + "\n"
+				if selectedFileSystem != "" {
+					summary += "  file_system: " + selectedFileSystem + "\n"
+				}
 
 				if !prompts.PromptYN(summary+"Proceed?", io) {
 					log.Fatalf("aborted by user")
@@ -150,6 +180,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 					DisplayName: displayName,
 					Visibility:  visEnum,
 					Description: description,
+					FileSystem:  selectedFileSystem,
 				})
 			} else {
 				projectRes, err = pm.ProjectCli().CreateProjectUsingTemplate(context.Background(), &api.CreateProjectUsingTemplateOptions{

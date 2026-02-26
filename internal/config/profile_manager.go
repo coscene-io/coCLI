@@ -155,6 +155,11 @@ func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface 
 	return pm.GetCurrentProfile().ContainerRegistryCli()
 }
 
+// StorageCli return storage client of current profile.
+func (pm *ProfileManager) StorageCli() api.StorageInterface {
+	return pm.GetCurrentProfile().StorageCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {

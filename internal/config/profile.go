@@ -53,6 +53,7 @@ type Profile struct {
 	eventcli             api.EventInterface
 	taskcli              api.TaskInterface
 	containerregistrycli api.ContainerRegistryInterface
+	storagecli          api.StorageInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
@@ -230,6 +231,12 @@ func (p *Profile) ContainerRegistryCli() api.ContainerRegistryInterface {
 	return p.containerregistrycli
 }
 
+// StorageCli returns storage api interface used by profile.
+func (p *Profile) StorageCli() api.StorageInterface {
+	p.initCli()
+	return p.storagecli
+}
+
 // initCli initializes the api clients for the profile.
 // This function is ensured to be called only once.
 func (p *Profile) initCli() {
@@ -252,6 +259,7 @@ func (p *Profile) initCli() {
 			userServiceClient              = openv1alpha1connect.NewUserServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			securityTokenServiceClient     = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			containerRegistryServiceClient = openv1alpha1connect.NewContainerRegistryServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			storageServiceClient           = openv1alpha1connect.NewStorageServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 		)
 
 		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
@@ -265,5 +273,6 @@ func (p *Profile) initCli() {
 		p.eventcli = api.NewEventClient(eventServiceClient)
 		p.taskcli = api.NewTaskClient(taskServiceClient)
 		p.containerregistrycli = api.NewContainerRegistryClient(containerRegistryServiceClient)
+		p.storagecli = api.NewStorageClient(storageServiceClient)
 	})
 }
