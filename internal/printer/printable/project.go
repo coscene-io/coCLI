@@ -61,6 +61,11 @@ func (p *Project) resolveRegion(proj *openv1alpha1resource.Project) string {
 		if fs, ok := p.FileSystemInfo[proj.FileSystem]; ok {
 			return api.FormatRegion(fs.Region)
 		}
+		for k, fs := range p.FileSystemInfo {
+			if strings.HasSuffix(k, "/"+proj.FileSystem) || strings.HasSuffix(k, "/fileSystems/"+strings.TrimPrefix(proj.FileSystem, "fileSystems/")) {
+				return api.FormatRegion(fs.Region)
+			}
+		}
 	}
 	return ""
 }
