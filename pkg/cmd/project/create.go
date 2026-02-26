@@ -103,8 +103,10 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 
 			// Resolve file system (only for blank projects, not templates)
 			var selectedFileSystem string
+			var fileSystems []*openv1alpha1resource.FileSystem
 			if templateSlug == "" {
-				fileSystems, fsErr := pm.StorageCli().ListAllFileSystems(cmd.Context())
+				var fsErr error
+				fileSystems, fsErr = pm.StorageCli().ListAllFileSystems(cmd.Context())
 				if fsErr != nil {
 					log.Fatalf("failed to list file systems: %v", fsErr)
 				}
@@ -197,9 +199,15 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 				log.Fatalf("failed to create project: %v", err)
 			}
 
+			// Build filesystem info for display
+			fsInfo := make(map[string]*openv1alpha1resource.FileSystem)
+			for _, fs := range fileSystems {
+				fsInfo[fs.Name] = fs
+			}
+
 			// Print project.
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{Verbose: verbose}}).
-				PrintObj(printable.NewProject([]*openv1alpha1resource.Project{projectRes}), io.Out)
+				PrintObj(printable.NewProjectWithFileSystemInfo([]*openv1alpha1resource.Project{projectRes}, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print project: %v", err)
 			}
