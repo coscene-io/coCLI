@@ -15,6 +15,7 @@
 package printable
 
 import (
+	"strings"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -59,6 +60,9 @@ func (p *File) ToTable(opts *table.PrintOpts) table.Table {
 		{
 			FieldName: "SIZE",
 			FieldValueFunc: func(f *openv1alpha1resource.File, opts *table.PrintOpts) string {
+				if strings.HasSuffix(f.Filename, "/") {
+					return "-"
+				}
 				return humanize.Bytes(uint64(f.Size))
 			},
 			TrimSize: fileSizeTrimSize,
