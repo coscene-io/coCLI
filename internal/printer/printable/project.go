@@ -53,40 +53,32 @@ func (p *Project) ToProtoMessage() proto.Message {
 	}
 }
 
+// lookupFileSystem finds the FileSystem info by exact map lookup.
+func (p *Project) lookupFileSystem(projectFS string) *openv1alpha1resource.FileSystem {
+	if p.FileSystemInfo == nil || projectFS == "" {
+		return nil
+	}
+	return p.FileSystemInfo[projectFS]
+}
+
 func (p *Project) resolveRegion(proj *openv1alpha1resource.Project) string {
 	if proj.Region != 0 {
 		return api.FormatRegion(proj.Region)
 	}
-	if p.FileSystemInfo != nil {
-		if fs, ok := p.FileSystemInfo[proj.FileSystem]; ok {
-			return api.FormatRegion(fs.Region)
-		}
-		for k, fs := range p.FileSystemInfo {
-			if strings.HasSuffix(k, "/"+proj.FileSystem) || strings.HasSuffix(k, "/fileSystems/"+strings.TrimPrefix(proj.FileSystem, "fileSystems/")) {
-				return api.FormatRegion(fs.Region)
-			}
-		}
+	if fs := p.lookupFileSystem(proj.FileSystem); fs != nil {
+		return api.FormatRegion(fs.Region)
 	}
 	return ""
 }
 
 func (p *Project) resolveFileSystem(fsName string) string {
-	if p.FileSystemInfo != nil {
-		if fs, ok := p.FileSystemInfo[fsName]; ok && fs.DisplayName != "" {
-			return fs.DisplayName
-		}
-		for k, fs := range p.FileSystemInfo {
-			if strings.HasSuffix(k, "/"+fsName) || strings.HasSuffix(k, "/fileSystems/"+fsName) {
-				if fs.DisplayName != "" {
-					return fs.DisplayName
-				}
-			}
-		}
+	if fs := p.lookupFileSystem(fsName); fs != nil && fs.DisplayName != "" {
+		return fs.DisplayName
 	}
 	if idx := strings.LastIndex(fsName, "/fileSystems/"); idx >= 0 {
 		return fsName[idx+len("/fileSystems/"):]
 	}
-	return strings.TrimPrefix(fsName, "fileSystems/")
+	return fsName
 }
 
 func (p *Project) ToTable(opts *table.PrintOpts) table.Table {

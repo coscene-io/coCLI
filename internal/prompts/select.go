@@ -24,12 +24,12 @@ import (
 )
 
 type selectModel struct {
-	prompt  string
-	items   []string
-	cursor  int
-	chosen  int
-	quit    bool
-	io      *iostreams.IOStreams
+	prompt string
+	items  []string
+	cursor int
+	chosen int
+	quit   bool
+	io     *iostreams.IOStreams
 }
 
 func (m selectModel) Init() tea.Cmd {

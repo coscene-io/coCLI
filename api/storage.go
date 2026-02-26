@@ -69,7 +69,10 @@ func FormatFileSystemLabel(fs *openv1alpha1resource.FileSystem) string {
 	region := FormatRegion(fs.Region)
 	name := fs.DisplayName
 	if name == "" {
-		name = strings.TrimPrefix(fs.Name, "fileSystems/")
+		idx := strings.LastIndex(fs.Name, "/fileSystems/")
+		if idx >= 0 {
+			name = fs.Name[idx+len("/fileSystems/"):]
+		}
 	}
 	label := fmt.Sprintf("%s - %s", region, name)
 	if fs.IsDefault {

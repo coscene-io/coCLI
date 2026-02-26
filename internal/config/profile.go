@@ -53,7 +53,7 @@ type Profile struct {
 	eventcli             api.EventInterface
 	taskcli              api.TaskInterface
 	containerregistrycli api.ContainerRegistryInterface
-	storagecli          api.StorageInterface
+	storagecli           api.StorageInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
