@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
-	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -54,7 +53,7 @@ func TestStorageClient_ListAllFileSystems(t *testing.T) {
 				Name:        "fileSystems/default",
 				DisplayName: "Default",
 				IsDefault:   true,
-				Region:      openv1alpha1enums.RegionEnum_CN_HANGZHOU,
+				Region:      "cn-hangzhou",
 			},
 		}
 		mock := &mockStorageServiceClient{
@@ -70,7 +69,7 @@ func TestStorageClient_ListAllFileSystems(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, fileSystems, 1)
 		assert.Equal(t, "fileSystems/default", fileSystems[0].Name)
-		assert.Equal(t, openv1alpha1enums.RegionEnum_CN_HANGZHOU, fileSystems[0].Region)
+		assert.Equal(t, "cn-hangzhou", fileSystems[0].Region)
 	})
 
 	t.Run("empty", func(t *testing.T) {
@@ -104,13 +103,13 @@ func TestFormatFileSystemLabel(t *testing.T) {
 		Name:        "fileSystems/default",
 		DisplayName: "Default",
 		IsDefault:   true,
-		Region:      openv1alpha1enums.RegionEnum_CN_HANGZHOU,
+		Region:      "cn-hangzhou",
 	}
 	assert.Equal(t, "cn-hangzhou - Default [default]", FormatFileSystemLabel(fs))
 
 	fs2 := &openv1alpha1resource.FileSystem{
 		Name:   "storageClusters/abc-123/fileSystems/custom",
-		Region: openv1alpha1enums.RegionEnum_CN_SHANGHAI,
+		Region: "cn-shanghai",
 	}
 	assert.Equal(t, "cn-shanghai - custom", FormatFileSystemLabel(fs2))
 }

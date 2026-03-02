@@ -14,20 +14,10 @@
 
 package api
 
-import (
-	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
-)
-
-var regionDisplayName = map[openv1alpha1enums.RegionEnum_Region]string{
-	openv1alpha1enums.RegionEnum_REGION_UNSPECIFIED: "unspecified",
-	openv1alpha1enums.RegionEnum_CN_HANGZHOU:        "cn-hangzhou",
-	openv1alpha1enums.RegionEnum_CN_SHANGHAI:        "cn-shanghai",
-}
-
 // FormatRegion returns a human-readable region string.
-func FormatRegion(region openv1alpha1enums.RegionEnum_Region) string {
-	if r, ok := regionDisplayName[region]; ok {
-		return r
+func FormatRegion(region string) string {
+	if region == "" {
+		return "unspecified"
 	}
-	return "unspecified"
+	return region
 }

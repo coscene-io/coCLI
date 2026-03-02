@@ -17,7 +17,6 @@ package printable
 import (
 	"testing"
 
-	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/stretchr/testify/assert"
 )
@@ -26,13 +25,13 @@ func TestProject_ResolveRegion(t *testing.T) {
 	fsInfo := map[string]*openv1alpha1resource.FileSystem{
 		"storageClusters/abc/fileSystems/default": {
 			Name:   "storageClusters/abc/fileSystems/default",
-			Region: openv1alpha1enums.RegionEnum_CN_HANGZHOU,
+			Region: "cn-hangzhou",
 		},
 	}
 	p := NewProjectWithFileSystemInfo(nil, fsInfo)
 
 	t.Run("from project region field", func(t *testing.T) {
-		proj := &openv1alpha1resource.Project{Region: openv1alpha1enums.RegionEnum_CN_SHANGHAI}
+		proj := &openv1alpha1resource.Project{Region: "cn-shanghai"}
 		assert.Equal(t, "cn-shanghai", p.resolveRegion(proj))
 	})
 

@@ -62,7 +62,7 @@ func (p *Project) lookupFileSystem(projectFS string) *openv1alpha1resource.FileS
 }
 
 func (p *Project) resolveRegion(proj *openv1alpha1resource.Project) string {
-	if proj.Region != 0 {
+	if proj.Region != "" {
 		return api.FormatRegion(proj.Region)
 	}
 	if fs := p.lookupFileSystem(proj.FileSystem); fs != nil {
