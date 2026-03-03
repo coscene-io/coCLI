@@ -36,18 +36,20 @@ import (
 
 func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
-		projectSlug  string
-		displayName  string
-		description  string
-		templateSlug string
-		scopeStr     string
-		visibility   string
-		forceYes     bool
-		verbose      bool
-		outputFormat string
+		projectSlug    string
+		displayName    string
+		description    string
+		templateSlug   string
+		scopeStr       string
+		visibility     string
+		regionFlag     string
+		fileSystemFlag string
+		forceYes       bool
+		verbose        bool
+		outputFormat   string
 	)
 	cmd := &cobra.Command{
-		Use:                   "create -p <project-slug> -n <display-name> -b <visibility> [--template <template-slug-or-name>] [--scope <scopes>] [--description <description>]",
+		Use:                   "create -p <project-slug> -n <display-name> -b <visibility> [--region <region>] [--filesystem <name>] [--template <template-slug-or-name>] [--scope <scopes>]",
 		Short:                 "Create a project",
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -101,45 +103,29 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 				}
 			}
 
-			// Resolve file system (only for blank projects, not templates)
+			// Resolve file system based on --region / --filesystem flags.
 			var selectedFileSystem string
 			var fileSystems []*openv1alpha1resource.FileSystem
-			if templateSlug == "" {
+			if fileSystemFlag != "" && regionFlag == "" {
+				log.Fatalf("--filesystem requires --region")
+			}
+			if regionFlag != "" && templateSlug == "" {
 				var fsErr error
 				fileSystems, fsErr = pm.FileSystemCli().ListAllFileSystems(cmd.Context())
 				if fsErr != nil {
 					log.Fatalf("failed to list file systems: %v", fsErr)
 				}
-				if len(fileSystems) == 0 {
-					log.Fatalf("no file systems available")
-				}
-
-				if len(fileSystems) == 1 {
-					selectedFileSystem = fileSystems[0].Name
-					io.Printf("Auto-selected storage: %s\n", api.FormatFileSystemLabel(fileSystems[0]))
-				} else {
-					labels := make([]string, len(fileSystems))
-					for i, fs := range fileSystems {
-						labels[i] = api.FormatFileSystemLabel(fs)
-					}
-					idx := prompts.PromptSelect("Select file system:", labels, io)
-					if idx < 0 || idx >= len(fileSystems) {
-						log.Fatalf("invalid selection")
-					}
-					selectedFileSystem = fileSystems[idx].Name
-				}
+				selectedFileSystem = resolveFileSystem(fileSystems, regionFlag, fileSystemFlag)
 			}
 
 			// Confirm unless forced
 			if !forceYes {
-				// Build a short summary for confirmation
 				summary := "Create project with the following settings:\n"
 				summary += "  name: " + projectSlug + "\n"
 				summary += "  display_name: " + displayName + "\n"
 				if templateSlug != "" {
 					summary += "  template: " + validatedTemplateName + "\n"
 				}
-				// scopes shown only for template. if provided without template, show note
 				if scopeStr != "" {
 					if templateSlug == "" {
 						summary += "  scopes: " + scopeStr + " (ignored without template)\n"
@@ -153,6 +139,8 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 				summary += "  visibility: " + visibility + "\n"
 				if selectedFileSystem != "" {
 					summary += "  file_system: " + selectedFileSystem + "\n"
+				} else {
+					summary += "  file_system: (server default)\n"
 				}
 
 				if !prompts.PromptYN(summary+"Proceed?", io) {
@@ -200,6 +188,11 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			}
 
 			// Build filesystem info for display
+			if len(fileSystems) == 0 {
+				if fetched, fetchErr := pm.FileSystemCli().ListAllFileSystems(cmd.Context()); fetchErr == nil {
+					fileSystems = fetched
+				}
+			}
 			fsInfo := make(map[string]*openv1alpha1resource.FileSystem)
 			for _, fs := range fileSystems {
 				fsInfo[fs.Name] = fs
@@ -220,16 +213,52 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	cmd.Flags().StringVarP(&templateSlug, "template", "t", "", "The template to use when creating the project. Can be either 'projects/uuid' or a project slug.")
 	cmd.Flags().StringVarP(&scopeStr, "scope", "s", "", "Template scopes (CUSTOM_FIELDS|ACTIONS|TRIGGERS|LAYOUTS) comma separated. Required when template is provided.")
 	cmd.Flags().StringVarP(&visibility, "visibility", "b", "", "Project visibility (private|internal) [required]")
+	cmd.Flags().StringVar(&regionFlag, "region", "", "Storage region (e.g. cn-hangzhou)")
+	cmd.Flags().StringVar(&fileSystemFlag, "filesystem", "", "File system name within the region (requires --region)")
 	cmd.Flags().BoolVarP(&forceYes, "yes", "y", false, "Skip confirmation and create without prompting")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
 
-	// Required flags
 	_ = cmd.MarkFlagRequired("project-slug")
 	_ = cmd.MarkFlagRequired("visibility")
 	_ = cmd.MarkFlagRequired("display-name")
 
 	return cmd
+}
+
+// resolveFileSystem finds the matching filesystem from the list based on region and optional name.
+func resolveFileSystem(fileSystems []*openv1alpha1resource.FileSystem, region, fsName string) string {
+	if fsName != "" {
+		for _, fs := range fileSystems {
+			fsID := extractFileSystemID(fs.Name)
+			if fs.Region == region && fsID == fsName {
+				return fs.Name
+			}
+		}
+		log.Fatalf("no file system %q found in region %s", fsName, region)
+	}
+
+	var defaults []*openv1alpha1resource.FileSystem
+	for _, fs := range fileSystems {
+		if fs.Region == region && fs.IsDefault {
+			defaults = append(defaults, fs)
+		}
+	}
+	if len(defaults) == 0 {
+		log.Fatalf("no default file system in region %s, specify --filesystem", region)
+	}
+	if len(defaults) > 1 {
+		log.Warnf("multiple default file systems in region %s, using first", region)
+	}
+	return defaults[0].Name
+}
+
+func extractFileSystemID(name string) string {
+	idx := strings.LastIndex(name, "/fileSystems/")
+	if idx >= 0 {
+		return name[idx+len("/fileSystems/"):]
+	}
+	return name
 }
 
 // parseTemplateScopes parses a comma-separated scopes string into the enum slice.
