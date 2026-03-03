@@ -53,7 +53,7 @@ type Profile struct {
 	eventcli             api.EventInterface
 	taskcli              api.TaskInterface
 	containerregistrycli api.ContainerRegistryInterface
-	storagecli           api.StorageInterface
+	filesystemcli        api.FileSystemInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
@@ -231,10 +231,10 @@ func (p *Profile) ContainerRegistryCli() api.ContainerRegistryInterface {
 	return p.containerregistrycli
 }
 
-// StorageCli returns storage api interface used by profile.
-func (p *Profile) StorageCli() api.StorageInterface {
+// FileSystemCli returns file system api interface used by profile.
+func (p *Profile) FileSystemCli() api.FileSystemInterface {
 	p.initCli()
-	return p.storagecli
+	return p.filesystemcli
 }
 
 // initCli initializes the api clients for the profile.
@@ -259,7 +259,7 @@ func (p *Profile) initCli() {
 			userServiceClient              = openv1alpha1connect.NewUserServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			securityTokenServiceClient     = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			containerRegistryServiceClient = openv1alpha1connect.NewContainerRegistryServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
-			storageServiceClient           = openv1alpha1connect.NewStorageServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			storageServiceClient           = openv1alpha1connect.NewFileSystemServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 		)
 
 		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
@@ -273,6 +273,6 @@ func (p *Profile) initCli() {
 		p.eventcli = api.NewEventClient(eventServiceClient)
 		p.taskcli = api.NewTaskClient(taskServiceClient)
 		p.containerregistrycli = api.NewContainerRegistryClient(containerRegistryServiceClient)
-		p.storagecli = api.NewStorageClient(storageServiceClient)
+		p.filesystemcli = api.NewFileSystemClient(storageServiceClient)
 	})
 }

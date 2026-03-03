@@ -26,19 +26,19 @@ import (
 	"github.com/coscene-io/cocli/internal/constants"
 )
 
-type StorageInterface interface {
+type FileSystemInterface interface {
 	ListAllFileSystems(ctx context.Context) ([]*openv1alpha1resource.FileSystem, error)
 }
 
-type storageClient struct {
-	storageServiceClient openv1alpha1connect.StorageServiceClient
+type fileSystemClient struct {
+	fileSystemServiceClient openv1alpha1connect.FileSystemServiceClient
 }
 
-func NewStorageClient(storageServiceClient openv1alpha1connect.StorageServiceClient) StorageInterface {
-	return &storageClient{storageServiceClient: storageServiceClient}
+func NewFileSystemClient(fileSystemServiceClient openv1alpha1connect.FileSystemServiceClient) FileSystemInterface {
+	return &fileSystemClient{fileSystemServiceClient: fileSystemServiceClient}
 }
 
-func (c *storageClient) ListAllFileSystems(ctx context.Context) ([]*openv1alpha1resource.FileSystem, error) {
+func (c *fileSystemClient) ListAllFileSystems(ctx context.Context) ([]*openv1alpha1resource.FileSystem, error) {
 	var (
 		pageToken string
 		ret       []*openv1alpha1resource.FileSystem
@@ -49,7 +49,7 @@ func (c *storageClient) ListAllFileSystems(ctx context.Context) ([]*openv1alpha1
 			PageSize:  int32(constants.MaxPageSize),
 			PageToken: pageToken,
 		})
-		res, err := c.storageServiceClient.ListFileSystems(ctx, req)
+		res, err := c.fileSystemServiceClient.ListFileSystems(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list file systems: %w", err)
 		}

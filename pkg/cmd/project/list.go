@@ -102,7 +102,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 			// Build file system info map for human-readable output
 			fsInfo := make(map[string]*openv1alpha1resource.FileSystem)
-			if fileSystems, fsErr := pm.StorageCli().ListAllFileSystems(context.Background()); fsErr == nil {
+			if fileSystems, fsErr := pm.FileSystemCli().ListAllFileSystems(context.Background()); fsErr == nil {
 				for _, fs := range fileSystems {
 					fsInfo[fs.Name] = fs
 				}

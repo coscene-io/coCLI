@@ -155,9 +155,9 @@ func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface 
 	return pm.GetCurrentProfile().ContainerRegistryCli()
 }
 
-// StorageCli return storage client of current profile.
-func (pm *ProfileManager) StorageCli() api.StorageInterface {
-	return pm.GetCurrentProfile().StorageCli()
+// FileSystemCli return file system client of current profile.
+func (pm *ProfileManager) FileSystemCli() api.FileSystemInterface {
+	return pm.GetCurrentProfile().FileSystemCli()
 }
 
 // GetCurrentProfile return current profile of profile manager.

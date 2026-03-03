@@ -28,21 +28,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockStorageServiceClient struct {
-	openv1alpha1connect.StorageServiceClient
+type mockFileSystemServiceClient struct {
+	openv1alpha1connect.FileSystemServiceClient
 	ctrl *gomock.Controller
 
 	listFileSystemsFunc func(context.Context, *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error)
 }
 
-func (m *mockStorageServiceClient) ListFileSystems(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+func (m *mockFileSystemServiceClient) ListFileSystems(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
 	if m.listFileSystemsFunc != nil {
 		return m.listFileSystemsFunc(ctx, req)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
 
-func TestStorageClient_ListAllFileSystems(t *testing.T) {
+func TestFileSystemClient_ListAllFileSystems(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -56,7 +56,7 @@ func TestStorageClient_ListAllFileSystems(t *testing.T) {
 				Region:      "cn-hangzhou",
 			},
 		}
-		mock := &mockStorageServiceClient{
+		mock := &mockFileSystemServiceClient{
 			ctrl: ctrl,
 			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
 				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
@@ -64,7 +64,7 @@ func TestStorageClient_ListAllFileSystems(t *testing.T) {
 				}), nil
 			},
 		}
-		client := NewStorageClient(mock)
+		client := NewFileSystemClient(mock)
 		fileSystems, err := client.ListAllFileSystems(ctx)
 		require.NoError(t, err)
 		assert.Len(t, fileSystems, 1)
@@ -73,26 +73,26 @@ func TestStorageClient_ListAllFileSystems(t *testing.T) {
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		mock := &mockStorageServiceClient{
+		mock := &mockFileSystemServiceClient{
 			ctrl: ctrl,
 			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
 				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{}), nil
 			},
 		}
-		client := NewStorageClient(mock)
+		client := NewFileSystemClient(mock)
 		fileSystems, err := client.ListAllFileSystems(ctx)
 		require.NoError(t, err)
 		assert.Empty(t, fileSystems)
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mock := &mockStorageServiceClient{
+		mock := &mockFileSystemServiceClient{
 			ctrl: ctrl,
 			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
 				return nil, connect.NewError(connect.CodeInternal, nil)
 			},
 		}
-		client := NewStorageClient(mock)
+		client := NewFileSystemClient(mock)
 		_, err := client.ListAllFileSystems(ctx)
 		assert.Error(t, err)
 	})

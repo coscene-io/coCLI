@@ -106,7 +106,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			var fileSystems []*openv1alpha1resource.FileSystem
 			if templateSlug == "" {
 				var fsErr error
-				fileSystems, fsErr = pm.StorageCli().ListAllFileSystems(cmd.Context())
+				fileSystems, fsErr = pm.FileSystemCli().ListAllFileSystems(cmd.Context())
 				if fsErr != nil {
 					log.Fatalf("failed to list file systems: %v", fsErr)
 				}
