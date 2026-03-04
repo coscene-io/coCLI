@@ -23,8 +23,8 @@ import (
 
 func TestProject_ResolveRegion(t *testing.T) {
 	fsInfo := map[string]*openv1alpha1resource.FileSystem{
-		"storageClusters/abc/fileSystems/default": {
-			Name:   "storageClusters/abc/fileSystems/default",
+		"regions/cn-hangzhou/fileSystems/default": {
+			Name:   "regions/cn-hangzhou/fileSystems/default",
 			Region: "cn-hangzhou",
 		},
 	}
@@ -36,31 +36,31 @@ func TestProject_ResolveRegion(t *testing.T) {
 	})
 
 	t.Run("from filesystem lookup", func(t *testing.T) {
-		proj := &openv1alpha1resource.Project{FileSystem: "storageClusters/abc/fileSystems/default"}
+		proj := &openv1alpha1resource.Project{FileSystem: "regions/cn-hangzhou/fileSystems/default"}
 		assert.Equal(t, "cn-hangzhou", p.resolveRegion(proj))
 	})
 
 	t.Run("empty when no match", func(t *testing.T) {
-		proj := &openv1alpha1resource.Project{FileSystem: "storageClusters/xyz/fileSystems/unknown"}
+		proj := &openv1alpha1resource.Project{FileSystem: "regions/cn-shanghai/fileSystems/unknown"}
 		assert.Equal(t, "", p.resolveRegion(proj))
 	})
 }
 
 func TestProject_ResolveFileSystem(t *testing.T) {
 	fsInfo := map[string]*openv1alpha1resource.FileSystem{
-		"storageClusters/abc/fileSystems/default": {
-			Name:        "storageClusters/abc/fileSystems/default",
+		"regions/cn-hangzhou/fileSystems/default": {
+			Name:        "regions/cn-hangzhou/fileSystems/default",
 			DisplayName: "Default Bucket",
 		},
 	}
 	p := NewProjectWithFileSystemInfo(nil, fsInfo)
 
 	t.Run("display name from lookup", func(t *testing.T) {
-		assert.Equal(t, "Default Bucket", p.resolveFileSystem("storageClusters/abc/fileSystems/default"))
+		assert.Equal(t, "Default Bucket", p.resolveFileSystem("regions/cn-hangzhou/fileSystems/default"))
 	})
 
 	t.Run("extract name from compound format", func(t *testing.T) {
-		assert.Equal(t, "custom", p.resolveFileSystem("storageClusters/xyz/fileSystems/custom"))
+		assert.Equal(t, "custom", p.resolveFileSystem("regions/cn-shanghai/fileSystems/custom"))
 	})
 
 	t.Run("passthrough when no format match", func(t *testing.T) {
@@ -69,13 +69,13 @@ func TestProject_ResolveFileSystem(t *testing.T) {
 }
 
 func TestProject_LookupFileSystem(t *testing.T) {
-	fs := &openv1alpha1resource.FileSystem{Name: "storageClusters/abc/fileSystems/default"}
+	fs := &openv1alpha1resource.FileSystem{Name: "regions/cn-hangzhou/fileSystems/default"}
 	p := NewProjectWithFileSystemInfo(nil, map[string]*openv1alpha1resource.FileSystem{
-		"storageClusters/abc/fileSystems/default": fs,
+		"regions/cn-hangzhou/fileSystems/default": fs,
 	})
 
-	assert.Equal(t, fs, p.lookupFileSystem("storageClusters/abc/fileSystems/default"))
-	assert.Nil(t, p.lookupFileSystem("storageClusters/xyz/fileSystems/other"))
+	assert.Equal(t, fs, p.lookupFileSystem("regions/cn-hangzhou/fileSystems/default"))
+	assert.Nil(t, p.lookupFileSystem("regions/cn-shanghai/fileSystems/other"))
 	assert.Nil(t, p.lookupFileSystem(""))
 
 	empty := NewProject(nil)

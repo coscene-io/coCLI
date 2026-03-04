@@ -108,7 +108,7 @@ func TestFormatFileSystemLabel(t *testing.T) {
 	assert.Equal(t, "cn-hangzhou - Default [default]", FormatFileSystemLabel(fs))
 
 	fs2 := &openv1alpha1resource.FileSystem{
-		Name:   "storageClusters/abc-123/fileSystems/custom",
+		Name:   "regions/cn-shanghai/fileSystems/custom",
 		Region: "cn-shanghai",
 	}
 	assert.Equal(t, "cn-shanghai - custom", FormatFileSystemLabel(fs2))
