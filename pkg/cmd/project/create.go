@@ -238,11 +238,17 @@ func resolveFileSystem(fileSystems []*openv1alpha1resource.FileSystem, region, f
 		log.Fatalf("no file system %q found in region %s", fsName, region)
 	}
 
-	var defaults []*openv1alpha1resource.FileSystem
+	var regionFs, defaults []*openv1alpha1resource.FileSystem
 	for _, fs := range fileSystems {
-		if fs.Region == region && fs.IsDefault {
-			defaults = append(defaults, fs)
+		if fs.Region == region {
+			regionFs = append(regionFs, fs)
+			if fs.IsDefault {
+				defaults = append(defaults, fs)
+			}
 		}
+	}
+	if len(regionFs) == 0 {
+		log.Fatalf("no file systems available in region %s", region)
 	}
 	if len(defaults) == 0 {
 		log.Fatalf("no default file system in region %s, specify --filesystem", region)
