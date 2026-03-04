@@ -111,9 +111,11 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			}
 
 			// Print listed projects.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
-				Verbose: verbose,
-			}}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
+			tableOpts := &table.PrintOpts{Verbose: verbose}
+			if outputFormat != "table,wide" {
+				tableOpts.OmitFields = []string{"DISPLAY NAME"}
+			}
+			err = printer.Printer(outputFormat, &printer.Options{TableOpts: tableOpts}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}
@@ -121,7 +123,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of projects per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all projects (overrides default page size)")
