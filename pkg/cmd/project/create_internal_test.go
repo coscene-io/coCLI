@@ -28,9 +28,8 @@ func TestExtractFileSystemID(t *testing.T) {
 		expected string
 	}{
 		{"regions format", "regions/cn-hangzhou/fileSystems/default", "default"},
-		{"simple format", "fileSystems/leju", "fileSystems/leju"},
-		{"no prefix", "something", "something"},
 		{"empty", "", ""},
+		{"no pattern", "something", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

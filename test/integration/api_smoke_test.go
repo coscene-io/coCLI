@@ -73,3 +73,12 @@ func TestLiveListActions(t *testing.T) {
 	require.NoError(t, err, "ListAllActions should succeed for current project")
 	t.Logf("found %d actions in current project", len(actions))
 }
+
+func TestLiveListFileSystems(t *testing.T) {
+	pm := liveProfileManager(t)
+	ctx := liveContext(t)
+
+	fileSystems, err := pm.FileSystemCli().ListAllFileSystems(ctx)
+	require.NoError(t, err, "ListAllFileSystems should succeed for authenticated user")
+	t.Logf("found %d file systems", len(fileSystems))
+}

@@ -16,12 +16,14 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/testutil"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -96,6 +98,38 @@ func TestFileSystemClient_ListAllFileSystems(t *testing.T) {
 		_, err := client.ListAllFileSystems(ctx)
 		assert.Error(t, err)
 	})
+
+	t.Run("pagination", func(t *testing.T) {
+		page1 := make([]*openv1alpha1resource.FileSystem, constants.MaxPageSize)
+		for i := 0; i < constants.MaxPageSize; i++ {
+			page1[i] = &openv1alpha1resource.FileSystem{Name: fmt.Sprintf("fileSystems/fs-%d", i)}
+		}
+		page2 := []*openv1alpha1resource.FileSystem{
+			{Name: "fileSystems/fs-last"},
+		}
+
+		callCount := 0
+		mock := &mockFileSystemServiceClient{
+			ctrl: ctrl,
+			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+				callCount++
+				if req.Msg.PageToken == "" {
+					return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
+						FileSystems:   page1,
+						NextPageToken: "token",
+					}), nil
+				}
+				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
+					FileSystems: page2,
+				}), nil
+			},
+		}
+		client := NewFileSystemClient(mock)
+		fileSystems, err := client.ListAllFileSystems(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, constants.MaxPageSize+1, len(fileSystems))
+		assert.Equal(t, 2, callCount)
+	})
 }
 
 func TestFormatFileSystemLabel(t *testing.T) {
@@ -112,4 +146,9 @@ func TestFormatFileSystemLabel(t *testing.T) {
 		Region: "cn-shanghai",
 	}
 	assert.Equal(t, "cn-shanghai - custom", FormatFileSystemLabel(fs2))
+
+	t.Run("empty DisplayName and no fileSystems pattern in Name", func(t *testing.T) {
+		fs3 := &openv1alpha1resource.FileSystem{Name: "legacy-id", Region: "cn-beijing"}
+		assert.Equal(t, "cn-beijing - ", FormatFileSystemLabel(fs3))
+	})
 }

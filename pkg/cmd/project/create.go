@@ -264,7 +264,7 @@ func extractFileSystemID(name string) string {
 	if idx >= 0 {
 		return name[idx+len("/fileSystems/"):]
 	}
-	return name
+	return ""
 }
 
 // parseTemplateScopes parses a comma-separated scopes string into the enum slice.
