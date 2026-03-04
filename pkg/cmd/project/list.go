@@ -112,7 +112,9 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 			// Print listed projects.
 			tableOpts := &table.PrintOpts{Verbose: verbose}
-			if outputFormat != "table,wide" {
+			if outputFormat == "table,wide" {
+				tableOpts.Wide = true
+			} else {
 				tableOpts.OmitFields = []string{"DISPLAY NAME"}
 			}
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: tableOpts}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
