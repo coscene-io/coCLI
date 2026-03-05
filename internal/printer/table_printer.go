@@ -17,6 +17,8 @@ package printer
 import (
 	"fmt"
 	"io"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -34,45 +36,65 @@ type TablePrinter struct {
 func (p *TablePrinter) PrintObj(obj printable.Interface, w io.Writer) (err error) {
 	t := obj.ToTable(p.Opts)
 
-	// Print field names
+	if p.Opts.Wide {
+		return p.printWide(t, w)
+	}
+	return p.printFixed(t, w)
+}
+
+func (p *TablePrinter) printWide(t table.Table, w io.Writer) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+
+	headers := make([]string, len(t.ColumnDefs))
+	for i, columnDef := range t.ColumnDefs {
+		fieldName := columnDef.FieldName
+		if columnDef.FieldNameFunc != nil {
+			fieldName = columnDef.FieldNameFunc(p.Opts)
+		}
+		headers[i] = fieldName
+	}
+	if _, err := fmt.Fprintln(tw, strings.Join(headers, "\t")); err != nil {
+		return err
+	}
+
+	for _, row := range t.Rows {
+		if _, err := fmt.Fprintln(tw, strings.Join(row, "\t")); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
+}
+
+func (p *TablePrinter) printFixed(t table.Table, w io.Writer) (err error) {
 	for _, columnDef := range t.ColumnDefs {
 		fieldName := columnDef.FieldName
 		if columnDef.FieldNameFunc != nil {
 			fieldName = columnDef.FieldNameFunc(p.Opts)
 		}
 		format := getColumnFormat(p.Opts.Verbose, columnDef.TrimSize, fieldName)
-
-		_, err = fmt.Fprintf(w, format, fieldName)
-		if err != nil {
+		if _, err = fmt.Fprintf(w, format, fieldName); err != nil {
 			return err
 		}
 	}
-	_, err = fmt.Fprintln(w)
-	if err != nil {
+	if _, err = fmt.Fprintln(w); err != nil {
 		return err
 	}
 
-	// Print items
 	for _, row := range t.Rows {
 		for idx, columnDef := range t.ColumnDefs {
 			item := row[idx]
 			if !p.Opts.Verbose && runewidth.StringWidth(item) > columnDef.TrimSize {
 				item = runewidth.Truncate(item, columnDef.TrimSize, "...")
 			}
-
 			format := getColumnFormat(p.Opts.Verbose, columnDef.TrimSize, item)
-
-			_, err = fmt.Fprintf(w, format, item)
-			if err != nil {
+			if _, err = fmt.Fprintf(w, format, item); err != nil {
 				return err
 			}
 		}
-		_, err = fmt.Fprintln(w)
-		if err != nil {
+		if _, err = fmt.Fprintln(w); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

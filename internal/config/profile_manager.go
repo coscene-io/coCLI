@@ -155,6 +155,11 @@ func (pm *ProfileManager) ContainerRegistryCli() api.ContainerRegistryInterface 
 	return pm.GetCurrentProfile().ContainerRegistryCli()
 }
 
+// FileSystemCli return file system client of current profile.
+func (pm *ProfileManager) FileSystemCli() api.FileSystemInterface {
+	return pm.GetCurrentProfile().FileSystemCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {

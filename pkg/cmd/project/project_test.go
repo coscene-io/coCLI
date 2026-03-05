@@ -81,7 +81,7 @@ func TestProjectCommand(t *testing.T) {
 		createCmd, _, err := cmd.Find([]string{"create"})
 		require.NoError(t, err)
 
-		for _, flag := range []string{"project-slug", "display-name", "output"} {
+		for _, flag := range []string{"project-slug", "display-name", "output", "region", "filesystem"} {
 			assert.NotNil(t, createCmd.Flag(flag), "Flag --%s not found", flag)
 		}
 	})
