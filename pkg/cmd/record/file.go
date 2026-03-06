@@ -178,7 +178,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json|yaml)")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&recursive, "recursive", "R", false, "list files recursively")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of files per page (10-100)")

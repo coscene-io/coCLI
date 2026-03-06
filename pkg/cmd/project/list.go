@@ -117,7 +117,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of projects per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all projects (overrides default page size)")
