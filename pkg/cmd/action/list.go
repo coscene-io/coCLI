@@ -85,7 +85,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
 
 	return cmd
 }

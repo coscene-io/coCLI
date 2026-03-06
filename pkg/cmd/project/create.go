@@ -217,7 +217,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	cmd.Flags().StringVar(&fileSystemFlag, "filesystem", "", "File system name within the region (requires --region)")
 	cmd.Flags().BoolVarP(&forceYes, "yes", "y", false, "Skip confirmation and create without prompting")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json|yaml)")
 
 	_ = cmd.MarkFlagRequired("project-slug")
 	_ = cmd.MarkFlagRequired("visibility")
