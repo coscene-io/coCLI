@@ -3,8 +3,8 @@ module github.com/coscene-io/cocli
 go 1.25.0
 
 require (
-	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.19.1-20251126074344-05da902ba782.1
-	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.10-20251126074344-05da902ba782.1
+	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.19.1-20260305065019-31555e3837bb.1
+	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260305065019-31555e3837bb.1
 	connectrpc.com/connect v1.19.1
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -34,13 +34,13 @@ require (
 	golang.org/x/net v0.46.0
 	golang.org/x/term v0.36.0
 	google.golang.org/genproto v0.0.0-20251110190251-83f479183930
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.10-20240508200655-46a4cf4ba109.1 // indirect
-	buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.10-20230414000709-087bc8072ce4.1 // indirect
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20240508200655-46a4cf4ba109.1 // indirect
+	buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/lipgloss v0.13.0 // indirect
 	github.com/charmbracelet/x/ansi v0.1.4 // indirect

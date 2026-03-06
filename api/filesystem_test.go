@@ -1,0 +1,154 @@
+// Copyright 2026 coScene
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package api
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
+	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/internal/constants"
+	"github.com/coscene-io/cocli/internal/testutil"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type mockFileSystemServiceClient struct {
+	openv1alpha1connect.FileSystemServiceClient
+	ctrl *gomock.Controller
+
+	listFileSystemsFunc func(context.Context, *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error)
+}
+
+func (m *mockFileSystemServiceClient) ListFileSystems(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+	if m.listFileSystemsFunc != nil {
+		return m.listFileSystemsFunc(ctx, req)
+	}
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func TestFileSystemClient_ListAllFileSystems(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	t.Run("success with region", func(t *testing.T) {
+		expected := []*openv1alpha1resource.FileSystem{
+			{
+				Name:        "fileSystems/default",
+				DisplayName: "Default",
+				IsDefault:   true,
+				Region:      "cn-hangzhou",
+			},
+		}
+		mock := &mockFileSystemServiceClient{
+			ctrl: ctrl,
+			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
+					FileSystems: expected,
+				}), nil
+			},
+		}
+		client := NewFileSystemClient(mock)
+		fileSystems, err := client.ListAllFileSystems(ctx)
+		require.NoError(t, err)
+		assert.Len(t, fileSystems, 1)
+		assert.Equal(t, "fileSystems/default", fileSystems[0].Name)
+		assert.Equal(t, "cn-hangzhou", fileSystems[0].Region)
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		mock := &mockFileSystemServiceClient{
+			ctrl: ctrl,
+			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{}), nil
+			},
+		}
+		client := NewFileSystemClient(mock)
+		fileSystems, err := client.ListAllFileSystems(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, fileSystems)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		mock := &mockFileSystemServiceClient{
+			ctrl: ctrl,
+			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+				return nil, connect.NewError(connect.CodeInternal, nil)
+			},
+		}
+		client := NewFileSystemClient(mock)
+		_, err := client.ListAllFileSystems(ctx)
+		assert.Error(t, err)
+	})
+
+	t.Run("pagination", func(t *testing.T) {
+		page1 := make([]*openv1alpha1resource.FileSystem, constants.MaxPageSize)
+		for i := 0; i < constants.MaxPageSize; i++ {
+			page1[i] = &openv1alpha1resource.FileSystem{Name: fmt.Sprintf("fileSystems/fs-%d", i)}
+		}
+		page2 := []*openv1alpha1resource.FileSystem{
+			{Name: "fileSystems/fs-last"},
+		}
+
+		callCount := 0
+		mock := &mockFileSystemServiceClient{
+			ctrl: ctrl,
+			listFileSystemsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListFileSystemsRequest]) (*connect.Response[openv1alpha1service.ListFileSystemsResponse], error) {
+				callCount++
+				if req.Msg.PageToken == "" {
+					return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
+						FileSystems:   page1,
+						NextPageToken: "token",
+					}), nil
+				}
+				return connect.NewResponse(&openv1alpha1service.ListFileSystemsResponse{
+					FileSystems: page2,
+				}), nil
+			},
+		}
+		client := NewFileSystemClient(mock)
+		fileSystems, err := client.ListAllFileSystems(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, constants.MaxPageSize+1, len(fileSystems))
+		assert.Equal(t, 2, callCount)
+	})
+}
+
+func TestFormatFileSystemLabel(t *testing.T) {
+	fs := &openv1alpha1resource.FileSystem{
+		Name:        "fileSystems/default",
+		DisplayName: "Default",
+		IsDefault:   true,
+		Region:      "cn-hangzhou",
+	}
+	assert.Equal(t, "cn-hangzhou - Default [default]", FormatFileSystemLabel(fs))
+
+	fs2 := &openv1alpha1resource.FileSystem{
+		Name:   "regions/cn-shanghai/fileSystems/custom",
+		Region: "cn-shanghai",
+	}
+	assert.Equal(t, "cn-shanghai - custom", FormatFileSystemLabel(fs2))
+
+	t.Run("empty DisplayName and no fileSystems pattern in Name", func(t *testing.T) {
+		fs3 := &openv1alpha1resource.FileSystem{Name: "legacy-id", Region: "cn-beijing"}
+		assert.Equal(t, "cn-beijing - ", FormatFileSystemLabel(fs3))
+	})
+}

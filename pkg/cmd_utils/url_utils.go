@@ -107,6 +107,7 @@ func DownloadFileThroughUrl(file string, downloadUrl string, maxRetries int) err
 		backoff.WithInitialInterval(retryWaitMin),
 		backoff.WithMaxInterval(retryWaitMax),
 		backoff.WithMultiplier(2),
+		backoff.WithRandomizationFactor(0.5),
 	), uint64(maxRetries))
 
 	if err = backoff.Retry(operation, retry); err != nil {

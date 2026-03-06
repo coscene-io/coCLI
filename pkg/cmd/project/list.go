@@ -24,7 +24,6 @@ import (
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
-	"github.com/coscene-io/cocli/internal/printer/table"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -100,10 +99,17 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				}
 			}
 
-			// Print listed projects.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
-				Verbose: verbose,
-			}}).PrintObj(printable.NewProject(projects), io.Out)
+			// Build file system info map for human-readable output
+			fsInfo := make(map[string]*openv1alpha1resource.FileSystem)
+			if fileSystems, fsErr := pm.FileSystemCli().ListAllFileSystems(context.Background()); fsErr == nil {
+				for _, fs := range fileSystems {
+					fsInfo[fs.Name] = fs
+				}
+			} else {
+				log.Debugf("unable to resolve file system info: %v", fsErr)
+			}
+
+			err = printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose, outputFormat)}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}
@@ -111,7 +117,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|json)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of projects per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all projects (overrides default page size)")

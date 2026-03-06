@@ -75,6 +75,7 @@ type CreateProjectOptions struct {
 	DisplayName string
 	Visibility  enums.ProjectVisibilityEnum_ProjectVisibility
 	Description string
+	FileSystem  string
 }
 
 type CreateProjectUsingTemplateOptions struct {
@@ -206,6 +207,7 @@ func (c *projectClient) CreateProject(ctx context.Context, opts *CreateProjectOp
 			DisplayName: opts.DisplayName,
 			Visibility:  opts.Visibility,
 			Description: descPtr,
+			FileSystem:  opts.FileSystem,
 		},
 	})
 	res, err := c.projectServiceClient.CreateProject(ctx, req)

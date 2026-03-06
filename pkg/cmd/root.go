@@ -27,6 +27,8 @@ import (
 	"github.com/coscene-io/cocli/pkg/cmd/project"
 	"github.com/coscene-io/cocli/pkg/cmd/record"
 	"github.com/coscene-io/cocli/pkg/cmd/registry"
+	"github.com/coscene-io/cocli/pkg/cmd/role"
+	"github.com/coscene-io/cocli/pkg/cmd/user"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -110,8 +112,10 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 	cmd.AddCommand(action.NewRootCommand(&cfgPath, io, getProvider))
 	cmd.AddCommand(login.NewRootCommand(&cfgPath, io, getProvider))
 	cmd.AddCommand(project.NewRootCommand(&cfgPath, io, getProvider))
-	cmd.AddCommand(registry.NewRootCommand(&cfgPath, io, getProvider))
 	cmd.AddCommand(record.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(registry.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(role.NewRootCommand(&cfgPath, io, getProvider))
+	cmd.AddCommand(user.NewRootCommand(&cfgPath, io, getProvider))
 	cmd.AddCommand(NewUpdateCommand(io))
 
 	return cmd
