@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2026 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package project
+package role
 
 import (
 	"github.com/coscene-io/cocli/internal/config"
@@ -23,22 +23,21 @@ import (
 
 func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "project",
-		Short: "Work with coScene project.",
+		Use:   "role",
+		Short: "Work with coScene roles.",
 	}
 
 	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
-	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
-	cmd.AddCommand(NewFileCommand(cfgPath, io, getProvider))
+
 	return cmd
 }
 
-func projectTableOpts(verbose bool, outputFormat string) *table.PrintOpts {
+func roleTableOpts(verbose bool, outputFormat string) *table.PrintOpts {
 	opts := &table.PrintOpts{Verbose: verbose}
 	if outputFormat == "table,wide" {
 		opts.Wide = true
 	} else {
-		opts.OmitFields = []string{"DISPLAY NAME"}
+		opts.OmitFields = []string{"NAME"}
 	}
 	return opts
 }

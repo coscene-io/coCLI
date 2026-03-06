@@ -24,7 +24,6 @@ import (
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
-	"github.com/coscene-io/cocli/internal/printer/table"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -110,14 +109,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Debugf("unable to resolve file system info: %v", fsErr)
 			}
 
-			// Print listed projects.
-			tableOpts := &table.PrintOpts{Verbose: verbose}
-			if outputFormat == "table,wide" {
-				tableOpts.Wide = true
-			} else {
-				tableOpts.OmitFields = []string{"DISPLAY NAME"}
-			}
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: tableOpts}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
+			err = printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose, outputFormat)}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}

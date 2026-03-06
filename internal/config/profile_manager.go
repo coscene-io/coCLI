@@ -160,6 +160,11 @@ func (pm *ProfileManager) FileSystemCli() api.FileSystemInterface {
 	return pm.GetCurrentProfile().FileSystemCli()
 }
 
+// RoleCli return role client of current profile.
+func (pm *ProfileManager) RoleCli() api.RoleInterface {
+	return pm.GetCurrentProfile().RoleCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {

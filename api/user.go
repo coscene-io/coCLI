@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -26,9 +27,23 @@ import (
 	"github.com/samber/lo"
 )
 
+type ListUsersOptions struct {
+	Parent    string
+	PageSize  int32
+	PageToken string
+	RoleCode  string
+}
+
+type ListUsersResult struct {
+	Users         []*openv1alpha1resource.User
+	NextPageToken string
+	TotalSize     int64
+}
+
 type UserInterface interface {
-	// BatchGetUsers gets users by usernames.
 	BatchGetUsers(ctx context.Context, userNameList mapset.Set[name.User]) (map[string]*openv1alpha1resource.User, error)
+	ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error)
+	GetUser(ctx context.Context, userName string) (*openv1alpha1resource.User, error)
 }
 
 type userClient struct {
@@ -59,4 +74,42 @@ func (c *userClient) BatchGetUsers(ctx context.Context, userNameSet mapset.Set[n
 	return lo.Associate(res.Msg.Users, func(u *openv1alpha1resource.User) (string, *openv1alpha1resource.User) {
 		return u.Name, u
 	}), nil
+}
+
+func (c *userClient) ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error) {
+	filter := ""
+	if opts.RoleCode != "" {
+		filter = fmt.Sprintf("role.code=%q", opts.RoleCode)
+	}
+
+	req := connect.NewRequest(&openv1alpha1service.ListUsersRequest{
+		Parent:    opts.Parent,
+		PageSize:  opts.PageSize,
+		PageToken: opts.PageToken,
+		Filter:    filter,
+	})
+
+	res, err := c.userServiceClient.ListUsers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ListUsersResult{
+		Users:         res.Msg.GetUsers(),
+		NextPageToken: res.Msg.GetNextPageToken(),
+		TotalSize:     res.Msg.GetTotalSize(),
+	}, nil
+}
+
+func (c *userClient) GetUser(ctx context.Context, userName string) (*openv1alpha1resource.User, error) {
+	req := connect.NewRequest(&openv1alpha1service.GetUserRequest{
+		Name: userName,
+	})
+
+	res, err := c.userServiceClient.GetUser(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Msg, nil
 }
