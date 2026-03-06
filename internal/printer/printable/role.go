@@ -15,6 +15,7 @@
 package printable
 
 import (
+	"sort"
 	"strings"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -36,7 +37,15 @@ type Role struct {
 }
 
 func NewRole(roles []*openv1alpha1resource.Role, nextPageToken string) *Role {
-	return &Role{Delegate: roles, NextPageToken: nextPageToken}
+	sorted := make([]*openv1alpha1resource.Role, len(roles))
+	copy(sorted, roles)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].GetLevel() != sorted[j].GetLevel() {
+			return sorted[i].GetLevel() < sorted[j].GetLevel()
+		}
+		return sorted[i].GetCode() < sorted[j].GetCode()
+	})
+	return &Role{Delegate: sorted, NextPageToken: nextPageToken}
 }
 
 func (p *Role) ToProtoMessage() proto.Message {

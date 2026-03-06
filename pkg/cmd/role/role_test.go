@@ -67,7 +67,7 @@ func TestRoleCommand(t *testing.T) {
 		listCmd, _, err := cmd.Find([]string{"list"})
 		require.NoError(t, err)
 
-		for _, flag := range []string{"project", "verbose", "output", "page-size", "page-token"} {
+		for _, flag := range []string{"level", "verbose", "output", "page-size", "page-token"} {
 			assert.NotNil(t, listCmd.Flag(flag), "Flag --%s not found", flag)
 		}
 	})

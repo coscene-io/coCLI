@@ -27,7 +27,7 @@ import (
 
 func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
-		projectSlug  = ""
+		level        = ""
 		verbose      = false
 		outputFormat = ""
 		pageSize     = 0
@@ -35,21 +35,19 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list [-p <project-slug>] [--page-size <size>] [--page-token <token>]",
-		Short:                 "List roles in the organization or project",
+		Use:                   "list [--level <organization|project>] [--page-size <size>] [--page-token <token>]",
+		Short:                 "List available roles",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
+			if level != "" && level != "organization" && level != "project" {
+				log.Fatalf("--level must be \"organization\" or \"project\"")
+			}
 			if pageSize > 0 && (pageSize < 10 || pageSize > 100) {
 				log.Fatalf("--page-size must be between 10 and 100")
 			}
 
 			pm, _ := getProvider(*cfgPath).GetProfileManager()
-
-			level := "organization"
-			if projectSlug != "" {
-				level = "project"
-			}
 
 			effectivePageSize := int32(pageSize)
 			if effectivePageSize <= 0 {
@@ -78,7 +76,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 		},
 	}
 
-	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "project slug (omit for organization-level roles)")
+	cmd.Flags().StringVar(&level, "level", "", "filter by role level (organization|project)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of roles per page (10-100)")

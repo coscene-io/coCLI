@@ -47,6 +47,21 @@ func TestRole_ToProtoMessage(t *testing.T) {
 	assert.Equal(t, int64(1), resp.TotalSize)
 }
 
+func TestRole_Sorting(t *testing.T) {
+	roles := []*openv1alpha1resource.Role{
+		newTestRole("roles/3", "Project Writer", "PROJECT_WRITER", "project"),
+		newTestRole("roles/1", "Org Admin", "ORGANIZATION_ADMIN", "organization"),
+		newTestRole("roles/4", "Project Admin", "PROJECT_ADMIN", "project"),
+		newTestRole("roles/2", "Org Reader", "ORGANIZATION_READER", "organization"),
+	}
+	p := NewRole(roles, "")
+
+	assert.Equal(t, "ORGANIZATION_ADMIN", p.Delegate[0].GetCode())
+	assert.Equal(t, "ORGANIZATION_READER", p.Delegate[1].GetCode())
+	assert.Equal(t, "PROJECT_ADMIN", p.Delegate[2].GetCode())
+	assert.Equal(t, "PROJECT_WRITER", p.Delegate[3].GetCode())
+}
+
 func TestRole_ToTable(t *testing.T) {
 	roles := []*openv1alpha1resource.Role{
 		newTestRole("roles/abc-123", "Org Admin", "ORGANIZATION_ADMIN", "organization"),
