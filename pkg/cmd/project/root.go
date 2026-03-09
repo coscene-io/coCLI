@@ -17,6 +17,7 @@ package project
 import (
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/spf13/cobra"
 )
 
@@ -30,4 +31,14 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewFileCommand(cfgPath, io, getProvider))
 	return cmd
+}
+
+func projectTableOpts(verbose bool, outputFormat string) *table.PrintOpts {
+	opts := &table.PrintOpts{Verbose: verbose}
+	if outputFormat == "table,wide" {
+		opts.Wide = true
+	} else {
+		opts.OmitFields = []string{"DISPLAY NAME"}
+	}
+	return opts
 }

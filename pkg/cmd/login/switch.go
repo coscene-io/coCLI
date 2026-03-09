@@ -15,16 +15,23 @@
 package login
 
 import (
+	"errors"
 	"fmt"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/samber/lo"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
+	"golang.org/x/term"
 )
+
+var errProfileSelectionAborted = errors.New("profile selection aborted")
+
+type profileSelectorFn func(profiles []*config.Profile, currentProfile string) (*config.Profile, error)
+type headlessDetectorFn func() bool
 
 func NewSwitchCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	cmd := &cobra.Command{
@@ -32,34 +39,62 @@ func NewSwitchCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 		Short:                 "Switch to another login profile.",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			cfg := getProvider(*cfgPath)
-			pm, _ := cfg.GetProfileManager()
-
-			currentProfileName := ""
-			if current := pm.GetCurrentProfile(); current != nil {
-				currentProfileName = current.Name
-			}
-			profile, err := promptForProfile(pm.GetProfiles(), currentProfileName)
-			if err != nil {
-				log.Fatalf("Failed to prompt for select profile: %v", err)
-			}
-
-			err = pm.SwitchProfile(profile.Name)
-			if err != nil {
-				log.Fatalf("Failed to switch to profile %s: %v", profile.Name, err)
-			}
-
-			if err = cfg.Persist(pm); err != nil {
-				log.Fatalf("Failed to persist profile manager: %v", err)
-			}
-
-			curProfile := pm.GetCurrentProfile()
-			io.Printf("Successfully switched to profile:\n%s\n", curProfile)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSwitch(*cfgPath, io, getProvider, promptForProfile, isHeadlessEnvironment)
 		},
 	}
 
 	return cmd
+}
+
+func runSwitch(
+	cfgPath string,
+	io *iostreams.IOStreams,
+	getProvider func(string) config.Provider,
+	selectProfile profileSelectorFn,
+	isHeadless headlessDetectorFn,
+) error {
+	cfg := getProvider(cfgPath)
+	pm, err := cfg.GetProfileManager()
+	if err != nil {
+		return fmt.Errorf("failed to get profile manager: %w", err)
+	}
+
+	profiles := pm.GetProfiles()
+	if len(profiles) == 0 {
+		return fmt.Errorf("no login profiles found")
+	}
+
+	currentProfileName := ""
+	if current := pm.GetCurrentProfile(); current != nil {
+		currentProfileName = current.Name
+	}
+
+	profile, err := selectProfile(profiles, currentProfileName)
+	if err != nil {
+		if errors.Is(err, errProfileSelectionAborted) {
+			io.Println("Profile switch cancelled.")
+			return nil
+		}
+		if isHeadless() {
+			return fmt.Errorf(
+				"unable to prompt for profile selection in non-interactive mode, use `cocli login set -n <profile-name>` instead",
+			)
+		}
+		return fmt.Errorf("failed to prompt for select profile: %w", err)
+	}
+
+	if err = pm.SwitchProfile(profile.Name); err != nil {
+		return fmt.Errorf("failed to switch to profile %s: %w", profile.Name, err)
+	}
+
+	if err = cfg.Persist(pm); err != nil {
+		return fmt.Errorf("failed to persist profile manager: %w", err)
+	}
+
+	curProfile := pm.GetCurrentProfile()
+	io.Printf("Successfully switched to profile:\n%s\n", curProfile)
+	return nil
 }
 
 type selectProfileModel struct {
@@ -119,11 +154,23 @@ func (m selectProfileModel) View() string {
 }
 
 func promptForProfile(profiles []*config.Profile, currentProfile string) (*config.Profile, error) {
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("no profiles found")
+	}
+	if len(profiles) == 1 {
+		return profiles[0], nil
+	}
+
 	profileNames := lo.Map(profiles, func(p *config.Profile, _ int) string { return p.Name })
+	cursor := slices.Index(profileNames, currentProfile)
+	if cursor < 0 {
+		cursor = 0
+	}
+
 	p := tea.NewProgram(selectProfileModel{
 		profiles:   profiles,
-		initCursor: slices.Index(profileNames, currentProfile),
-		cursor:     slices.Index(profileNames, currentProfile),
+		initCursor: cursor,
+		cursor:     cursor,
 		selected:   -1,
 	})
 	finalModel, err := p.Run()
@@ -132,7 +179,20 @@ func promptForProfile(profiles []*config.Profile, currentProfile string) (*confi
 	}
 	selected := finalModel.(selectProfileModel).selected
 	if selected < 0 {
-		return nil, fmt.Errorf("prompt failed")
+		return nil, errProfileSelectionAborted
 	}
 	return profiles[selected], nil
+}
+
+func isHeadlessEnvironment() bool {
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return true
+	}
+	if os.Getenv("CI") == "true" {
+		return true
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return true
+	}
+	return false
 }
