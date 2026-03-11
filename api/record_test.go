@@ -583,6 +583,66 @@ func TestRecordClient_MoveFiles(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRecordClient_SearchWithAdvancedFilter(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	project := &name.Project{ProjectID: "test-project"}
+
+	t.Run("search JSON uses advanced_filter", func(t *testing.T) {
+		searchJSON := `{"and":[{"==":[{"var":"isArchived"},false]},{">":[{"var":"create_time"},"2024-01-01T00:00:00Z"]}]}`
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+				f := req.Msg.GetQueryFilter()
+				af, ok := f.(*openv1alpha1service.SearchRecordsRequest_AdvancedFilter)
+				require.True(t, ok, "expected AdvancedFilter, got %T", f)
+				assert.NotNil(t, af.AdvancedFilter)
+				assert.Contains(t, af.AdvancedFilter.Fields, "and")
+				return connect.NewResponse(&openv1alpha1service.SearchRecordsResponse{}), nil
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		_, err := client.SearchWithPageToken(ctx, &SearchRecordsOptions{
+			Project:  project,
+			Search:   searchJSON,
+			PageSize: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid search JSON returns error", func(t *testing.T) {
+		client := NewRecordClient(nil, nil, nil, nil)
+		_, err := client.SearchWithPageToken(ctx, &SearchRecordsOptions{
+			Project:  project,
+			Search:   `{not valid json`,
+			PageSize: 10,
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid search JSON")
+	})
+
+	t.Run("no search uses AIP-160 filter", func(t *testing.T) {
+		mock := &mockRecordServiceClient{
+			ctrl: ctrl,
+			searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+				f := req.Msg.GetQueryFilter()
+				filterReq, ok := f.(*openv1alpha1service.SearchRecordsRequest_Filter)
+				require.True(t, ok, "expected Filter, got %T", f)
+				assert.Equal(t, "isArchived = false", filterReq.Filter)
+				return connect.NewResponse(&openv1alpha1service.SearchRecordsResponse{}), nil
+			},
+		}
+		client := NewRecordClient(mock, nil, nil, nil)
+		_, err := client.SearchWithPageToken(ctx, &SearchRecordsOptions{
+			Project:  project,
+			PageSize: 10,
+		})
+		require.NoError(t, err)
+	})
+}
+
 func TestRecordClient_Search_ErrorCodePropagation(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
