@@ -119,13 +119,10 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 			},
 			TrimSize: recordTimeTrimSize,
 		},
-		{
-			FieldName: "DESCRIPTION",
-			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-				return r.Description
-			},
-			TrimSize: recordTitleTrimSize,
-		},
+	}
+
+	// Wide columns: shown in table,wide and csv
+	wideColumnDefs := []table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
 		{
 			FieldName: "DEVICE",
 			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
@@ -159,26 +156,6 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 			TrimSize: fileSizeTrimSize,
 		},
 		{
-			FieldName: "FILE COUNT",
-			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-				return fmt.Sprintf("%d", r.FileSize)
-			},
-			TrimSize: recordArchiveTrimSize,
-		},
-		{
-			FieldName: "FILES DURATION",
-			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-				if r.Summary == nil {
-					return ""
-				}
-				if opts.CSV {
-					return fmt.Sprintf("%d", r.Summary.FilesDuration)
-				}
-				return formatDuration(r.Summary.FilesDuration)
-			},
-			TrimSize: fileSizeTrimSize,
-		},
-		{
 			FieldName: "PLAY DURATION",
 			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
 				if r.Summary == nil {
@@ -194,6 +171,39 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 	}
 
 	if opts.Wide {
+		fullColumnDefs = append(fullColumnDefs, wideColumnDefs...)
+	}
+
+	// CSV-only columns: shown only in csv output
+	if opts.CSV {
+		csvOnlyDefs := []table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
+			{
+				FieldName: "DESCRIPTION",
+				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+					return r.Description
+				},
+				TrimSize: recordTitleTrimSize,
+			},
+			{
+				FieldName: "FILE COUNT",
+				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+					return fmt.Sprintf("%d", r.FileSize)
+				},
+				TrimSize: recordArchiveTrimSize,
+			},
+			{
+				FieldName: "FILES DURATION",
+				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+					if r.Summary == nil {
+						return ""
+					}
+					return fmt.Sprintf("%d", r.Summary.FilesDuration)
+				},
+				TrimSize: fileSizeTrimSize,
+			},
+		}
+		fullColumnDefs = append(fullColumnDefs, csvOnlyDefs...)
+
 		cfColumns := collectCustomFieldColumns(p.Delegate)
 		for _, col := range cfColumns {
 			colName := col

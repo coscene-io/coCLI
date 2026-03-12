@@ -151,7 +151,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				nextPageToken = result.NextPageToken
 			}
 
-			omitFields := []string{"DESCRIPTION", "DEVICE", "CREATOR", "BYTE SIZE", "FILE COUNT", "FILES DURATION", "PLAY DURATION"}
+			var omitFields []string
 			if !includeArchive {
 				omitFields = append(omitFields, "ARCHIVED")
 			}

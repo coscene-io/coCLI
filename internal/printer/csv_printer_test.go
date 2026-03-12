@@ -56,7 +56,7 @@ func TestCSVPrinter_PrintObj(t *testing.T) {
 		},
 	}
 
-	p := &CSVPrinter{Opts: &table.PrintOpts{Wide: true}}
+	p := &CSVPrinter{Opts: &table.PrintOpts{Wide: true, CSV: true}}
 	obj := printable.NewRecord(records, "")
 
 	var buf bytes.Buffer

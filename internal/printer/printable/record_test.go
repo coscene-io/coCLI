@@ -137,7 +137,36 @@ func TestExtractCustomFieldValue_User(t *testing.T) {
 	assert.Equal(t, "u1;u2", extractCustomFieldValue(r, "assignee", &table.PrintOpts{CSV: true}))
 }
 
+func getHeaders(tbl table.Table) []string {
+	headers := make([]string, len(tbl.ColumnDefs))
+	for i, col := range tbl.ColumnDefs {
+		if col.FieldName != "" {
+			headers[i] = col.FieldName
+		}
+	}
+	return headers
+}
+
 func TestRecord_ToTable_Wide(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", nil),
+	}
+
+	p := NewRecord(records, "")
+	tbl := p.ToTable(&table.PrintOpts{Wide: true})
+	headers := getHeaders(tbl)
+
+	assert.Contains(t, headers, "DEVICE")
+	assert.Contains(t, headers, "CREATOR")
+	assert.Contains(t, headers, "BYTE SIZE")
+	assert.Contains(t, headers, "PLAY DURATION")
+
+	assert.NotContains(t, headers, "DESCRIPTION")
+	assert.NotContains(t, headers, "FILE COUNT")
+	assert.NotContains(t, headers, "FILES DURATION")
+}
+
+func TestRecord_ToTable_CSV(t *testing.T) {
 	records := []*openv1alpha1resource.Record{
 		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
 			{
@@ -158,15 +187,13 @@ func TestRecord_ToTable_Wide(t *testing.T) {
 	}
 
 	p := NewRecord(records, "")
-	tbl := p.ToTable(&table.PrintOpts{Wide: true})
+	tbl := p.ToTable(&table.PrintOpts{Wide: true, CSV: true})
+	headers := getHeaders(tbl)
 
-	headers := make([]string, len(tbl.ColumnDefs))
-	for i, col := range tbl.ColumnDefs {
-		if col.FieldName != "" {
-			headers[i] = col.FieldName
-		}
-	}
-
+	assert.Contains(t, headers, "DEVICE")
+	assert.Contains(t, headers, "DESCRIPTION")
+	assert.Contains(t, headers, "FILE COUNT")
+	assert.Contains(t, headers, "FILES DURATION")
 	assert.Contains(t, headers, "color")
 	assert.Contains(t, headers, "size")
 	require.Len(t, tbl.Rows, 2)
@@ -202,14 +229,10 @@ func TestRecord_ToTable_NoWide_NoCFColumns(t *testing.T) {
 
 	p := NewRecord(records, "")
 	tbl := p.ToTable(&table.PrintOpts{Wide: false})
+	headers := getHeaders(tbl)
 
-	headers := make([]string, len(tbl.ColumnDefs))
-	for i, col := range tbl.ColumnDefs {
-		if col.FieldName != "" {
-			headers[i] = col.FieldName
-		}
-	}
 	assert.NotContains(t, headers, "color")
+	assert.NotContains(t, headers, "DEVICE")
 }
 
 func TestFormatDuration(t *testing.T) {
