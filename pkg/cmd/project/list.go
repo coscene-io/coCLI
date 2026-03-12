@@ -109,7 +109,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Debugf("unable to resolve file system info: %v", fsErr)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose, outputFormat)}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
+			err = printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose)}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}

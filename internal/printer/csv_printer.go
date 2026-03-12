@@ -12,29 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package role
+package printer
 
 import (
-	"github.com/coscene-io/cocli/internal/config"
-	"github.com/coscene-io/cocli/internal/iostreams"
+	"encoding/csv"
+	"io"
+
+	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
-	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "role",
-		Short: "Work with coScene roles.",
-	}
-
-	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
-
-	return cmd
+type CSVPrinter struct {
+	Opts *table.PrintOpts
 }
 
-func roleTableOpts(verbose bool) *table.PrintOpts {
-	return &table.PrintOpts{
-		Verbose:    verbose,
-		OmitFields: []string{"NAME"},
+func (p *CSVPrinter) PrintObj(obj printable.Interface, w io.Writer) error {
+	t := obj.ToTable(p.Opts)
+
+	cw := csv.NewWriter(w)
+
+	headers := make([]string, len(t.ColumnDefs))
+	for i, col := range t.ColumnDefs {
+		if col.FieldNameFunc != nil {
+			headers[i] = col.FieldNameFunc(p.Opts)
+		} else {
+			headers[i] = col.FieldName
+		}
 	}
+	if err := cw.Write(headers); err != nil {
+		return err
+	}
+
+	for _, row := range t.Rows {
+		if err := cw.Write(row); err != nil {
+			return err
+		}
+	}
+
+	cw.Flush()
+	return cw.Error()
 }

@@ -15,10 +15,12 @@
 package printable
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/internal/name"
@@ -33,6 +35,9 @@ const (
 	recordTitleTrimSize   = 40
 	recordLabelsTrimSize  = 25
 	recordTimeTrimSize    = len(time.RFC3339)
+
+	multiValueSepTable = ", "
+	multiValueSepCSV   = ";"
 )
 
 type Record struct {
@@ -93,7 +98,7 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 				labels := lo.Map(r.Labels, func(l *openv1alpha1resource.Label, _ int) string {
 					return l.DisplayName
 				})
-				return strings.Join(labels, ", ")
+				return strings.Join(labels, multiValueSep(opts))
 			},
 			TrimSize: recordLabelsTrimSize,
 		},
@@ -106,5 +111,77 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 		},
 	}
 
+	if opts.Wide {
+		cfColumns := collectCustomFieldColumns(p.Delegate)
+		for _, col := range cfColumns {
+			colName := col
+			fullColumnDefs = append(fullColumnDefs, table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
+				FieldName: colName,
+				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+					return extractCustomFieldValue(r, colName, opts)
+				},
+				TrimSize: recordTitleTrimSize,
+			})
+		}
+	}
+
 	return table.ColumnDefs2Table(fullColumnDefs, p.Delegate, opts)
+}
+
+func collectCustomFieldColumns(records []*openv1alpha1resource.Record) []string {
+	seen := map[string]bool{}
+	var columns []string
+	for _, r := range records {
+		for _, cfv := range r.CustomFieldValues {
+			n := cfv.Property.GetName()
+			if n != "" && !seen[n] {
+				seen[n] = true
+				columns = append(columns, n)
+			}
+		}
+	}
+	return columns
+}
+
+func extractCustomFieldValue(r *openv1alpha1resource.Record, propertyName string, opts *table.PrintOpts) string {
+	sep := multiValueSep(opts)
+	for _, cfv := range r.CustomFieldValues {
+		if cfv.Property.GetName() != propertyName {
+			continue
+		}
+		switch cfv.Property.GetType().(type) {
+		case *commons.Property_Text:
+			return cfv.GetText().GetValue()
+		case *commons.Property_Number:
+			return fmt.Sprintf("%g", cfv.GetNumber().GetValue())
+		case *commons.Property_Enums:
+			if cfv.Property.GetEnums().GetMultiple() {
+				names := lo.Map(cfv.GetEnums().GetIds(), func(id string, _ int) string {
+					if v, ok := cfv.Property.GetEnums().GetValues()[id]; ok {
+						return v
+					}
+					return id
+				})
+				return strings.Join(names, sep)
+			}
+			if v, ok := cfv.Property.GetEnums().GetValues()[cfv.GetEnums().GetId()]; ok {
+				return v
+			}
+			return cfv.GetEnums().GetId()
+		case *commons.Property_Time:
+			if cfv.GetTime().GetValue() != nil {
+				return cfv.GetTime().GetValue().AsTime().In(time.Local).Format(time.RFC3339)
+			}
+		case *commons.Property_User:
+			return strings.Join(cfv.GetUser().GetIds(), sep)
+		}
+	}
+	return ""
+}
+
+func multiValueSep(opts *table.PrintOpts) string {
+	if opts.CSV {
+		return multiValueSepCSV
+	}
+	return multiValueSepTable
 }

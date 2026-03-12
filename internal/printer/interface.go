@@ -31,12 +31,26 @@ type Options struct {
 }
 
 func Printer(format string, opts *Options) Interface {
+	tableOpts := opts.TableOpts
+	if tableOpts == nil {
+		tableOpts = &table.PrintOpts{}
+	}
+
 	switch format {
 	case "json":
 		return &JSONPrinter{}
 	case "yaml":
 		return &YAMLPrinter{}
+	case "csv":
+		csvOpts := *tableOpts
+		csvOpts.Wide = true
+		csvOpts.CSV = true
+		return &CSVPrinter{Opts: &csvOpts}
+	case "table,wide":
+		wideOpts := *tableOpts
+		wideOpts.Wide = true
+		return &TablePrinter{Opts: &wideOpts}
 	default:
-		return &TablePrinter{Opts: opts.TableOpts}
+		return &TablePrinter{Opts: tableOpts}
 	}
 }

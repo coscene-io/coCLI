@@ -1,0 +1,213 @@
+// Copyright 2026 coScene
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package printable
+
+import (
+	"testing"
+	"time"
+
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"github.com/coscene-io/cocli/internal/printer/table"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+func makeTestRecord(id, title string, cfvs []*commons.CustomFieldValue) *openv1alpha1resource.Record {
+	return &openv1alpha1resource.Record{
+		Name:              "projects/p1/records/" + id,
+		Title:             title,
+		CreateTime:        timestamppb.New(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)),
+		CustomFieldValues: cfvs,
+	}
+}
+
+func TestCollectCustomFieldColumns(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+			{Property: &commons.Property{Name: "size", Type: &commons.Property_Number{Number: &commons.NumberType{}}}},
+		}),
+		makeTestRecord("r2", "rec2", []*commons.CustomFieldValue{
+			{Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+			{Property: &commons.Property{Name: "status", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+		}),
+	}
+
+	cols := collectCustomFieldColumns(records)
+	assert.Equal(t, []string{"color", "size", "status"}, cols)
+}
+
+func TestCollectCustomFieldColumns_Empty(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", nil),
+	}
+	cols := collectCustomFieldColumns(records)
+	assert.Empty(t, cols)
+}
+
+func TestExtractCustomFieldValue_Text(t *testing.T) {
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}},
+			Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "red"}},
+		},
+	})
+	tableOpts := &table.PrintOpts{}
+	assert.Equal(t, "red", extractCustomFieldValue(r, "color", tableOpts))
+	assert.Equal(t, "", extractCustomFieldValue(r, "missing", tableOpts))
+}
+
+func TestExtractCustomFieldValue_Number(t *testing.T) {
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{Name: "count", Type: &commons.Property_Number{Number: &commons.NumberType{}}},
+			Value:    &commons.CustomFieldValue_Number{Number: &commons.NumberValue{Value: 42.5}},
+		},
+	})
+	assert.Equal(t, "42.5", extractCustomFieldValue(r, "count", &table.PrintOpts{}))
+}
+
+func TestExtractCustomFieldValue_Enum_Single(t *testing.T) {
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{
+				Name: "priority",
+				Type: &commons.Property_Enums{Enums: &commons.EnumType{
+					Values:   map[string]string{"p1": "High", "p2": "Low"},
+					Multiple: false,
+				}},
+			},
+			Value: &commons.CustomFieldValue_Enums{Enums: &commons.EnumValue{Id: "p1"}},
+		},
+	})
+	assert.Equal(t, "High", extractCustomFieldValue(r, "priority", &table.PrintOpts{}))
+}
+
+func TestExtractCustomFieldValue_Enum_Multiple(t *testing.T) {
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{
+				Name: "tags",
+				Type: &commons.Property_Enums{Enums: &commons.EnumType{
+					Values:   map[string]string{"t1": "Alpha", "t2": "Beta"},
+					Multiple: true,
+				}},
+			},
+			Value: &commons.CustomFieldValue_Enums{Enums: &commons.EnumValue{Ids: []string{"t1", "t2"}}},
+		},
+	})
+	assert.Equal(t, "Alpha, Beta", extractCustomFieldValue(r, "tags", &table.PrintOpts{}))
+	assert.Equal(t, "Alpha;Beta", extractCustomFieldValue(r, "tags", &table.PrintOpts{CSV: true}))
+}
+
+func TestExtractCustomFieldValue_Time(t *testing.T) {
+	ts := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{Name: "due", Type: &commons.Property_Time{Time: &commons.TimeType{}}},
+			Value:    &commons.CustomFieldValue_Time{Time: &commons.TimeValue{Value: timestamppb.New(ts)}},
+		},
+	})
+	expected := ts.In(time.Local).Format(time.RFC3339)
+	assert.Equal(t, expected, extractCustomFieldValue(r, "due", &table.PrintOpts{}))
+}
+
+func TestExtractCustomFieldValue_User(t *testing.T) {
+	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+		{
+			Property: &commons.Property{Name: "assignee", Type: &commons.Property_User{User: &commons.UserType{}}},
+			Value:    &commons.CustomFieldValue_User{User: &commons.UserValue{Ids: []string{"u1", "u2"}}},
+		},
+	})
+	assert.Equal(t, "u1, u2", extractCustomFieldValue(r, "assignee", &table.PrintOpts{}))
+	assert.Equal(t, "u1;u2", extractCustomFieldValue(r, "assignee", &table.PrintOpts{CSV: true}))
+}
+
+func TestRecord_ToTable_Wide(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{
+				Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}},
+				Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "blue"}},
+			},
+		}),
+		makeTestRecord("r2", "rec2", []*commons.CustomFieldValue{
+			{
+				Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}},
+				Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "green"}},
+			},
+			{
+				Property: &commons.Property{Name: "size", Type: &commons.Property_Number{Number: &commons.NumberType{}}},
+				Value:    &commons.CustomFieldValue_Number{Number: &commons.NumberValue{Value: 10}},
+			},
+		}),
+	}
+
+	p := NewRecord(records, "")
+	tbl := p.ToTable(&table.PrintOpts{Wide: true})
+
+	headers := make([]string, len(tbl.ColumnDefs))
+	for i, col := range tbl.ColumnDefs {
+		if col.FieldName != "" {
+			headers[i] = col.FieldName
+		}
+	}
+
+	assert.Contains(t, headers, "color")
+	assert.Contains(t, headers, "size")
+	require.Len(t, tbl.Rows, 2)
+
+	colorIdx := -1
+	sizeIdx := -1
+	for i, h := range headers {
+		if h == "color" {
+			colorIdx = i
+		}
+		if h == "size" {
+			sizeIdx = i
+		}
+	}
+	require.NotEqual(t, -1, colorIdx)
+	require.NotEqual(t, -1, sizeIdx)
+
+	assert.Equal(t, "blue", tbl.Rows[0][colorIdx])
+	assert.Equal(t, "", tbl.Rows[0][sizeIdx])
+	assert.Equal(t, "green", tbl.Rows[1][colorIdx])
+	assert.Equal(t, "10", tbl.Rows[1][sizeIdx])
+}
+
+func TestRecord_ToTable_NoWide_NoCFColumns(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{
+				Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}},
+				Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "blue"}},
+			},
+		}),
+	}
+
+	p := NewRecord(records, "")
+	tbl := p.ToTable(&table.PrintOpts{Wide: false})
+
+	headers := make([]string, len(tbl.ColumnDefs))
+	for i, col := range tbl.ColumnDefs {
+		if col.FieldName != "" {
+			headers[i] = col.FieldName
+		}
+	}
+	assert.NotContains(t, headers, "color")
+}

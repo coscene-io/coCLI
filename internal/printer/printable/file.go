@@ -21,7 +21,7 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/internal/printer/table"
-	"github.com/dustin/go-humanize"
+	"github.com/coscene-io/cocli/internal/printer/utils"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -63,7 +63,7 @@ func (p *File) ToTable(opts *table.PrintOpts) table.Table {
 				if strings.HasSuffix(f.Filename, "/") {
 					return "-"
 				}
-				return humanize.Bytes(uint64(f.Size))
+				return utils.FormatBytes(uint64(f.Size))
 			},
 			TrimSize: fileSizeTrimSize,
 		},

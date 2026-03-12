@@ -177,7 +177,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|table,wide|csv|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "[DEPRECATED] page number (use --page-token instead)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
