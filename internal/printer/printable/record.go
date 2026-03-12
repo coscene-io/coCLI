@@ -25,6 +25,7 @@ import (
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer/table"
+	"github.com/coscene-io/cocli/internal/printer/utils"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/proto"
 )
@@ -43,12 +44,21 @@ const (
 type Record struct {
 	Delegate      []*openv1alpha1resource.Record
 	NextPageToken string
+	CreatorNames  map[string]string
 }
 
 func NewRecord(records []*openv1alpha1resource.Record, nextPageToken string) *Record {
 	return &Record{
 		Delegate:      records,
 		NextPageToken: nextPageToken,
+	}
+}
+
+func NewRecordWithCreators(records []*openv1alpha1resource.Record, nextPageToken string, creatorNames map[string]string) *Record {
+	return &Record{
+		Delegate:      records,
+		NextPageToken: nextPageToken,
+		CreatorNames:  creatorNames,
 	}
 }
 
@@ -108,6 +118,78 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 				return r.CreateTime.AsTime().In(time.Local).Format(time.RFC3339)
 			},
 			TrimSize: recordTimeTrimSize,
+		},
+		{
+			FieldName: "DESCRIPTION",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				return r.Description
+			},
+			TrimSize: recordTitleTrimSize,
+		},
+		{
+			FieldName: "DEVICE",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				if r.Device != nil {
+					return r.Device.Name
+				}
+				return ""
+			},
+			TrimSize: recordTitleTrimSize,
+		},
+		{
+			FieldName: "CREATOR",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				if p.CreatorNames != nil {
+					if n, ok := p.CreatorNames[r.Creator]; ok {
+						return n
+					}
+				}
+				return r.Creator
+			},
+			TrimSize: userNicknameTrimSize,
+		},
+		{
+			FieldName: "BYTE SIZE",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				if opts.CSV {
+					return fmt.Sprintf("%d", r.ByteSize)
+				}
+				return utils.FormatBytes(uint64(r.ByteSize))
+			},
+			TrimSize: fileSizeTrimSize,
+		},
+		{
+			FieldName: "FILE COUNT",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				return fmt.Sprintf("%d", r.FileSize)
+			},
+			TrimSize: recordArchiveTrimSize,
+		},
+		{
+			FieldName: "FILES DURATION",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				if r.Summary == nil {
+					return ""
+				}
+				if opts.CSV {
+					return fmt.Sprintf("%d", r.Summary.FilesDuration)
+				}
+				return formatDuration(r.Summary.FilesDuration)
+			},
+			TrimSize: fileSizeTrimSize,
+		},
+		{
+			FieldName: "PLAY DURATION",
+			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+				if r.Summary == nil {
+					return ""
+				}
+				if opts.CSV {
+					return fmt.Sprintf("%d", r.Summary.PlayDuration)
+				}
+				return formatDuration(r.Summary.PlayDuration)
+			},
+			TrimSize: fileSizeTrimSize,
 		},
 	}
 
@@ -184,4 +266,17 @@ func multiValueSep(opts *table.PrintOpts) string {
 		return multiValueSepCSV
 	}
 	return multiValueSepTable
+}
+
+func formatDuration(seconds int64) string {
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	if seconds < 3600 {
+		return fmt.Sprintf("%dm%ds", seconds/60, seconds%60)
+	}
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	return fmt.Sprintf("%dh%dm%ds", h, m, s)
 }

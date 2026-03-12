@@ -121,7 +121,8 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 
 		// Summary
 		if r.Record.Summary != nil {
-			rows = append(rows, []string{"Duration:", fmt.Sprintf("%ds", r.Record.Summary.PlayDuration)})
+			rows = append(rows, []string{"Files Duration:", fmt.Sprintf("%ds", r.Record.Summary.FilesDuration)})
+			rows = append(rows, []string{"Play Duration:", fmt.Sprintf("%ds", r.Record.Summary.PlayDuration)})
 		}
 
 		// Times

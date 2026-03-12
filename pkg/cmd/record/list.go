@@ -16,10 +16,13 @@ package record
 
 import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -148,14 +151,20 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				nextPageToken = result.NextPageToken
 			}
 
-			var omitFields []string
+			omitFields := []string{"DESCRIPTION", "DEVICE", "CREATOR", "BYTE SIZE", "FILE COUNT", "FILES DURATION", "PLAY DURATION"}
 			if !includeArchive {
 				omitFields = append(omitFields, "ARCHIVED")
 			}
+
+			var creatorNames map[string]string
+			if outputFormat == "table,wide" || outputFormat == "csv" {
+				creatorNames = resolveCreatorNames(cmd, pm, records)
+			}
+
 			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecord(records, nextPageToken), io.Out)
+			}}).PrintObj(printable.NewRecordWithCreators(records, nextPageToken, creatorNames), io.Out)
 			if err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
@@ -191,4 +200,34 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.MarkFlagsMutuallyExclusive("page", "page-token")
 
 	return cmd
+}
+
+func resolveCreatorNames(cmd *cobra.Command, pm *config.ProfileManager, records []*openv1alpha1resource.Record) map[string]string {
+	userNameSet := mapset.NewSet[name.User]()
+	for _, r := range records {
+		if r.Creator == "" {
+			continue
+		}
+		u, err := name.NewUser(r.Creator)
+		if err == nil {
+			userNameSet.Add(*u)
+		}
+	}
+	if userNameSet.Cardinality() == 0 {
+		return nil
+	}
+
+	users, err := pm.UserCli().BatchGetUsers(cmd.Context(), userNameSet)
+	if err != nil {
+		log.Warnf("unable to resolve creator names: %v", err)
+		return nil
+	}
+
+	result := make(map[string]string, len(users))
+	for k, u := range users {
+		if u.Nickname != nil && *u.Nickname != "" {
+			result[k] = *u.Nickname
+		}
+	}
+	return result
 }
