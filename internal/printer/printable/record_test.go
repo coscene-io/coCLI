@@ -211,3 +211,23 @@ func TestRecord_ToTable_NoWide_NoCFColumns(t *testing.T) {
 	}
 	assert.NotContains(t, headers, "color")
 }
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		seconds  int64
+		expected string
+	}{
+		{0, "0s"},
+		{59, "59s"},
+		{60, "1m0s"},
+		{137, "2m17s"},
+		{3599, "59m59s"},
+		{3600, "1h0m0s"},
+		{3661, "1h1m1s"},
+		{86400, "24h0m0s"},
+		{1000000, "277h46m40s"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, formatDuration(tt.seconds), "formatDuration(%d)", tt.seconds)
+	}
+}
