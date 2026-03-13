@@ -17,9 +17,11 @@ package record
 import (
 	"time"
 
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/customfield"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
@@ -35,6 +37,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 		updateLabelStrs []string
 		appendLabelStrs []string
 		deleteLabelStrs []string
+		customFieldStrs []string
 		projectSlug     = ""
 		thumbnail       = ""
 		multiOpts       = &upload_utils.UploadManagerOpts{}
@@ -42,7 +45,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "update <record-resource-name/id> [-p <working-project-slug>] [-t <title>] [-d <description>] [-l <append-labels>...] [--update-labels <update-labels>...] [--delete-labels <delete-labels>...] [-i <thumbnail>]",
+		Use:                   "update <record-resource-name/id> [-p <working-project-slug>] [-t <title>] [-d <description>] [-l <append-labels>...] [--update-labels <update-labels>...] [--delete-labels <delete-labels>...] [--custom <key=value>...] [-i <thumbnail>]",
 		Short:                 "Update record metadata",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
@@ -115,6 +118,14 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 				}
 			}
 
+			var customFieldValues []*commons.CustomFieldValue
+			if len(customFieldStrs) > 0 {
+				customFieldValues, err = customfield.ResolveCustomFields(cmd.Context(), pm.CustomFieldCli(), pm.UserCli(), proj, customFieldStrs)
+				if err != nil {
+					log.Fatalf("Failed to resolve custom fields: %v", err)
+				}
+			}
+
 			// Create field mask
 			var paths []string
 			if title != "" {
@@ -126,10 +137,13 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			if len(appendLabelStrs) > 0 || len(updateLabelStrs) > 0 || len(deleteLabelStrs) > 0 {
 				paths = append(paths, "labels")
 			}
+			if len(customFieldValues) > 0 {
+				paths = append(paths, "custom_field_values")
+			}
 
 			// Update record.
 			if len(paths) > 0 {
-				err = pm.RecordCli().Update(cmd.Context(), recordName, title, description, labels, paths)
+				err = pm.RecordCli().Update(cmd.Context(), recordName, title, description, labels, customFieldValues, paths)
 				if err != nil {
 					log.Fatalf("Failed to update record: %v", err)
 				}
@@ -165,6 +179,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	cmd.Flags().StringSliceVar(&updateLabelStrs, "update-labels", []string{}, "update labels of the record. if contains only one empty string, clear all labels.")
 	cmd.Flags().StringSliceVar(&deleteLabelStrs, "delete-labels", []string{}, "delete labels from the record.")
 	cmd.Flags().StringSliceVarP(&appendLabelStrs, "append-labels", "l", []string{}, "append labels to the record.")
+	cmd.Flags().StringArrayVar(&customFieldStrs, "custom", []string{}, `custom field values in key=value format (repeatable, e.g. --custom "color=blue")`)
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&thumbnail, "thumbnail", "i", "", "thumbnail path of the record.")
 	cmd.Flags().IntVarP(&multiOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")

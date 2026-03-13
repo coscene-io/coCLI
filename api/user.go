@@ -32,6 +32,7 @@ type ListUsersOptions struct {
 	PageSize  int32
 	PageToken string
 	RoleCode  string
+	Filter    string
 }
 
 type ListUsersResult struct {
@@ -44,6 +45,7 @@ type UserInterface interface {
 	BatchGetUsers(ctx context.Context, userNameList mapset.Set[name.User]) (map[string]*openv1alpha1resource.User, error)
 	ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error)
 	GetUser(ctx context.Context, userName string) (*openv1alpha1resource.User, error)
+	FindUsersByNickname(ctx context.Context, nickname string) ([]*openv1alpha1resource.User, error)
 }
 
 type userClient struct {
@@ -77,8 +79,8 @@ func (c *userClient) BatchGetUsers(ctx context.Context, userNameSet mapset.Set[n
 }
 
 func (c *userClient) ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error) {
-	filter := ""
-	if opts.RoleCode != "" {
+	filter := opts.Filter
+	if filter == "" && opts.RoleCode != "" {
 		filter = fmt.Sprintf("role.code=%q", opts.RoleCode)
 	}
 
@@ -112,4 +114,23 @@ func (c *userClient) GetUser(ctx context.Context, userName string) (*openv1alpha
 	}
 
 	return res.Msg, nil
+}
+
+func (c *userClient) FindUsersByNickname(ctx context.Context, nickname string) ([]*openv1alpha1resource.User, error) {
+	result, err := c.ListUsers(ctx, &ListUsersOptions{
+		Filter:   fmt.Sprintf("nickname=%q", nickname),
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Server does substring matching (LIKE %nickname%), so filter locally for exact match.
+	var exact []*openv1alpha1resource.User
+	for _, u := range result.Users {
+		if u.GetNickname() == nickname {
+			exact = append(exact, u)
+		}
+	}
+	return exact, nil
 }

@@ -17,8 +17,10 @@ package record
 import (
 	"time"
 
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/customfield"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/pkg/cmd_utils/upload_utils"
@@ -32,6 +34,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 		description       = ""
 		projectSlug       = ""
 		labelDisplayNames []string
+		customFieldStrs   []string
 		thumbnail         = ""
 		multiOpts         = &upload_utils.UploadManagerOpts{}
 		timeout           time.Duration
@@ -39,7 +42,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "create [-t <title>] [-d <description>] [-l <labels>...] [-p <working-project-slug>] [-i <thumbnail>] [-o <output-format>]",
+		Use:                   "create [-t <title>] [-d <description>] [-l <labels>...] [--custom <key=value>...] [-p <working-project-slug>] [-i <thumbnail>] [-o <output-format>]",
 		Short:                 "Create a new record",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
@@ -61,7 +64,15 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 					labelEntities = append(labelEntities, labelEntity)
 				}
 			}
-			res, err := pm.RecordCli().Create(cmd.Context(), proj, title, "", description, labelEntities)
+			var customFieldValues []*commons.CustomFieldValue
+			if len(customFieldStrs) > 0 {
+				customFieldValues, err = customfield.ResolveCustomFields(cmd.Context(), pm.CustomFieldCli(), pm.UserCli(), proj, customFieldStrs)
+				if err != nil {
+					log.Fatalf("Failed to resolve custom fields: %v", err)
+				}
+			}
+
+			res, err := pm.RecordCli().Create(cmd.Context(), proj, title, "", description, labelEntities, customFieldValues)
 			if err != nil {
 				log.Fatalf("Failed to create record: %v", err)
 			}
@@ -98,6 +109,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	cmd.Flags().StringVarP(&title, "title", "t", "cocli created record", "title of the record.")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "description of the record.")
 	cmd.Flags().StringSliceVarP(&labelDisplayNames, "labels", "l", []string{}, "labels of the record.")
+	cmd.Flags().StringArrayVar(&customFieldStrs, "custom", []string{}, `custom field values in key=value format (repeatable, e.g. --custom "color=blue" --custom "priority=high")`)
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&thumbnail, "thumbnail", "i", "", "thumbnail path of the record.")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
