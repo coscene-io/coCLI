@@ -15,6 +15,7 @@
 package printer
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -30,13 +31,15 @@ type Options struct {
 	TableOpts *table.PrintOpts
 }
 
-func Printer(format string, opts *Options) Interface {
+func Printer(format string, opts *Options) (Interface, error) {
 	switch format {
+	case "", "table", "wide":
+		return &TablePrinter{Opts: opts.TableOpts}, nil
 	case "json":
-		return &JSONPrinter{}
+		return &JSONPrinter{}, nil
 	case "yaml":
-		return &YAMLPrinter{}
+		return &YAMLPrinter{}, nil
 	default:
-		return &TablePrinter{Opts: opts.TableOpts}
+		return nil, fmt.Errorf("unsupported output format %q: valid options are table, wide, json, yaml", format)
 	}
 }

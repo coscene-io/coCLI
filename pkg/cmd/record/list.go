@@ -152,11 +152,14 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			if !includeArchive {
 				omitFields = append(omitFields, "ARCHIVED")
 			}
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecord(records, nextPageToken), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewRecord(records, nextPageToken), io.Out); err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
 

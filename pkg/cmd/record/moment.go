@@ -255,9 +255,13 @@ func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 				log.Errorf("unable to list moments: %v", err)
 			}
 
-			if err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewEvent(moments), io.Out); err != nil {
+			}})
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewEvent(moments), io.Out); err != nil {
 				log.Fatalf("unable to print moments: %v", err)
 			}
 
