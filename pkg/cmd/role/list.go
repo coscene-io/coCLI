@@ -63,8 +63,11 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("unable to list roles: %v", err)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: roleTableOpts(verbose, outputFormat)}).PrintObj(printable.NewRole(result.Roles, result.NextPageToken), io.Out)
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: roleTableOpts(verbose, outputFormat)})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewRole(result.Roles, result.NextPageToken), io.Out); err != nil {
 				log.Fatalf("unable to print roles: %v", err)
 			}
 
@@ -78,7 +81,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 	cmd.Flags().StringVar(&level, "level", "", "filter by role level (organization|project)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of roles per page (10-100)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
 

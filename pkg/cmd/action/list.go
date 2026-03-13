@@ -74,10 +74,13 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			convertActionUsers(cmd.Context(), allActions, pm)
 
 			// Print listed actions.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewAction(allActions), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewAction(allActions), io.Out); err != nil {
 				log.Fatalf("failed to print actions: %v", err)
 			}
 		},

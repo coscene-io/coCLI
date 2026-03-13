@@ -34,7 +34,7 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 func roleTableOpts(verbose bool, outputFormat string) *table.PrintOpts {
 	opts := &table.PrintOpts{Verbose: verbose}
-	if outputFormat == "table,wide" {
+	if outputFormat == "wide" {
 		opts.Wide = true
 	} else {
 		opts.OmitFields = []string{"NAME"}

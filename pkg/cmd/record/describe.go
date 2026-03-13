@@ -104,11 +104,14 @@ func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.R
 	}
 
 	// Use the printer pattern
-	p := printer.Printer(format, &printer.Options{
+	p, err := printer.Printer(format, &printer.Options{
 		TableOpts: &table.PrintOpts{
 			Verbose: false,
 		},
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := p.PrintObj(recordWithMeta, io.Out); err != nil {
 		log.Fatalf("unable to print record: %v", err)

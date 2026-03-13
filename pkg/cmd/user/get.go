@@ -65,15 +65,18 @@ func NewGetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 				log.Fatalf("unable to get user: %v", err)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose, outputFormat)}).PrintObj(printable.NewSingleUser(user), io.Out)
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose, outputFormat)})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewSingleUser(user), io.Out); err != nil {
 				log.Fatalf("unable to print user: %v", err)
 			}
 		},
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|table,wide|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|wide|json|yaml)")
 
 	return cmd
 }
