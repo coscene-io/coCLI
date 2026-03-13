@@ -33,9 +33,10 @@ import (
 const (
 	recordIdTrimSize      = 36
 	recordArchiveTrimSize = 8
-	recordTitleTrimSize   = 40
-	recordLabelsTrimSize  = 25
+	recordTitleTrimSize   = 25
+	recordLabelsTrimSize  = 20
 	recordTimeTrimSize    = len(time.RFC3339)
+	recordCreatorTrimSize = 15
 
 	multiValueSepTable = ", "
 	multiValueSepCSV   = ";"
@@ -121,18 +122,8 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 		},
 	}
 
-	// Wide columns: shown in table,wide and csv
+	// Wide columns: shown in wide and csv
 	wideColumnDefs := []table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
-		{
-			FieldName: "DEVICE",
-			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-				if r.Device != nil {
-					return r.Device.Name
-				}
-				return ""
-			},
-			TrimSize: recordTitleTrimSize,
-		},
 		{
 			FieldName: "CREATOR",
 			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
@@ -143,7 +134,7 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 				}
 				return r.Creator
 			},
-			TrimSize: userNicknameTrimSize,
+			TrimSize: recordCreatorTrimSize,
 		},
 		{
 			FieldName: "BYTE SIZE",
@@ -177,6 +168,16 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 	// CSV-only columns: shown only in csv output
 	if opts.CSV {
 		csvOnlyDefs := []table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
+			{
+				FieldName: "DEVICE",
+				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
+					if r.Device != nil {
+						return r.Device.Name
+					}
+					return ""
+				},
+				TrimSize: recordTitleTrimSize,
+			},
 			{
 				FieldName: "DESCRIPTION",
 				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {

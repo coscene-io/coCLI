@@ -156,11 +156,11 @@ func TestRecord_ToTable_Wide(t *testing.T) {
 	tbl := p.ToTable(&table.PrintOpts{Wide: true})
 	headers := getHeaders(tbl)
 
-	assert.Contains(t, headers, "DEVICE")
 	assert.Contains(t, headers, "CREATOR")
 	assert.Contains(t, headers, "BYTE SIZE")
 	assert.Contains(t, headers, "PLAY DURATION")
 
+	assert.NotContains(t, headers, "DEVICE")
 	assert.NotContains(t, headers, "DESCRIPTION")
 	assert.NotContains(t, headers, "FILE COUNT")
 	assert.NotContains(t, headers, "FILES DURATION")

@@ -17,15 +17,13 @@ package table
 import "github.com/samber/lo"
 
 func ColumnDefs2Table[T any](tcdwv []ColumnDefinitionFull[T], data []T, opts *PrintOpts) Table {
-	if !opts.Wide {
-		tcdwv = lo.Filter(tcdwv, func(c ColumnDefinitionFull[T], _ int) bool {
-			fieldName := c.FieldName
-			if c.FieldNameFunc != nil {
-				fieldName = c.FieldNameFunc(opts)
-			}
-			return !lo.Contains(opts.OmitFields, fieldName)
-		})
-	}
+	tcdwv = lo.Filter(tcdwv, func(c ColumnDefinitionFull[T], _ int) bool {
+		fieldName := c.FieldName
+		if c.FieldNameFunc != nil {
+			fieldName = c.FieldNameFunc(opts)
+		}
+		return !lo.Contains(opts.OmitFields, fieldName)
+	})
 	tcd := lo.Map(tcdwv, func(c ColumnDefinitionFull[T], _ int) ColumnDefinition {
 		return c.ToColumnDefinition()
 	})
