@@ -49,4 +49,8 @@ type PrintOpts struct {
 
 	// Wide indicates additional columns should be shown beyond the default set.
 	Wide bool
+
+	// CSV indicates output is destined for CSV format.
+	// Multi-value fields should use ";" instead of ", " as separator.
+	CSV bool
 }
