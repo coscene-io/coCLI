@@ -55,6 +55,7 @@ type Profile struct {
 	containerregistrycli api.ContainerRegistryInterface
 	filesystemcli        api.FileSystemInterface
 	rolecli              api.RoleInterface
+	customfieldcli       api.CustomFieldInterface
 }
 
 func (p *Profile) StringWithOpts(withStar bool, verbose bool) string {
@@ -244,6 +245,12 @@ func (p *Profile) RoleCli() api.RoleInterface {
 	return p.rolecli
 }
 
+// CustomFieldCli returns custom field api interface used by profile.
+func (p *Profile) CustomFieldCli() api.CustomFieldInterface {
+	p.initCli()
+	return p.customfieldcli
+}
+
 // initCli initializes the api clients for the profile.
 // This function is ensured to be called only once.
 func (p *Profile) initCli() {
@@ -268,6 +275,7 @@ func (p *Profile) initCli() {
 			securityTokenServiceClient     = openDssv1alphaconnect.NewSecurityTokenServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			containerRegistryServiceClient = openv1alpha1connect.NewContainerRegistryServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			storageServiceClient           = openv1alpha1connect.NewFileSystemServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			customFieldServiceClient       = openv1alpha1connect.NewCustomFieldServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 		)
 
 		p.orgcli = api.NewOrganizationClient(organizationServiceClient)
@@ -283,5 +291,6 @@ func (p *Profile) initCli() {
 		p.containerregistrycli = api.NewContainerRegistryClient(containerRegistryServiceClient)
 		p.filesystemcli = api.NewFileSystemClient(storageServiceClient)
 		p.rolecli = api.NewRoleClient(roleServiceClient)
+		p.customfieldcli = api.NewCustomFieldClient(customFieldServiceClient)
 	})
 }
