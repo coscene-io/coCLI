@@ -29,13 +29,14 @@ import (
 // MockProfileManager provides a test-friendly ProfileManager that doesn't require real authentication
 type MockProfileManager struct {
 	*config.ProfileManager
-	recordCli  api.RecordInterface
-	fileCli    api.FileInterface
-	labelCli   api.LabelInterface
-	projectCli api.ProjectInterface
-	actionCli  api.ActionInterface
-	taskCli    api.TaskInterface
-	eventCli   api.EventInterface
+	recordCli      api.RecordInterface
+	fileCli        api.FileInterface
+	labelCli       api.LabelInterface
+	projectCli     api.ProjectInterface
+	actionCli      api.ActionInterface
+	taskCli        api.TaskInterface
+	eventCli       api.EventInterface
+	customFieldCli api.CustomFieldInterface
 }
 
 // NewMockProfileManager creates a ProfileManager suitable for testing
@@ -131,6 +132,17 @@ func (m *MockProfileManager) TaskCli() api.TaskInterface {
 func (m *MockProfileManager) EventCli() api.EventInterface {
 	if m.eventCli != nil {
 		return m.eventCli
+	}
+	return nil
+}
+
+func (m *MockProfileManager) SetCustomFieldClient(client api.CustomFieldInterface) {
+	m.customFieldCli = client
+}
+
+func (m *MockProfileManager) CustomFieldCli() api.CustomFieldInterface {
+	if m.customFieldCli != nil {
+		return m.customFieldCli
 	}
 	return nil
 }

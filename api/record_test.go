@@ -92,7 +92,7 @@ func TestRecordClient_Create(t *testing.T) {
 
 	client := NewRecordClient(mockRecordService, nil, nil, nil)
 
-	record, err := client.Create(ctx, projectName, title, deviceName, description, labels)
+	record, err := client.Create(ctx, projectName, title, deviceName, description, labels, nil)
 	require.NoError(t, err)
 	assert.Equal(t, expectedRecord, record)
 }
@@ -151,7 +151,7 @@ func TestRecordClient_Update(t *testing.T) {
 
 	client := NewRecordClient(mockRecordService, nil, nil, nil)
 
-	err := client.Update(ctx, recordName, newTitle, newDescription, newLabels, fieldMask)
+	err := client.Update(ctx, recordName, newTitle, newDescription, newLabels, nil, fieldMask)
 	require.NoError(t, err)
 }
 

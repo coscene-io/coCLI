@@ -38,7 +38,7 @@ type RecordInterface interface {
 	Get(ctx context.Context, recordName *name.Record) (*openv1alpha1resource.Record, error)
 
 	// Create creates a record.
-	Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labelDisplayNames []*openv1alpha1resource.Label) (*openv1alpha1resource.Record, error)
+	Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labelDisplayNames []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue) (*openv1alpha1resource.Record, error)
 
 	// Copy copies a record to target project.
 	Copy(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
@@ -71,7 +71,7 @@ type RecordInterface interface {
 	DeleteFile(ctx context.Context, recordName *name.Record, fileName string) error
 
 	// Update updates a record.
-	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error
+	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue, fieldMask []string) error
 
 	// ListAllEvents lists all events in a record.
 	ListAllEvents(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.Event, error)
@@ -144,7 +144,7 @@ func (c *recordClient) Get(ctx context.Context, recordName *name.Record) (*openv
 	return getRecordRes.Msg, nil
 }
 
-func (c *recordClient) Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labels []*openv1alpha1resource.Label) (*openv1alpha1resource.Record, error) {
+func (c *recordClient) Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue) (*openv1alpha1resource.Record, error) {
 	var (
 		device *openv1alpha1resource.Device = nil
 	)
@@ -155,10 +155,11 @@ func (c *recordClient) Create(ctx context.Context, parent *name.Project, title s
 	req := connect.NewRequest(&openv1alpha1service.CreateRecordRequest{
 		Parent: parent.String(),
 		Record: &openv1alpha1resource.Record{
-			Title:       title,
-			Description: description,
-			Device:      device,
-			Labels:      labels,
+			Title:             title,
+			Description:       description,
+			Device:            device,
+			Labels:            labels,
+			CustomFieldValues: customFieldValues,
 		},
 	})
 	resp, err := c.recordServiceClient.CreateRecord(ctx, req)
@@ -351,13 +352,14 @@ func (c *recordClient) DeleteFile(ctx context.Context, recordName *name.Record, 
 	return err
 }
 
-func (c *recordClient) Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error {
+func (c *recordClient) Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue, fieldMask []string) error {
 	req := connect.NewRequest(&openv1alpha1service.UpdateRecordRequest{
 		Record: &openv1alpha1resource.Record{
-			Name:        recordName.String(),
-			Title:       title,
-			Description: description,
-			Labels:      labels,
+			Name:              recordName.String(),
+			Title:             title,
+			Description:       description,
+			Labels:            labels,
+			CustomFieldValues: customFieldValues,
 		},
 		UpdateMask: &field_mask.FieldMask{
 			Paths: fieldMask,
