@@ -49,10 +49,13 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams, getPro
 				return
 			}
 
-			p := printer.Printer(outputFormat, &printer.Options{
+			p, err := printer.Printer(outputFormat, &printer.Options{
 				TableOpts: &table.PrintOpts{},
 			})
-			if err := p.PrintObj(printable.NewRegistryCredential(cred.GetUsername(), cred.GetPassword()), io.Out); err != nil {
+			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewRegistryCredential(cred.GetUsername(), cred.GetPassword()), io.Out); err != nil {
 				log.Fatalf("failed to print credential: %v", err)
 			}
 		},
