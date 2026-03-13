@@ -25,7 +25,6 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
-	"github.com/coscene-io/cocli/internal/printer/table"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -161,10 +160,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				creatorNames = resolveCreatorNames(cmd, pm, records)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
-				Verbose:    verbose,
-				OmitFields: omitFields,
-			}})
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: recordTableOpts(verbose, outputFormat, omitFields)})
 			if err != nil {
 				log.Fatal(err)
 			}

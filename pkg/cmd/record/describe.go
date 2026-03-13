@@ -70,7 +70,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 	}
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|table,wide|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|wide|json|yaml)")
 
 	return cmd
 }
