@@ -43,13 +43,14 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	return cmd
 }
 
-func recordTableOpts(verbose bool, outputFormat string, omitFields []string) *table.PrintOpts {
+func recordTableOpts(verbose bool, outputFormat string, omitFields []string) (string, *table.PrintOpts) {
 	opts := &table.PrintOpts{
 		Verbose:    verbose,
 		OmitFields: omitFields,
 	}
 	if outputFormat == "wide" {
 		opts.Wide = true
+		return "table", opts
 	}
-	return opts
+	return outputFormat, opts
 }

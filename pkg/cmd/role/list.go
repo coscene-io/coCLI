@@ -63,7 +63,8 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("unable to list roles: %v", err)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: roleTableOpts(verbose, outputFormat)})
+			format, tableOpts := roleTableOpts(verbose, outputFormat)
+			p, err := printer.Printer(format, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}

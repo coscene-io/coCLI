@@ -160,7 +160,8 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				creatorNames = resolveCreatorNames(cmd, pm, records)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: recordTableOpts(verbose, outputFormat, omitFields)})
+			format, tableOpts := recordTableOpts(verbose, outputFormat, omitFields)
+			p, err := printer.Printer(format, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}

@@ -65,7 +65,8 @@ func NewGetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 				log.Fatalf("unable to get user: %v", err)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose, outputFormat)})
+			format, tableOpts := userTableOpts(verbose, outputFormat)
+			p, err := printer.Printer(format, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}

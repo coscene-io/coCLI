@@ -38,7 +38,7 @@ func Printer(format string, opts *Options) (Interface, error) {
 	}
 
 	switch format {
-	case "", "table", "wide":
+	case "", "table":
 		return &TablePrinter{Opts: tableOpts}, nil
 	case "json":
 		return &JSONPrinter{}, nil
@@ -50,6 +50,6 @@ func Printer(format string, opts *Options) (Interface, error) {
 		csvOpts.CSV = true
 		return &CSVPrinter{Opts: &csvOpts}, nil
 	default:
-		return nil, fmt.Errorf("unsupported output format %q: valid options are table, wide, csv, json, yaml", format)
+		return nil, fmt.Errorf("unsupported output format %q", format)
 	}
 }
