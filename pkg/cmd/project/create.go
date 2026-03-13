@@ -199,9 +199,11 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			}
 
 			// Print project.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{Verbose: verbose}}).
-				PrintObj(printable.NewProjectWithFileSystemInfo([]*openv1alpha1resource.Project{projectRes}, fsInfo), io.Out)
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{Verbose: verbose}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewProjectWithFileSystemInfo([]*openv1alpha1resource.Project{projectRes}, fsInfo), io.Out); err != nil {
 				log.Fatalf("unable to print project: %v", err)
 			}
 		},

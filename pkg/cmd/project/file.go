@@ -154,10 +154,13 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			// Print listed files and directories.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(files), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewFile(files), io.Out); err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
 		},

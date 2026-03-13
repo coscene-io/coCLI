@@ -157,15 +157,18 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			}
 
 			var creatorNames map[string]string
-			if outputFormat == "table,wide" || outputFormat == "csv" {
+			if outputFormat == "wide" || outputFormat == "csv" {
 				creatorNames = resolveCreatorNames(cmd, pm, records)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose:    verbose,
 				OmitFields: omitFields,
-			}}).PrintObj(printable.NewRecordWithCreators(records, nextPageToken, creatorNames), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewRecordWithCreators(records, nextPageToken, creatorNames), io.Out); err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
 
@@ -186,7 +189,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|table,wide|csv|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|wide|csv|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "[DEPRECATED] page number (use --page-token instead)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")

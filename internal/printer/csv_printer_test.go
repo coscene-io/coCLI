@@ -84,7 +84,8 @@ func TestCSVPrinter_PrintObj(t *testing.T) {
 }
 
 func TestCSVPrinter_ViaFactory(t *testing.T) {
-	p := Printer("csv", &Options{TableOpts: &table.PrintOpts{}})
+	p, err := Printer("csv", &Options{TableOpts: &table.PrintOpts{}})
+	require.NoError(t, err)
 	_, ok := p.(*CSVPrinter)
 	assert.True(t, ok, "csv format should produce CSVPrinter")
 
@@ -93,9 +94,8 @@ func TestCSVPrinter_ViaFactory(t *testing.T) {
 	assert.True(t, csvP.Opts.CSV, "CSVPrinter should have CSV=true")
 }
 
-func TestTableWide_ViaFactory(t *testing.T) {
-	p := Printer("table,wide", &Options{TableOpts: &table.PrintOpts{}})
-	tp, ok := p.(*TablePrinter)
-	assert.True(t, ok, "table,wide should produce TablePrinter")
-	assert.True(t, tp.Opts.Wide, "table,wide should have Wide=true")
+func TestUnsupportedFormat_ViaFactory(t *testing.T) {
+	_, err := Printer("unknown", &Options{TableOpts: &table.PrintOpts{}})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported output format")
 }

@@ -109,15 +109,18 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Debugf("unable to resolve file system info: %v", fsErr)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose)}).PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out)
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: projectTableOpts(verbose, outputFormat)})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewProjectWithFileSystemInfo(projects, fsInfo), io.Out); err != nil {
 				log.Fatalf("unable to print projects: %v", err)
 			}
 		},
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of projects per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "page number (1-based)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all projects (overrides default page size)")

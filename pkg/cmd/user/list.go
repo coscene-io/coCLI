@@ -71,8 +71,11 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("unable to list users: %v", err)
 			}
 
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose)}).PrintObj(printable.NewUser(result.Users, result.NextPageToken), io.Out)
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose, outputFormat)})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewUser(result.Users, result.NextPageToken), io.Out); err != nil {
 				log.Fatalf("unable to print users: %v", err)
 			}
 
@@ -87,7 +90,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "project slug (omit for organization-level users)")
 	cmd.Flags().StringVar(&roleCode, "role-code", "", "filter by role code (e.g. PROJECT_WRITER, ORGANIZATION_ADMIN)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|table,wide|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "output format (table|wide|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of users per page (10-100)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
 
