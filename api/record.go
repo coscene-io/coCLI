@@ -31,6 +31,8 @@ import (
 	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/genproto/protobuf/field_mask"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type RecordInterface interface {
@@ -97,6 +99,7 @@ type SearchRecordsOptions struct {
 	Titles         []string
 	Labels         []string
 	IncludeArchive bool
+	Search         string
 	PageSize       int32
 	PageToken      string
 	OrderBy        string
@@ -461,7 +464,6 @@ func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOpti
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(ctx, options)
 	var (
 		pageToken = ""
 		ret       []*openv1alpha1resource.Record
@@ -475,10 +477,8 @@ func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOpti
 			OrderBy:   options.OrderBy,
 		})
 
-		if filter != "" {
-			req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
-				Filter: filter,
-			}
+		if err := c.applyQueryFilter(ctx, req.Msg, options); err != nil {
+			return nil, err
 		}
 
 		res, err := c.recordServiceClient.SearchRecords(ctx, req)
@@ -504,8 +504,6 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(ctx, options)
-
 	req := connect.NewRequest(&openv1alpha1service.SearchRecordsRequest{
 		Parent:    options.Project.String(),
 		PageSize:  options.PageSize,
@@ -513,10 +511,8 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		OrderBy:   options.OrderBy,
 	})
 
-	if filter != "" {
-		req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
-			Filter: filter,
-		}
+	if err := c.applyQueryFilter(ctx, req.Msg, options); err != nil {
+		return nil, err
 	}
 
 	res, err := c.recordServiceClient.SearchRecords(ctx, req)
@@ -529,6 +525,30 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		NextPageToken: res.Msg.NextPageToken,
 		TotalSize:     res.Msg.TotalSize,
 	}, nil
+}
+
+// applyQueryFilter sets the appropriate query_filter on the request.
+// When opts.Search is set (JSON Logic from frontend), it uses advanced_filter.
+// Otherwise, it builds an AIP-160 filter string from the individual flags.
+func (c *recordClient) applyQueryFilter(ctx context.Context, msg *openv1alpha1service.SearchRecordsRequest, opts *SearchRecordsOptions) error {
+	if opts.Search != "" {
+		s := &structpb.Struct{}
+		if err := protojson.Unmarshal([]byte(opts.Search), s); err != nil {
+			return fmt.Errorf("invalid search JSON: %w", err)
+		}
+		msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_AdvancedFilter{
+			AdvancedFilter: s,
+		}
+		return nil
+	}
+
+	filter := c.buildSearchFilter(ctx, opts)
+	if filter != "" {
+		msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
+			Filter: filter,
+		}
+	}
+	return nil
 }
 
 // buildSearchFilter builds the filter string for the SearchRecords API using AIP-160 syntax.

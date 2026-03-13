@@ -37,12 +37,13 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 		page           = 0
 		pageToken      = ""
 		all            = false
+		search         = ""
 		labels         []string
 		titles         []string
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [--page-size <size>] [--page-token <token>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
+		Use:                   "list [-v] [-p <working-project-slug>] [--include-archive] [-s <search>] [--page-size <size>] [--page-token <token>] [--all] [--labels <label1,label2>] [--keywords <keyword1,keyword2>]",
 		Short:                 "List records in a project",
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
@@ -65,6 +66,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			searchOptions := &api.SearchRecordsOptions{
 				Project:        proj,
 				IncludeArchive: includeArchive,
+				Search:         search,
 				Labels:         labels,
 				Titles:         titles,
 				OrderBy:        "",
@@ -185,6 +187,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.Flags().IntVar(&page, "page", 1, "[DEPRECATED] page number (use --page-token instead)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
 	cmd.Flags().BoolVar(&all, "all", false, "list all records (overrides pagination)")
+	cmd.Flags().StringVarP(&search, "search", "s", "", "JSON Logic search query (from frontend advanced search)")
 	cmd.Flags().StringSliceVar(&labels, "labels", []string{}, "filter by labels (comma-separated)")
 	cmd.Flags().StringSliceVar(&titles, "keywords", []string{}, "filter by keywords in titles (comma-separated)")
 
@@ -192,6 +195,9 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.MarkFlagsMutuallyExclusive("all", "page")
 	cmd.MarkFlagsMutuallyExclusive("all", "page-token")
 	cmd.MarkFlagsMutuallyExclusive("page", "page-token")
+	cmd.MarkFlagsMutuallyExclusive("search", "include-archive")
+	cmd.MarkFlagsMutuallyExclusive("search", "labels")
+	cmd.MarkFlagsMutuallyExclusive("search", "keywords")
 
 	return cmd
 }
