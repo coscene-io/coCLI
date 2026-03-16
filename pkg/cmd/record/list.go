@@ -15,6 +15,7 @@
 package record
 
 import (
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	mapset "github.com/deckarep/golang-set/v2"
 
@@ -155,9 +156,9 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				omitFields = append(omitFields, "ARCHIVED")
 			}
 
-			var creatorNames map[string]string
+			var userNames map[string]string
 			if outputFormat == "wide" || outputFormat == "csv" {
-				creatorNames = resolveCreatorNames(cmd, pm, records)
+				userNames = resolveUserNames(cmd, pm, records)
 			}
 
 			format, tableOpts := recordTableOpts(verbose, outputFormat, omitFields)
@@ -165,7 +166,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			if err != nil {
 				log.Fatal(err)
 			}
-			if err = p.PrintObj(printable.NewRecordWithCreators(records, nextPageToken, creatorNames), io.Out); err != nil {
+			if err = p.PrintObj(printable.NewRecordWithUserNames(records, nextPageToken, userNames), io.Out); err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
 
@@ -202,15 +203,21 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	return cmd
 }
 
-func resolveCreatorNames(cmd *cobra.Command, pm *config.ProfileManager, records []*openv1alpha1resource.Record) map[string]string {
+func resolveUserNames(cmd *cobra.Command, pm *config.ProfileManager, records []*openv1alpha1resource.Record) map[string]string {
 	userNameSet := mapset.NewSet[name.User]()
 	for _, r := range records {
-		if r.Creator == "" {
-			continue
+		if r.Creator != "" {
+			if u, err := name.NewUser(r.Creator); err == nil {
+				userNameSet.Add(*u)
+			}
 		}
-		u, err := name.NewUser(r.Creator)
-		if err == nil {
-			userNameSet.Add(*u)
+		for _, cfv := range r.CustomFieldValues {
+			if _, ok := cfv.Property.GetType().(*commons.Property_User); !ok {
+				continue
+			}
+			for _, id := range cfv.GetUser().GetIds() {
+				userNameSet.Add(name.User{UserID: id})
+			}
 		}
 	}
 	if userNameSet.Cardinality() == 0 {
@@ -219,14 +226,19 @@ func resolveCreatorNames(cmd *cobra.Command, pm *config.ProfileManager, records 
 
 	users, err := pm.UserCli().BatchGetUsers(cmd.Context(), userNameSet)
 	if err != nil {
-		log.Warnf("unable to resolve creator names: %v", err)
+		log.Warnf("unable to resolve user names: %v", err)
 		return nil
 	}
 
 	result := make(map[string]string, len(users))
-	for k, u := range users {
-		if u.Nickname != nil && *u.Nickname != "" {
-			result[k] = *u.Nickname
+	for resourceName, u := range users {
+		if u.Nickname == nil || *u.Nickname == "" {
+			continue
+		}
+		result[resourceName] = *u.Nickname
+		// Also index by bare UUID so custom field user IDs can be resolved.
+		if nu, err := name.NewUser(resourceName); err == nil {
+			result[nu.UserID] = *u.Nickname
 		}
 	}
 	return result

@@ -90,7 +90,7 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 
 		// Device
 		if r.Record.Device != nil {
-			rows = append(rows, []string{"Device:", r.Record.Device.Name})
+			rows = append(rows, []string{"Device:", r.Record.Device.SerialNumber})
 		}
 
 		// Labels

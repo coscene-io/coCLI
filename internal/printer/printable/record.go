@@ -45,7 +45,7 @@ const (
 type Record struct {
 	Delegate      []*openv1alpha1resource.Record
 	NextPageToken string
-	CreatorNames  map[string]string
+	UserNames     map[string]string
 }
 
 func NewRecord(records []*openv1alpha1resource.Record, nextPageToken string) *Record {
@@ -55,11 +55,11 @@ func NewRecord(records []*openv1alpha1resource.Record, nextPageToken string) *Re
 	}
 }
 
-func NewRecordWithCreators(records []*openv1alpha1resource.Record, nextPageToken string, creatorNames map[string]string) *Record {
+func NewRecordWithUserNames(records []*openv1alpha1resource.Record, nextPageToken string, userNames map[string]string) *Record {
 	return &Record{
 		Delegate:      records,
 		NextPageToken: nextPageToken,
-		CreatorNames:  creatorNames,
+		UserNames:     userNames,
 	}
 }
 
@@ -127,8 +127,8 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 		{
 			FieldName: "CREATOR",
 			FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-				if p.CreatorNames != nil {
-					if n, ok := p.CreatorNames[r.Creator]; ok {
+				if p.UserNames != nil {
+					if n, ok := p.UserNames[r.Creator]; ok {
 						return n
 					}
 				}
@@ -172,7 +172,7 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 				FieldName: "DEVICE",
 				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
 					if r.Device != nil {
-						return r.Device.Name
+						return r.Device.SerialNumber
 					}
 					return ""
 				},
@@ -211,7 +211,7 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 			fullColumnDefs = append(fullColumnDefs, table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
 				FieldName: colName,
 				FieldValueFunc: func(r *openv1alpha1resource.Record, opts *table.PrintOpts) string {
-					return extractCustomFieldValue(r, colName, opts)
+					return p.extractCustomFieldValue(r, colName, opts)
 				},
 				TrimSize: recordTitleTrimSize,
 			})
@@ -236,7 +236,7 @@ func collectCustomFieldColumns(records []*openv1alpha1resource.Record) []string 
 	return columns
 }
 
-func extractCustomFieldValue(r *openv1alpha1resource.Record, propertyName string, opts *table.PrintOpts) string {
+func (p *Record) extractCustomFieldValue(r *openv1alpha1resource.Record, propertyName string, opts *table.PrintOpts) string {
 	sep := multiValueSep(opts)
 	for _, cfv := range r.CustomFieldValues {
 		if cfv.Property.GetName() != propertyName {
@@ -266,7 +266,16 @@ func extractCustomFieldValue(r *openv1alpha1resource.Record, propertyName string
 				return cfv.GetTime().GetValue().AsTime().In(time.Local).Format(time.RFC3339)
 			}
 		case *commons.Property_User:
-			return strings.Join(cfv.GetUser().GetIds(), sep)
+			ids := cfv.GetUser().GetIds()
+			resolved := lo.Map(ids, func(id string, _ int) string {
+				if p.UserNames != nil {
+					if n, ok := p.UserNames[id]; ok {
+						return n
+					}
+				}
+				return id
+			})
+			return strings.Join(resolved, sep)
 		}
 	}
 	return ""

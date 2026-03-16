@@ -66,9 +66,10 @@ func TestExtractCustomFieldValue_Text(t *testing.T) {
 			Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "red"}},
 		},
 	})
+	p := &Record{}
 	tableOpts := &table.PrintOpts{}
-	assert.Equal(t, "red", extractCustomFieldValue(r, "color", tableOpts))
-	assert.Equal(t, "", extractCustomFieldValue(r, "missing", tableOpts))
+	assert.Equal(t, "red", p.extractCustomFieldValue(r, "color", tableOpts))
+	assert.Equal(t, "", p.extractCustomFieldValue(r, "missing", tableOpts))
 }
 
 func TestExtractCustomFieldValue_Number(t *testing.T) {
@@ -78,7 +79,8 @@ func TestExtractCustomFieldValue_Number(t *testing.T) {
 			Value:    &commons.CustomFieldValue_Number{Number: &commons.NumberValue{Value: 42.5}},
 		},
 	})
-	assert.Equal(t, "42.5", extractCustomFieldValue(r, "count", &table.PrintOpts{}))
+	p := &Record{}
+	assert.Equal(t, "42.5", p.extractCustomFieldValue(r, "count", &table.PrintOpts{}))
 }
 
 func TestExtractCustomFieldValue_Enum_Single(t *testing.T) {
@@ -94,7 +96,8 @@ func TestExtractCustomFieldValue_Enum_Single(t *testing.T) {
 			Value: &commons.CustomFieldValue_Enums{Enums: &commons.EnumValue{Id: "p1"}},
 		},
 	})
-	assert.Equal(t, "High", extractCustomFieldValue(r, "priority", &table.PrintOpts{}))
+	p := &Record{}
+	assert.Equal(t, "High", p.extractCustomFieldValue(r, "priority", &table.PrintOpts{}))
 }
 
 func TestExtractCustomFieldValue_Enum_Multiple(t *testing.T) {
@@ -110,8 +113,9 @@ func TestExtractCustomFieldValue_Enum_Multiple(t *testing.T) {
 			Value: &commons.CustomFieldValue_Enums{Enums: &commons.EnumValue{Ids: []string{"t1", "t2"}}},
 		},
 	})
-	assert.Equal(t, "Alpha, Beta", extractCustomFieldValue(r, "tags", &table.PrintOpts{}))
-	assert.Equal(t, "Alpha;Beta", extractCustomFieldValue(r, "tags", &table.PrintOpts{CSV: true}))
+	p := &Record{}
+	assert.Equal(t, "Alpha, Beta", p.extractCustomFieldValue(r, "tags", &table.PrintOpts{}))
+	assert.Equal(t, "Alpha;Beta", p.extractCustomFieldValue(r, "tags", &table.PrintOpts{CSV: true}))
 }
 
 func TestExtractCustomFieldValue_Time(t *testing.T) {
@@ -122,8 +126,9 @@ func TestExtractCustomFieldValue_Time(t *testing.T) {
 			Value:    &commons.CustomFieldValue_Time{Time: &commons.TimeValue{Value: timestamppb.New(ts)}},
 		},
 	})
+	p := &Record{}
 	expected := ts.In(time.Local).Format(time.RFC3339)
-	assert.Equal(t, expected, extractCustomFieldValue(r, "due", &table.PrintOpts{}))
+	assert.Equal(t, expected, p.extractCustomFieldValue(r, "due", &table.PrintOpts{}))
 }
 
 func TestExtractCustomFieldValue_User(t *testing.T) {
@@ -133,8 +138,13 @@ func TestExtractCustomFieldValue_User(t *testing.T) {
 			Value:    &commons.CustomFieldValue_User{User: &commons.UserValue{Ids: []string{"u1", "u2"}}},
 		},
 	})
-	assert.Equal(t, "u1, u2", extractCustomFieldValue(r, "assignee", &table.PrintOpts{}))
-	assert.Equal(t, "u1;u2", extractCustomFieldValue(r, "assignee", &table.PrintOpts{CSV: true}))
+
+	p := &Record{UserNames: map[string]string{"u1": "Alice", "u2": "Bob"}}
+	assert.Equal(t, "Alice, Bob", p.extractCustomFieldValue(r, "assignee", &table.PrintOpts{}))
+	assert.Equal(t, "Alice;Bob", p.extractCustomFieldValue(r, "assignee", &table.PrintOpts{CSV: true}))
+
+	pNoNames := &Record{}
+	assert.Equal(t, "u1, u2", pNoNames.extractCustomFieldValue(r, "assignee", &table.PrintOpts{}))
 }
 
 func getHeaders(tbl table.Table) []string {
