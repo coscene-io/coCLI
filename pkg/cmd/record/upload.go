@@ -37,10 +37,10 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <record-resource-name/id> <path> [-p <working-project-slug>] [--dir <target-dir>] [-H]",
+		Use:                   "upload <record-resource-name/id> <path>... [-p <working-project-slug>] [--dir <target-dir>] [-H]",
 		Short:                 "Upload files or directory to a record",
 		DisableFlagsInUseLine: true,
-		Args:                  cobra.ExactArgs(2),
+		Args:                  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
 			pm, _ := getProvider(*cfgPath).GetProfileManager()
@@ -57,9 +57,14 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			} else if err != nil {
 				log.Fatalf("unable to get record name from %s: %v", args[0], err)
 			}
-			filePath, err := filepath.Abs(args[1])
-			if err != nil {
-				log.Fatalf("unable to get absolute path: %v", err)
+
+			var filePaths []string
+			for _, arg := range args[1:] {
+				absPath, err := filepath.Abs(arg)
+				if err != nil {
+					log.Fatalf("unable to get absolute path for %s: %v", arg, err)
+				}
+				filePaths = append(filePaths, absPath)
 			}
 
 			io.Println("-------------------------------------------------------------")
@@ -77,7 +82,7 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 
 			// Upload files
 			if err := um.Run(cmd.Context(), upload_utils.NewRecordParent(recordName), &upload_utils.FileOpts{
-				Path:          filePath,
+				Paths:         filePaths,
 				Recursive:     true,
 				IncludeHidden: includeHidden,
 				TargetDir:     targetDir,
