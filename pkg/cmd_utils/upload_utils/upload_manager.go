@@ -37,6 +37,7 @@ import (
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/getsentry/sentry-go"
+	"github.com/mattn/go-runewidth"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/muesli/reflow/wordwrap"
@@ -985,6 +986,8 @@ func (um *UploadManager) View() string {
 	skipCount := 0
 	successCount := 0
 	spinnerFrame := spinnerFrames[um.spinnerIdx]
+	const progressBarPrefixSuffix = 12
+
 	for _, k := range um.fileList {
 		// Use remote path for display if available, fallback to local path
 		displayPath := um.fileInfos[k].RemotePath
@@ -992,31 +995,46 @@ func (um *UploadManager) View() string {
 			displayPath = k
 		}
 
-		statusStrLen := um.windowWidth - len(displayPath) - 1
+		pathWidth := runewidth.StringWidth(displayPath)
+		minStatusWidth := 15
+		truncateWidth := max(um.windowWidth-minStatusWidth-2, 0)
+		if pathWidth > truncateWidth {
+			displayPath = runewidth.Truncate(displayPath, truncateWidth, "...")
+			pathWidth = runewidth.StringWidth(displayPath)
+		}
+		statusAvail := max(um.windowWidth-pathWidth-2, 0) // 2 for ": "
+		rightAlign := func(text string) string {
+			w := runewidth.StringWidth(text)
+			if w > statusAvail {
+				return runewidth.Truncate(text, statusAvail, "")
+			}
+			return strings.Repeat(" ", statusAvail-w) + text
+		}
+
 		switch um.fileInfos[k].Status {
 		case Unprocessed:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Preparing for upload"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Preparing for upload"+spinnerFrame))
 		case CalculatingSha256:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Calculating sha256"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Calculating sha256"+spinnerFrame))
 		case PreviouslyUploaded:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Previously uploaded, skipping")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Previously uploaded, skipping"))
 			skipCount++
 		case WaitingForUpload:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Waiting for upload")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Waiting for upload"))
 		case UploadCompleted:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload completed")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Upload completed"))
 			successCount++
 		case MultipartCompletionInProgress:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Completing multipart upload"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Completing multipart upload"+spinnerFrame))
 		case UploadFailed:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload failed")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Upload failed"))
 		case UploadInProgress:
 			progress := um.calculateUploadProgress(k)
-			barWidth := max(um.windowWidth-len(k)-12, 10)                       // Adjust for label and percentage, make sure it is at least 10
-			progressCount := min(int(progress*float64(barWidth)/100), barWidth) // min used to prevent float rounding errors
+			barWidth := max(um.windowWidth-pathWidth-progressBarPrefixSuffix, 10)
+			progressCount := min(int(progress*float64(barWidth)/100), barWidth)
 			emptyBar := strings.Repeat("-", barWidth-progressCount)
-			progressBar := strings.Repeat("█", progressCount)
-			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", displayPath, progressBar, emptyBar, 6, progress)
+			progressBar := strings.Repeat("=", progressCount)
+			s += fmt.Sprintf("%s: [%s%s] %6.2f%%\n", displayPath, progressBar, emptyBar, progress)
 		}
 	}
 
