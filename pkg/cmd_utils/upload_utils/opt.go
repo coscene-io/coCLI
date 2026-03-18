@@ -79,9 +79,9 @@ func (opt *UploadManagerOpts) ShouldUseInteractiveMode() bool {
 }
 
 type FileOpts struct {
-	Path          string
+	Paths         []string
 	relDir        string
-	expandedPaths []string // Populated if Path contains glob patterns
+	expandedPaths []string // Populated if single Path contains glob patterns
 	Recursive     bool
 	IncludeHidden bool
 	TargetDir     string // Target directory in remote (e.g., "data/" to upload to data/ subdirectory)
@@ -90,15 +90,12 @@ type FileOpts struct {
 	AdditionalUploads map[string]string
 }
 
-// GetPaths returns the list of paths to upload. If glob was used, returns expanded paths; otherwise returns single Path.
+// GetPaths returns the list of paths to upload.
 func (opt *FileOpts) GetPaths() []string {
 	if len(opt.expandedPaths) > 0 {
 		return opt.expandedPaths
 	}
-	if opt.Path != "" {
-		return []string{opt.Path}
-	}
-	return nil
+	return opt.Paths
 }
 
 // RelDir returns the base directory for computing relative paths.
@@ -107,37 +104,45 @@ func (opt *FileOpts) RelDir() string {
 }
 
 func (opt *FileOpts) Valid() error {
-	if opt.Path == "" && len(opt.AdditionalUploads) == 0 {
+	if len(opt.Paths) == 0 && len(opt.AdditionalUploads) == 0 {
 		return errors.New("file path empty")
 	}
 
-	if opt.Path == "" {
+	if len(opt.Paths) == 0 {
 		return nil
 	}
 
-	// Detect glob pattern
-	if hasGlobPattern(opt.Path) {
-		matches, err := filepath.Glob(opt.Path)
-		if err != nil {
-			return errors.Wrap(err, "invalid glob pattern")
-		}
-		if len(matches) == 0 {
-			return errors.New("glob pattern matched no files")
+	// Single path: may be a glob pattern, directory, or file
+	if len(opt.Paths) == 1 {
+		path := opt.Paths[0]
+
+		if hasGlobPattern(path) {
+			matches, err := filepath.Glob(path)
+			if err != nil {
+				return errors.Wrap(err, "invalid glob pattern")
+			}
+			if len(matches) == 0 {
+				return errors.New("glob pattern matched no files")
+			}
+			opt.expandedPaths = matches
+			opt.relDir = globBaseDir(path)
+			return nil
 		}
 
-		opt.expandedPaths = matches
-		// relDir is the base directory before the first wildcard
-		opt.relDir = globBaseDir(opt.Path)
+		if _, err := os.Stat(path); err != nil {
+			return errors.Wrap(err, "invalid file path")
+		}
+		opt.relDir = filepath.Dir(path)
 		return nil
 	}
 
-	// Regular path (no glob)
-	_, err := os.Stat(opt.Path)
-	if err != nil {
-		return errors.Wrap(err, "invalid file path")
+	// Multiple paths (e.g. shell-expanded glob)
+	for _, p := range opt.Paths {
+		if _, err := os.Stat(p); err != nil {
+			return errors.Wrapf(err, "invalid path: %s", p)
+		}
 	}
-	// Always use parent directory as relative base to preserve directory/file names
-	opt.relDir = filepath.Dir(opt.Path)
+	opt.relDir = commonDir(opt.Paths)
 	return nil
 }
 
@@ -156,7 +161,26 @@ func globBaseDir(pattern string) string {
 
 	beforeWildcard := pattern[:wildcardPos]
 
-	// If it ends with a separator, remove it; otherwise get the directory
-	beforeWildcard = strings.TrimRight(beforeWildcard, string(filepath.Separator))
+	if beforeWildcard == "" || beforeWildcard[len(beforeWildcard)-1] == filepath.Separator {
+		return filepath.Clean(beforeWildcard)
+	}
 	return filepath.Dir(beforeWildcard)
+}
+
+// commonDir returns the deepest common ancestor directory of all paths.
+func commonDir(paths []string) string {
+	if len(paths) == 0 {
+		return "."
+	}
+	dir := filepath.Dir(paths[0])
+	for _, p := range paths[1:] {
+		for !strings.HasPrefix(p, dir+string(filepath.Separator)) {
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				return dir
+			}
+			dir = parent
+		}
+	}
+	return dir
 }

@@ -37,11 +37,11 @@ func TestGlobBaseDir(t *testing.T) {
 		pattern string
 		want    string
 	}{
-		{"a/*", "."},
-		{"a/b/*.txt", "a"},
-		{"a/**/*.txt", "."},
+		{"a/*", "a"},
+		{"a/b/*.txt", "a/b"},
+		{"a/**/*.txt", "a"},
 		{"*.txt", "."},
-		{"/tmp/data/*.csv", "/tmp"},
+		{"/tmp/data/*.csv", "/tmp/data"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.pattern, func(t *testing.T) {
@@ -70,29 +70,29 @@ func TestUploadManagerOpts_Valid(t *testing.T) {
 }
 
 func TestFileOpts_Valid(t *testing.T) {
-	t.Run("empty path no additional", func(t *testing.T) {
+	t.Run("empty paths no additional", func(t *testing.T) {
 		opt := &FileOpts{}
 		assert.Error(t, opt.Valid())
 	})
 
-	t.Run("empty path with additional uploads", func(t *testing.T) {
+	t.Run("empty paths with additional uploads", func(t *testing.T) {
 		opt := &FileOpts{AdditionalUploads: map[string]string{"a": "b"}}
 		require.NoError(t, opt.Valid())
 	})
 
-	t.Run("valid file path", func(t *testing.T) {
+	t.Run("single file path", func(t *testing.T) {
 		dir := t.TempDir()
 		f := filepath.Join(dir, "test.txt")
 		require.NoError(t, os.WriteFile(f, []byte("x"), 0644))
 
-		opt := &FileOpts{Path: f}
+		opt := &FileOpts{Paths: []string{f}}
 		require.NoError(t, opt.Valid())
 		assert.Equal(t, dir, opt.RelDir())
 		assert.Equal(t, []string{f}, opt.GetPaths())
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		opt := &FileOpts{Path: "/nonexistent/file"}
+		opt := &FileOpts{Paths: []string{"/nonexistent/file"}}
 		assert.Error(t, opt.Valid())
 	})
 
@@ -102,14 +102,37 @@ func TestFileOpts_Valid(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "c.log"), []byte("c"), 0644))
 
-		opt := &FileOpts{Path: filepath.Join(dir, "*.txt")}
+		opt := &FileOpts{Paths: []string{filepath.Join(dir, "*.txt")}}
 		require.NoError(t, opt.Valid())
 		assert.Len(t, opt.GetPaths(), 2)
+		assert.Equal(t, dir, opt.RelDir())
 	})
 
 	t.Run("glob no match", func(t *testing.T) {
 		dir := t.TempDir()
-		opt := &FileOpts{Path: filepath.Join(dir, "*.xyz")}
+		opt := &FileOpts{Paths: []string{filepath.Join(dir, "*.xyz")}}
+		assert.Error(t, opt.Valid())
+	})
+
+	t.Run("multiple paths shell expansion", func(t *testing.T) {
+		dir := t.TempDir()
+		f1 := filepath.Join(dir, "a.txt")
+		f2 := filepath.Join(dir, "b.txt")
+		require.NoError(t, os.WriteFile(f1, []byte("a"), 0644))
+		require.NoError(t, os.WriteFile(f2, []byte("b"), 0644))
+
+		opt := &FileOpts{Paths: []string{f1, f2}}
+		require.NoError(t, opt.Valid())
+		assert.Equal(t, dir, opt.RelDir())
+		assert.Equal(t, []string{f1, f2}, opt.GetPaths())
+	})
+
+	t.Run("multiple paths bad entry", func(t *testing.T) {
+		dir := t.TempDir()
+		f1 := filepath.Join(dir, "a.txt")
+		require.NoError(t, os.WriteFile(f1, []byte("a"), 0644))
+
+		opt := &FileOpts{Paths: []string{f1, filepath.Join(dir, "nope.txt")}}
 		assert.Error(t, opt.Valid())
 	})
 }
@@ -117,6 +140,25 @@ func TestFileOpts_Valid(t *testing.T) {
 func TestFileOpts_GetPaths_Empty(t *testing.T) {
 	opt := &FileOpts{}
 	assert.Nil(t, opt.GetPaths())
+}
+
+func TestCommonDir(t *testing.T) {
+	tests := []struct {
+		name  string
+		paths []string
+		want  string
+	}{
+		{"empty", nil, "."},
+		{"single file", []string{"/a/b/file.txt"}, "/a/b"},
+		{"siblings", []string{"/a/b/f1", "/a/b/f2"}, "/a/b"},
+		{"nested", []string{"/a/b/c/f1", "/a/b/d/f2"}, "/a/b"},
+		{"divergent", []string{"/a/x/f1", "/b/y/f2"}, "/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, commonDir(tt.paths))
+		})
+	}
 }
 
 func TestUploadManagerOpts_ShouldUseInteractiveMode(t *testing.T) {
