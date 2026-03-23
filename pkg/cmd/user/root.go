@@ -33,12 +33,12 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	return cmd
 }
 
-func userTableOpts(verbose bool, outputFormat string) *table.PrintOpts {
+func userTableOpts(verbose bool, outputFormat string) (string, *table.PrintOpts) {
 	opts := &table.PrintOpts{Verbose: verbose}
 	if outputFormat == "wide" {
 		opts.Wide = true
-	} else {
-		opts.OmitFields = []string{"EMAIL", "PHONE", "CREATE TIME"}
+		return "table", opts
 	}
-	return opts
+	opts.OmitFields = []string{"EMAIL", "PHONE", "CREATE TIME"}
+	return outputFormat, opts
 }

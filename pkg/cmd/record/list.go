@@ -15,14 +15,17 @@
 package record
 
 import (
+	commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
-	"github.com/coscene-io/cocli/internal/printer/table"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -152,14 +155,18 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			if !includeArchive {
 				omitFields = append(omitFields, "ARCHIVED")
 			}
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
-				Verbose:    verbose,
-				OmitFields: omitFields,
-			}})
+
+			var userNames map[string]string
+			if outputFormat == "wide" || outputFormat == "csv" {
+				userNames = resolveUserNames(cmd, pm, records)
+			}
+
+			format, tableOpts := recordTableOpts(verbose, outputFormat, omitFields)
+			p, err := printer.Printer(format, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}
-			if err = p.PrintObj(printable.NewRecord(records, nextPageToken), io.Out); err != nil {
+			if err = p.PrintObj(printable.NewRecordWithUserNames(records, nextPageToken, userNames), io.Out); err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
 
@@ -180,7 +187,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().BoolVar(&includeArchive, "include-archive", false, "include archived records")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|json|yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "output format (table|wide|csv|json|yaml)")
 	cmd.Flags().IntVar(&pageSize, "page-size", 0, "number of records per page (10-100)")
 	cmd.Flags().IntVar(&page, "page", 1, "[DEPRECATED] page number (use --page-token instead)")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "page token for pagination (get from previous response)")
@@ -194,4 +201,45 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.MarkFlagsMutuallyExclusive("page", "page-token")
 
 	return cmd
+}
+
+func resolveUserNames(cmd *cobra.Command, pm *config.ProfileManager, records []*openv1alpha1resource.Record) map[string]string {
+	userNameSet := mapset.NewSet[name.User]()
+	for _, r := range records {
+		if r.Creator != "" {
+			if u, err := name.NewUser(r.Creator); err == nil {
+				userNameSet.Add(*u)
+			}
+		}
+		for _, cfv := range r.CustomFieldValues {
+			if _, ok := cfv.Property.GetType().(*commons.Property_User); !ok {
+				continue
+			}
+			for _, id := range cfv.GetUser().GetIds() {
+				userNameSet.Add(name.User{UserID: id})
+			}
+		}
+	}
+	if userNameSet.Cardinality() == 0 {
+		return nil
+	}
+
+	users, err := pm.UserCli().BatchGetUsers(cmd.Context(), userNameSet)
+	if err != nil {
+		log.Warnf("unable to resolve user names: %v", err)
+		return nil
+	}
+
+	result := make(map[string]string, len(users))
+	for resourceName, u := range users {
+		if u.Nickname == nil || *u.Nickname == "" {
+			continue
+		}
+		result[resourceName] = *u.Nickname
+		// Also index by bare UUID so custom field user IDs can be resolved.
+		if nu, err := name.NewUser(resourceName); err == nil {
+			result[nu.UserID] = *u.Nickname
+		}
+	}
+	return result
 }

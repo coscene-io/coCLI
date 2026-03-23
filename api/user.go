@@ -58,24 +58,31 @@ func NewUserClient(userServiceClient openv1alpha1connect.UserServiceClient) User
 	}
 }
 
+const batchGetUsersChunkSize = 100
+
 func (c *userClient) BatchGetUsers(ctx context.Context, userNameSet mapset.Set[name.User]) (map[string]*openv1alpha1resource.User, error) {
 	userNameList := userNameSet.ToSlice()
 	if len(userNameList) == 0 {
 		return map[string]*openv1alpha1resource.User{}, nil
 	}
-	req := connect.NewRequest(&openv1alpha1service.BatchGetUsersRequest{
-		Names: lo.Map(userNameList, func(u name.User, _ int) string {
-			return u.String()
-		}),
-	})
-	res, err := c.userServiceClient.BatchGetUsers(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 
-	return lo.Associate(res.Msg.Users, func(u *openv1alpha1resource.User) (string, *openv1alpha1resource.User) {
-		return u.Name, u
-	}), nil
+	result := make(map[string]*openv1alpha1resource.User, len(userNameList))
+	chunks := lo.Chunk(userNameList, batchGetUsersChunkSize)
+	for _, chunk := range chunks {
+		req := connect.NewRequest(&openv1alpha1service.BatchGetUsersRequest{
+			Names: lo.Map(chunk, func(u name.User, _ int) string {
+				return u.String()
+			}),
+		})
+		res, err := c.userServiceClient.BatchGetUsers(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range res.Msg.Users {
+			result[u.Name] = u
+		}
+	}
+	return result, nil
 }
 
 func (c *userClient) ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error) {

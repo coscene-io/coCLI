@@ -32,14 +32,24 @@ type Options struct {
 }
 
 func Printer(format string, opts *Options) (Interface, error) {
+	tableOpts := opts.TableOpts
+	if tableOpts == nil {
+		tableOpts = &table.PrintOpts{}
+	}
+
 	switch format {
-	case "", "table", "wide":
-		return &TablePrinter{Opts: opts.TableOpts}, nil
+	case "", "table":
+		return &TablePrinter{Opts: tableOpts}, nil
 	case "json":
 		return &JSONPrinter{}, nil
 	case "yaml":
 		return &YAMLPrinter{}, nil
+	case "csv":
+		csvOpts := *tableOpts
+		csvOpts.Wide = true
+		csvOpts.CSV = true
+		return &CSVPrinter{Opts: &csvOpts}, nil
 	default:
-		return nil, fmt.Errorf("unsupported output format %q: valid options are table, wide, json, yaml", format)
+		return nil, fmt.Errorf("unsupported output format %q", format)
 	}
 }

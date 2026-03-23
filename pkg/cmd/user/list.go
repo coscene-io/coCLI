@@ -71,7 +71,8 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("unable to list users: %v", err)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: userTableOpts(verbose, outputFormat)})
+			format, tableOpts := userTableOpts(verbose, outputFormat)
+			p, err := printer.Printer(format, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}

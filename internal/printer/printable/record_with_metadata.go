@@ -15,6 +15,7 @@
 package printable
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/printer/utils"
 	"github.com/samber/lo"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -41,63 +44,34 @@ func NewRecordWithMetadata(record *openv1alpha1resource.Record, url string) *Rec
 	}
 }
 
-// ToProtoMessage returns a Struct proto message that includes both record and URL
+// ToProtoMessage serializes the full Record proto and injects the URL field.
 func (r *RecordWithMetadata) ToProtoMessage() proto.Message {
-	// Create a struct to hold both record data and URL
-	recordStruct, _ := structpb.NewStruct(nil)
-
-	// Convert record fields to struct fields
-	if r.Record != nil {
-		recordStruct.Fields = map[string]*structpb.Value{
-			"name":        structpb.NewStringValue(r.Record.Name),
-			"title":       structpb.NewStringValue(r.Record.Title),
-			"description": structpb.NewStringValue(r.Record.Description),
-			"is_archived": structpb.NewBoolValue(r.Record.IsArchived),
-		}
-
-		// Add device name if present
-		if r.Record.Device != nil {
-			recordStruct.Fields["device"] = structpb.NewStructValue(&structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"name": structpb.NewStringValue(r.Record.Device.Name),
-				},
-			})
-		}
-
-		// Add labels
-		if len(r.Record.Labels) > 0 {
-			labelList := make([]*structpb.Value, 0, len(r.Record.Labels))
-			for _, label := range r.Record.Labels {
-				labelStruct, _ := structpb.NewStruct(map[string]interface{}{
-					"display_name": label.DisplayName,
-					"name":         label.Name,
-				})
-				labelList = append(labelList, structpb.NewStructValue(labelStruct))
-			}
-			recordStruct.Fields["labels"] = structpb.NewListValue(&structpb.ListValue{Values: labelList})
-		}
-
-		// Add custom field values
-		if len(r.Record.CustomFieldValues) > 0 {
-			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
-			recordStruct.Fields["custom_field_values"] = structpb.NewListValue(&structpb.ListValue{Values: customFieldValues})
-		}
-
-		// Add times
-		if r.Record.CreateTime != nil {
-			recordStruct.Fields["create_time"] = structpb.NewStringValue(r.Record.CreateTime.AsTime().Format(time.RFC3339))
-		}
-		if r.Record.UpdateTime != nil {
-			recordStruct.Fields["update_time"] = structpb.NewStringValue(r.Record.UpdateTime.AsTime().Format(time.RFC3339))
-		}
+	if r.Record == nil {
+		return &structpb.Struct{}
 	}
 
-	// Add URL
+	jsonBytes, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(r.Record)
+	if err != nil {
+		log.Warnf("failed to marshal record: %v", err)
+		return &structpb.Struct{}
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		log.Warnf("failed to unmarshal record JSON: %v", err)
+		return &structpb.Struct{}
+	}
+
 	if r.URL != "" {
-		recordStruct.Fields["url"] = structpb.NewStringValue(r.URL)
+		data["url"] = r.URL
 	}
 
-	return recordStruct
+	s, err := structpb.NewStruct(data)
+	if err != nil {
+		log.Warnf("failed to create struct: %v", err)
+		return &structpb.Struct{}
+	}
+	return s
 }
 
 // ToTable implements the table output format
@@ -116,7 +90,7 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 
 		// Device
 		if r.Record.Device != nil {
-			rows = append(rows, []string{"Device:", r.Record.Device.Name})
+			rows = append(rows, []string{"Device:", r.Record.Device.SerialNumber})
 		}
 
 		// Labels
@@ -131,8 +105,24 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 		if len(r.Record.CustomFieldValues) > 0 {
 			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
 			rows = append(rows, []string{"Custom Field Values:", strings.Join(lo.Map(customFieldValues, func(c *structpb.Value, _ int) string {
-				return fmt.Sprintf("(%s: %v)", c.AsInterface().(map[string]any)["property"].(string), c.AsInterface().(map[string]any)["value"])
+				m := c.AsInterface().(map[string]any)
+				return fmt.Sprintf("(%s: %v)", m["property"], m["value"])
 			}), ", ")})
+		}
+
+		// Creator
+		if r.Record.Creator != "" {
+			rows = append(rows, []string{"Creator:", r.Record.Creator})
+		}
+
+		// Sizes
+		rows = append(rows, []string{"Byte Size:", utils.FormatBytes(uint64(r.Record.ByteSize))})
+		rows = append(rows, []string{"File Count:", fmt.Sprintf("%d", r.Record.FileSize)})
+
+		// Summary
+		if r.Record.Summary != nil {
+			rows = append(rows, []string{"Files Duration:", fmt.Sprintf("%ds", r.Record.Summary.FilesDuration)})
+			rows = append(rows, []string{"Play Duration:", fmt.Sprintf("%ds", r.Record.Summary.PlayDuration)})
 		}
 
 		// Times
