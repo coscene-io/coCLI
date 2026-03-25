@@ -43,9 +43,10 @@ const (
 )
 
 type Record struct {
-	Delegate      []*openv1alpha1resource.Record
-	NextPageToken string
-	UserNames     map[string]string
+	Delegate                  []*openv1alpha1resource.Record
+	NextPageToken             string
+	UserNames                 map[string]string
+	CSVCustomFieldSchemaOrder []string
 }
 
 func NewRecord(records []*openv1alpha1resource.Record, nextPageToken string) *Record {
@@ -205,7 +206,7 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 		}
 		fullColumnDefs = append(fullColumnDefs, csvOnlyDefs...)
 
-		cfColumns := collectCustomFieldColumns(p.Delegate)
+		cfColumns := csvCustomFieldColumnOrder(p.CSVCustomFieldSchemaOrder, p.Delegate)
 		for _, col := range cfColumns {
 			colName := col
 			fullColumnDefs = append(fullColumnDefs, table.ColumnDefinitionFull[*openv1alpha1resource.Record]{
@@ -219,6 +220,29 @@ func (p *Record) ToTable(opts *table.PrintOpts) table.Table {
 	}
 
 	return table.ColumnDefs2Table(fullColumnDefs, p.Delegate, opts)
+}
+
+func csvCustomFieldColumnOrder(schemaOrder []string, records []*openv1alpha1resource.Record) []string {
+	if schemaOrder == nil {
+		return collectCustomFieldColumns(records)
+	}
+	seen := make(map[string]bool, len(schemaOrder)+8)
+	out := make([]string, 0, len(schemaOrder)+8)
+	for _, n := range schemaOrder {
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	for _, n := range collectCustomFieldColumns(records) {
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
 }
 
 func collectCustomFieldColumns(records []*openv1alpha1resource.Record) []string {
