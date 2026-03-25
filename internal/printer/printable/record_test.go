@@ -59,6 +59,79 @@ func TestCollectCustomFieldColumns_Empty(t *testing.T) {
 	assert.Empty(t, cols)
 }
 
+func TestCsvCustomFieldColumnOrder_NilUsesDataOnly(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{Property: &commons.Property{Name: "a", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+		}),
+	}
+	assert.Equal(t, []string{"a"}, csvCustomFieldColumnOrder(nil, records))
+}
+
+func TestCsvCustomFieldColumnOrder_SchemaIncludesNeverSetFields(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+		}),
+		makeTestRecord("r2", "rec2", nil),
+	}
+	schema := []string{"unused", "color"}
+	assert.Equal(t, []string{"unused", "color"}, csvCustomFieldColumnOrder(schema, records))
+}
+
+func TestCsvCustomFieldColumnOrder_AppendsOrphanFromRecords(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{Property: &commons.Property{Name: "only_in_data", Type: &commons.Property_Text{Text: &commons.TextType{}}}},
+		}),
+	}
+	assert.Equal(t, []string{"in_schema", "only_in_data"}, csvCustomFieldColumnOrder([]string{"in_schema"}, records))
+}
+
+func TestCsvCustomFieldColumnOrder_DedupSchemaAndSkipsEmptyNames(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", nil),
+	}
+	schema := []string{"x", "", "x", "y"}
+	assert.Equal(t, []string{"x", "y"}, csvCustomFieldColumnOrder(schema, records))
+}
+
+func TestRecord_ToTable_CSV_WithSchemaOrder(t *testing.T) {
+	records := []*openv1alpha1resource.Record{
+		makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
+			{
+				Property: &commons.Property{Name: "color", Type: &commons.Property_Text{Text: &commons.TextType{}}},
+				Value:    &commons.CustomFieldValue_Text{Text: &commons.TextValue{Value: "blue"}},
+			},
+		}),
+		makeTestRecord("r2", "rec2", nil),
+	}
+
+	p := NewRecord(records, "")
+	p.CSVCustomFieldSchemaOrder = []string{"ghost", "color"}
+	tbl := p.ToTable(&table.PrintOpts{Wide: true, CSV: true})
+	headers := getHeaders(tbl)
+
+	ghostIdx, colorIdx := -1, -1
+	for i, h := range headers {
+		switch h {
+		case "ghost":
+			ghostIdx = i
+		case "color":
+			colorIdx = i
+		}
+	}
+	require.NotEqual(t, -1, ghostIdx)
+	require.NotEqual(t, -1, colorIdx)
+	assert.Less(t, ghostIdx, colorIdx)
+
+	require.Len(t, tbl.Rows, 2)
+	assert.Equal(t, "", tbl.Rows[0][ghostIdx])
+	assert.Equal(t, "blue", tbl.Rows[0][colorIdx])
+	assert.Equal(t, "", tbl.Rows[1][ghostIdx])
+	assert.Equal(t, "", tbl.Rows[1][colorIdx])
+}
+
 func TestExtractCustomFieldValue_Text(t *testing.T) {
 	r := makeTestRecord("r1", "rec1", []*commons.CustomFieldValue{
 		{

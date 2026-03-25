@@ -168,7 +168,24 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			if err != nil {
 				log.Fatal(err)
 			}
-			if err = p.PrintObj(printable.NewRecordWithUserNames(records, nextPageToken, userNames), io.Out); err != nil {
+
+			recObj := printable.NewRecordWithUserNames(records, nextPageToken, userNames)
+			if outputFormat == "csv" {
+				schema, err := pm.CustomFieldCli().GetRecordCustomFieldSchema(cmd.Context(), proj)
+				if err != nil {
+					log.Warnf("unable to get record custom field schema, CSV column order may be unstable: %v", err)
+				} else {
+					names := make([]string, 0, len(schema.GetProperties()))
+					for _, prop := range schema.GetProperties() {
+						if n := prop.GetName(); n != "" {
+							names = append(names, n)
+						}
+					}
+					recObj.CSVCustomFieldSchemaOrder = names
+				}
+			}
+
+			if err = p.PrintObj(recObj, io.Out); err != nil {
 				log.Fatalf("unable to print records: %v", err)
 			}
 
