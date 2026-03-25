@@ -165,6 +165,11 @@ func (pm *ProfileManager) RoleCli() api.RoleInterface {
 	return pm.GetCurrentProfile().RoleCli()
 }
 
+// CustomFieldCli return custom field client of current profile.
+func (pm *ProfileManager) CustomFieldCli() api.CustomFieldInterface {
+	return pm.GetCurrentProfile().CustomFieldCli()
+}
+
 // GetCurrentProfile return current profile of profile manager.
 func (pm *ProfileManager) GetCurrentProfile() *Profile {
 	for i, profile := range pm.Profiles {

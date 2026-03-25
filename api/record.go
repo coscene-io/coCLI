@@ -31,6 +31,8 @@ import (
 	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/genproto/protobuf/field_mask"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type RecordInterface interface {
@@ -38,7 +40,7 @@ type RecordInterface interface {
 	Get(ctx context.Context, recordName *name.Record) (*openv1alpha1resource.Record, error)
 
 	// Create creates a record.
-	Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labelDisplayNames []*openv1alpha1resource.Label) (*openv1alpha1resource.Record, error)
+	Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labelDisplayNames []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue) (*openv1alpha1resource.Record, error)
 
 	// Copy copies a record to target project.
 	Copy(ctx context.Context, recordName *name.Record, targetProjectName *name.Project) (*openv1alpha1resource.Record, error)
@@ -71,7 +73,7 @@ type RecordInterface interface {
 	DeleteFile(ctx context.Context, recordName *name.Record, fileName string) error
 
 	// Update updates a record.
-	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error
+	Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue, fieldMask []string) error
 
 	// ListAllEvents lists all events in a record.
 	ListAllEvents(ctx context.Context, recordName *name.Record) ([]*openv1alpha1resource.Event, error)
@@ -97,6 +99,7 @@ type SearchRecordsOptions struct {
 	Titles         []string
 	Labels         []string
 	IncludeArchive bool
+	Search         string
 	PageSize       int32
 	PageToken      string
 	OrderBy        string
@@ -144,7 +147,7 @@ func (c *recordClient) Get(ctx context.Context, recordName *name.Record) (*openv
 	return getRecordRes.Msg, nil
 }
 
-func (c *recordClient) Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labels []*openv1alpha1resource.Label) (*openv1alpha1resource.Record, error) {
+func (c *recordClient) Create(ctx context.Context, parent *name.Project, title string, deviceNameStr string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue) (*openv1alpha1resource.Record, error) {
 	var (
 		device *openv1alpha1resource.Device = nil
 	)
@@ -155,10 +158,11 @@ func (c *recordClient) Create(ctx context.Context, parent *name.Project, title s
 	req := connect.NewRequest(&openv1alpha1service.CreateRecordRequest{
 		Parent: parent.String(),
 		Record: &openv1alpha1resource.Record{
-			Title:       title,
-			Description: description,
-			Device:      device,
-			Labels:      labels,
+			Title:             title,
+			Description:       description,
+			Device:            device,
+			Labels:            labels,
+			CustomFieldValues: customFieldValues,
 		},
 	})
 	resp, err := c.recordServiceClient.CreateRecord(ctx, req)
@@ -351,13 +355,14 @@ func (c *recordClient) DeleteFile(ctx context.Context, recordName *name.Record, 
 	return err
 }
 
-func (c *recordClient) Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, fieldMask []string) error {
+func (c *recordClient) Update(ctx context.Context, recordName *name.Record, title string, description string, labels []*openv1alpha1resource.Label, customFieldValues []*commons.CustomFieldValue, fieldMask []string) error {
 	req := connect.NewRequest(&openv1alpha1service.UpdateRecordRequest{
 		Record: &openv1alpha1resource.Record{
-			Name:        recordName.String(),
-			Title:       title,
-			Description: description,
-			Labels:      labels,
+			Name:              recordName.String(),
+			Title:             title,
+			Description:       description,
+			Labels:            labels,
+			CustomFieldValues: customFieldValues,
 		},
 		UpdateMask: &field_mask.FieldMask{
 			Paths: fieldMask,
@@ -461,7 +466,6 @@ func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOpti
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(ctx, options)
 	var (
 		pageToken = ""
 		ret       []*openv1alpha1resource.Record
@@ -475,10 +479,8 @@ func (c *recordClient) SearchAll(ctx context.Context, options *SearchRecordsOpti
 			OrderBy:   options.OrderBy,
 		})
 
-		if filter != "" {
-			req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
-				Filter: filter,
-			}
+		if err := c.applyQueryFilter(ctx, req.Msg, options); err != nil {
+			return nil, err
 		}
 
 		res, err := c.recordServiceClient.SearchRecords(ctx, req)
@@ -504,8 +506,6 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		return nil, errors.Errorf("invalid project: %s", options.Project)
 	}
 
-	filter := c.buildSearchFilter(ctx, options)
-
 	req := connect.NewRequest(&openv1alpha1service.SearchRecordsRequest{
 		Parent:    options.Project.String(),
 		PageSize:  options.PageSize,
@@ -513,10 +513,8 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		OrderBy:   options.OrderBy,
 	})
 
-	if filter != "" {
-		req.Msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
-			Filter: filter,
-		}
+	if err := c.applyQueryFilter(ctx, req.Msg, options); err != nil {
+		return nil, err
 	}
 
 	res, err := c.recordServiceClient.SearchRecords(ctx, req)
@@ -529,6 +527,30 @@ func (c *recordClient) SearchWithPageToken(ctx context.Context, options *SearchR
 		NextPageToken: res.Msg.NextPageToken,
 		TotalSize:     res.Msg.TotalSize,
 	}, nil
+}
+
+// applyQueryFilter sets the appropriate query_filter on the request.
+// When opts.Search is set (JSON Logic from frontend), it uses advanced_filter.
+// Otherwise, it builds an AIP-160 filter string from the individual flags.
+func (c *recordClient) applyQueryFilter(ctx context.Context, msg *openv1alpha1service.SearchRecordsRequest, opts *SearchRecordsOptions) error {
+	if opts.Search != "" {
+		s := &structpb.Struct{}
+		if err := protojson.Unmarshal([]byte(opts.Search), s); err != nil {
+			return fmt.Errorf("invalid search JSON: %w", err)
+		}
+		msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_AdvancedFilter{
+			AdvancedFilter: s,
+		}
+		return nil
+	}
+
+	filter := c.buildSearchFilter(ctx, opts)
+	if filter != "" {
+		msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
+			Filter: filter,
+		}
+	}
+	return nil
 }
 
 // buildSearchFilter builds the filter string for the SearchRecords API using AIP-160 syntax.

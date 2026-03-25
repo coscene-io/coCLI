@@ -47,7 +47,10 @@ type PrintOpts struct {
 	// OmitFields indicates fields to omit.
 	OmitFields []string
 
-	// Wide indicates table columns should auto-size to content (no truncation).
-	// Uses tabwriter for kubectl-style output.
+	// Wide indicates additional columns should be shown beyond the default set.
 	Wide bool
+
+	// CSV indicates output is destined for CSV format.
+	// Multi-value fields should use ";" instead of ", " as separator.
+	CSV bool
 }

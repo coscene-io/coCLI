@@ -154,10 +154,13 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			// Print listed files and directories.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewFile(files), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewFile(files), io.Out); err != nil {
 				log.Fatalf("unable to print files: %v", err)
 			}
 		},
@@ -347,10 +350,10 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <project-resource-name/slug> <path> [--dir <target-dir>] [-H]",
+		Use:                   "upload <project-resource-name/slug> <path>... [--dir <target-dir>] [-H]",
 		Short:                 "Upload files or directory to a project",
 		DisableFlagsInUseLine: true,
-		Args:                  cobra.ExactArgs(2),
+		Args:                  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			pm, _ := getProvider(*cfgPath).GetProfileManager()
 
@@ -359,13 +362,13 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 				log.Fatalf("unable to get project name: %v", err)
 			}
 
-			sourcePath, err := filepath.Abs(args[1])
-			if err != nil {
-				log.Fatalf("unable to get absolute path: %v", err)
-			}
-
-			if _, err := os.Stat(sourcePath); err != nil {
-				log.Fatalf("Error checking source path: %v", err)
+			var filePaths []string
+			for _, arg := range args[1:] {
+				absPath, err := filepath.Abs(arg)
+				if err != nil {
+					log.Fatalf("unable to get absolute path for %s: %v", arg, err)
+				}
+				filePaths = append(filePaths, absPath)
 			}
 
 			io.Println("-------------------------------------------------------------")
@@ -381,7 +384,7 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 			}
 
 			if err := um.Run(cmd.Context(), upload_utils.NewProjectParent(projectName), &upload_utils.FileOpts{
-				Path:          sourcePath,
+				Paths:         filePaths,
 				Recursive:     true,
 				IncludeHidden: includeHidden,
 				TargetDir:     targetDir,

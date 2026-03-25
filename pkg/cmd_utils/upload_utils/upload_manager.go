@@ -37,6 +37,7 @@ import (
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/getsentry/sentry-go"
+	"github.com/mattn/go-runewidth"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/muesli/reflow/wordwrap"
@@ -91,12 +92,14 @@ const (
 
 // FileInfo contains the path, size and sha256 of a file.
 type FileInfo struct {
-	Path       string // Local absolute path
-	RemotePath string // Remote destination path (for display)
-	Size       int64
-	Sha256     string
-	Uploaded   int64
-	Status     UploadStatusEnum
+	Path            string // Local absolute path
+	RemotePath      string // Remote destination path (for display)
+	Size            int64
+	Sha256          string
+	Uploaded        int64
+	Status          UploadStatusEnum
+	SpeedBps        float64   // Upload speed (bytes/sec), computed from tick interval
+	UploadStartTime time.Time // When upload started (for time spent display)
 }
 
 // UploadInfo contains the information needed to upload a file or a file part (multipart upload).
@@ -147,11 +150,15 @@ type UploadManager struct {
 	progressCh chan IncUploadedMsg
 
 	// Monitor related
-	windowWidth int
-	spinnerIdx  int
-	manualQuit  bool
-	monitor     *tea.Program
-	noTTY       bool
+	windowWidth     int
+	spinnerIdx      int
+	manualQuit      bool
+	monitor         *tea.Program
+	noTTY           bool
+	lastSpeedSample map[string]struct {
+		uploaded int64
+		t        time.Time
+	}
 
 	// other
 	errs    map[string]error
@@ -436,7 +443,9 @@ func (um *UploadManager) produceUploadInfos(ctx context.Context, fileToUploadUrl
 			for idx, info := range multipartUploadInfo {
 				uploadInfos <- info
 				if idx == 0 {
-					um.fileInfos[fileAbsolutePath].Status = UploadInProgress
+					fi := um.fileInfos[fileAbsolutePath]
+					fi.Status = UploadInProgress
+					fi.UploadStartTime = time.Now()
 				}
 			}
 		}
@@ -752,7 +761,9 @@ func (um *UploadManager) consumeSingleUploadInfo(ctx context.Context, uploadInfo
 		}
 	}(uploadInfo.FileReader)
 
-	um.fileInfos[uploadInfo.Path].Status = UploadInProgress
+	fi := um.fileInfos[uploadInfo.Path]
+	fi.Status = UploadInProgress
+	fi.UploadStartTime = time.Now()
 	progressReader := &uploadProgressReader{
 		File:       uploadInfo.FileReader,
 		fileInfo:   um.fileInfos[uploadInfo.Path],
@@ -950,6 +961,75 @@ func (um *UploadManager) findAllUploadUrls(ctx context.Context, filesToUpload []
 	return ret
 }
 
+// updateUploadSpeeds computes speed from (uploaded, time) delta for each UploadInProgress file.
+func (um *UploadManager) updateUploadSpeeds() {
+	now := time.Now()
+	if um.lastSpeedSample == nil {
+		um.lastSpeedSample = make(map[string]struct {
+			uploaded int64
+			t        time.Time
+		})
+	}
+	for _, k := range um.fileList {
+		fi := um.fileInfos[k]
+		if fi.Status != UploadInProgress {
+			continue
+		}
+		if prev, ok := um.lastSpeedSample[k]; ok && prev.t.Before(now) {
+			elapsed := now.Sub(prev.t).Seconds()
+			if elapsed >= 0.2 { // avoid noisy speed from very short intervals
+				fi.SpeedBps = float64(fi.Uploaded-prev.uploaded) / elapsed
+			}
+		}
+		um.lastSpeedSample[k] = struct {
+			uploaded int64
+			t        time.Time
+		}{fi.Uploaded, now}
+	}
+}
+
+// formatDuration returns compact elapsed time like "32s", "2m 30s", "1h 2m".
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", d/time.Second)
+	}
+	if d < time.Hour {
+		m := d / time.Minute
+		s := (d % time.Minute) / time.Second
+		if s == 0 {
+			return fmt.Sprintf("%dm", m)
+		}
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	h := d / time.Hour
+	m := (d % time.Hour) / time.Minute
+	if m == 0 {
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dh %dm", h, m)
+}
+
+// formatSpeed returns human-readable speed string like "1.2 MB/s".
+func formatSpeed(bps float64) string {
+	const (
+		B  = 1
+		KB = 1024 * B
+		MB = 1024 * KB
+		GB = 1024 * MB
+	)
+	switch {
+	case bps >= GB:
+		return fmt.Sprintf("%.1f GB/s", bps/GB)
+	case bps >= MB:
+		return fmt.Sprintf("%.1f MB/s", bps/MB)
+	case bps >= KB:
+		return fmt.Sprintf("%.0f KB/s", bps/KB)
+	default:
+		return fmt.Sprintf("%.0f B/s", bps)
+	}
+}
+
 // calculateUploadProgress is used to calculate the progress of a file upload
 func (um *UploadManager) calculateUploadProgress(name string) float64 {
 	status := um.fileInfos[name]
@@ -975,6 +1055,7 @@ func (um *UploadManager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case TickMsg:
 		um.spinnerIdx = (um.spinnerIdx + 1) % len(spinnerFrames)
+		um.updateUploadSpeeds()
 		return um, tick()
 	}
 	return um, nil
@@ -985,6 +1066,11 @@ func (um *UploadManager) View() string {
 	skipCount := 0
 	successCount := 0
 	spinnerFrame := spinnerFrames[um.spinnerIdx]
+	const (
+		progressBarPrefixSuffix = 12
+		progressBarSuffixWidth  = 22 // e.g. " 12.3 MB/s 1h 59m"
+	)
+
 	for _, k := range um.fileList {
 		// Use remote path for display if available, fallback to local path
 		displayPath := um.fileInfos[k].RemotePath
@@ -992,31 +1078,58 @@ func (um *UploadManager) View() string {
 			displayPath = k
 		}
 
-		statusStrLen := um.windowWidth - len(displayPath) - 1
+		pathWidth := runewidth.StringWidth(displayPath)
+		minStatusWidth := 15
+		truncateWidth := max(um.windowWidth-minStatusWidth-2, 0)
+		if pathWidth > truncateWidth {
+			displayPath = runewidth.Truncate(displayPath, truncateWidth, "...")
+			pathWidth = runewidth.StringWidth(displayPath)
+		}
+		statusAvail := max(um.windowWidth-pathWidth-2, 0) // 2 for ": "
+		rightAlign := func(text string) string {
+			w := runewidth.StringWidth(text)
+			if w > statusAvail {
+				return runewidth.Truncate(text, statusAvail, "")
+			}
+			return strings.Repeat(" ", statusAvail-w) + text
+		}
+
 		switch um.fileInfos[k].Status {
 		case Unprocessed:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Preparing for upload"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Preparing for upload"+spinnerFrame))
 		case CalculatingSha256:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Calculating sha256"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Calculating sha256"+spinnerFrame))
 		case PreviouslyUploaded:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Previously uploaded, skipping")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Previously uploaded, skipping"))
 			skipCount++
 		case WaitingForUpload:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Waiting for upload")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Waiting for upload"))
 		case UploadCompleted:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload completed")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Upload completed"))
 			successCount++
 		case MultipartCompletionInProgress:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Completing multipart upload"+spinnerFrame)
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Completing multipart upload"+spinnerFrame))
 		case UploadFailed:
-			s += fmt.Sprintf("%s:%*s\n", displayPath, statusStrLen, "Upload failed")
+			s += fmt.Sprintf("%s: %s\n", displayPath, rightAlign("Upload failed"))
 		case UploadInProgress:
 			progress := um.calculateUploadProgress(k)
-			barWidth := max(um.windowWidth-len(k)-12, 10)                       // Adjust for label and percentage, make sure it is at least 10
-			progressCount := min(int(progress*float64(barWidth)/100), barWidth) // min used to prevent float rounding errors
+			fi := um.fileInfos[k]
+			speedStr := ""
+			if fi.SpeedBps > 0 {
+				speedStr = " " + formatSpeed(fi.SpeedBps)
+			}
+			elapsed := time.Since(fi.UploadStartTime)
+			timeStr := " " + formatDuration(elapsed)
+			suffixContent := speedStr + timeStr
+			suffixPadded := runewidth.Truncate(suffixContent, progressBarSuffixWidth, "")
+			if w := runewidth.StringWidth(suffixPadded); w < progressBarSuffixWidth {
+				suffixPadded += strings.Repeat(" ", progressBarSuffixWidth-w)
+			}
+			barWidth := max(um.windowWidth-pathWidth-progressBarPrefixSuffix-progressBarSuffixWidth, 10)
+			progressCount := min(int(progress*float64(barWidth)/100), barWidth)
 			emptyBar := strings.Repeat("-", barWidth-progressCount)
-			progressBar := strings.Repeat("█", progressCount)
-			s += fmt.Sprintf("%s: [%s%s] %*.2f%%\n", displayPath, progressBar, emptyBar, 6, progress)
+			progressBar := strings.Repeat("=", progressCount)
+			s += fmt.Sprintf("%s: [%s%s] %6.2f%%%s\n", displayPath, progressBar, emptyBar, progress, suffixPadded)
 		}
 	}
 

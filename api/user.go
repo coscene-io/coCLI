@@ -32,6 +32,7 @@ type ListUsersOptions struct {
 	PageSize  int32
 	PageToken string
 	RoleCode  string
+	Filter    string
 }
 
 type ListUsersResult struct {
@@ -44,6 +45,7 @@ type UserInterface interface {
 	BatchGetUsers(ctx context.Context, userNameList mapset.Set[name.User]) (map[string]*openv1alpha1resource.User, error)
 	ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error)
 	GetUser(ctx context.Context, userName string) (*openv1alpha1resource.User, error)
+	FindUsersByNickname(ctx context.Context, nickname string) ([]*openv1alpha1resource.User, error)
 }
 
 type userClient struct {
@@ -56,29 +58,36 @@ func NewUserClient(userServiceClient openv1alpha1connect.UserServiceClient) User
 	}
 }
 
+const batchGetUsersChunkSize = 100
+
 func (c *userClient) BatchGetUsers(ctx context.Context, userNameSet mapset.Set[name.User]) (map[string]*openv1alpha1resource.User, error) {
 	userNameList := userNameSet.ToSlice()
 	if len(userNameList) == 0 {
 		return map[string]*openv1alpha1resource.User{}, nil
 	}
-	req := connect.NewRequest(&openv1alpha1service.BatchGetUsersRequest{
-		Names: lo.Map(userNameList, func(u name.User, _ int) string {
-			return u.String()
-		}),
-	})
-	res, err := c.userServiceClient.BatchGetUsers(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 
-	return lo.Associate(res.Msg.Users, func(u *openv1alpha1resource.User) (string, *openv1alpha1resource.User) {
-		return u.Name, u
-	}), nil
+	result := make(map[string]*openv1alpha1resource.User, len(userNameList))
+	chunks := lo.Chunk(userNameList, batchGetUsersChunkSize)
+	for _, chunk := range chunks {
+		req := connect.NewRequest(&openv1alpha1service.BatchGetUsersRequest{
+			Names: lo.Map(chunk, func(u name.User, _ int) string {
+				return u.String()
+			}),
+		})
+		res, err := c.userServiceClient.BatchGetUsers(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		for _, u := range res.Msg.Users {
+			result[u.Name] = u
+		}
+	}
+	return result, nil
 }
 
 func (c *userClient) ListUsers(ctx context.Context, opts *ListUsersOptions) (*ListUsersResult, error) {
-	filter := ""
-	if opts.RoleCode != "" {
+	filter := opts.Filter
+	if filter == "" && opts.RoleCode != "" {
 		filter = fmt.Sprintf("role.code=%q", opts.RoleCode)
 	}
 
@@ -112,4 +121,23 @@ func (c *userClient) GetUser(ctx context.Context, userName string) (*openv1alpha
 	}
 
 	return res.Msg, nil
+}
+
+func (c *userClient) FindUsersByNickname(ctx context.Context, nickname string) ([]*openv1alpha1resource.User, error) {
+	result, err := c.ListUsers(ctx, &ListUsersOptions{
+		Filter:   fmt.Sprintf("nickname=%q", nickname),
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Server does substring matching (LIKE %nickname%), so filter locally for exact match.
+	var exact []*openv1alpha1resource.User
+	for _, u := range result.Users {
+		if u.GetNickname() == nickname {
+			exact = append(exact, u)
+		}
+	}
+	return exact, nil
 }

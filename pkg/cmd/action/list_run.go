@@ -78,10 +78,13 @@ func NewListRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fun
 			convertActionRunUsers(cmd.Context(), actionRuns, pm)
 
 			// Print listed actions.
-			err = printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{
 				Verbose: verbose,
-			}}).PrintObj(printable.NewActionRun(actionRuns), io.Out)
+			}})
 			if err != nil {
+				log.Fatal(err)
+			}
+			if err = p.PrintObj(printable.NewActionRun(actionRuns), io.Out); err != nil {
 				log.Fatalf("unable to print action runs: %v", err)
 			}
 		},

@@ -71,6 +71,7 @@ func TestRecordCommand(t *testing.T) {
 		expectedFlags := map[string]string{
 			"project":         "p",
 			"all":             "",
+			"search":          "s",
 			"keywords":        "",
 			"page":            "",
 			"page-size":       "",
