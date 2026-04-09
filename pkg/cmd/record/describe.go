@@ -20,6 +20,7 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
+	"github.com/coscene-io/cocli/internal/customfield"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
@@ -65,7 +66,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(cmd.Context(), record, pm, outputFormat, false, io)
+			DisplayRecordWithFormat(cmd.Context(), record, pm, customfield.NewDeresolver(pm.UserCli()), outputFormat, false, io)
 		},
 	}
 
@@ -76,7 +77,7 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 }
 
 // DisplayRecordWithFormat displays record details in the specified format
-func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.Record, pm *config.ProfileManager, format string, showSuccessMessage bool, io *iostreams.IOStreams) {
+func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.Record, pm *config.ProfileManager, deresolver *customfield.Deresolver, format string, showSuccessMessage bool, io *iostreams.IOStreams) {
 	// Parse record name
 	recordName, err := name.NewRecord(record.Name)
 	if err != nil {
@@ -95,7 +96,7 @@ func DisplayRecordWithFormat(ctx context.Context, record *openv1alpha1resource.R
 	}
 
 	// Create wrapped record with metadata
-	recordWithMeta := printable.NewRecordWithMetadata(record, recordUrl)
+	recordWithMeta := printable.NewRecordWithMetadata(record, recordUrl, deresolver)
 
 	// Handle success message for table format
 	if showSuccessMessage && format == "table" {

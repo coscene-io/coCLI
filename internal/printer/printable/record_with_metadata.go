@@ -15,12 +15,14 @@
 package printable
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"github.com/coscene-io/cocli/internal/customfield"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"github.com/coscene-io/cocli/internal/printer/utils"
@@ -33,14 +35,16 @@ import (
 
 // RecordWithMetadata wraps a single record with additional metadata like URL
 type RecordWithMetadata struct {
-	Record *openv1alpha1resource.Record
-	URL    string
+	Record     *openv1alpha1resource.Record
+	URL        string
+	Deresolver *customfield.Deresolver
 }
 
-func NewRecordWithMetadata(record *openv1alpha1resource.Record, url string) *RecordWithMetadata {
+func NewRecordWithMetadata(record *openv1alpha1resource.Record, url string, deresolver *customfield.Deresolver) *RecordWithMetadata {
 	return &RecordWithMetadata{
-		Record: record,
-		URL:    url,
+		Record:     record,
+		URL:        url,
+		Deresolver: deresolver,
 	}
 }
 
@@ -98,16 +102,16 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 			labels := lo.Map(r.Record.Labels, func(l *openv1alpha1resource.Label, _ int) string {
 				return l.DisplayName
 			})
-			rows = append(rows, []string{"Labels:", strings.Join(labels, ", ")})
+			rows = append(rows, []string{"Labels:", strings.Join(labels, ",")})
 		}
 
 		// Custom field values
 		if len(r.Record.CustomFieldValues) > 0 {
-			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
+			customFieldValues := r.Deresolver.Deresolve(context.Background(), r.Record.CustomFieldValues)
 			rows = append(rows, []string{"Custom Field Values:", strings.Join(lo.Map(customFieldValues, func(c *structpb.Value, _ int) string {
 				m := c.AsInterface().(map[string]any)
-				return fmt.Sprintf("(%s: %v)", m["property"], m["value"])
-			}), ", ")})
+				return fmt.Sprintf("%s=%v", m["property"], m["value"])
+			}), ",")})
 		}
 
 		// Creator
@@ -145,7 +149,7 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 	// Create column definitions
 	columnDefs := []table.ColumnDefinition{
 		{FieldName: "Field", TrimSize: 20},
-		{FieldName: "Value", TrimSize: 150},
+		{FieldName: "Value", TrimSize: 800},
 	}
 
 	return table.Table{
