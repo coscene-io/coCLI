@@ -28,20 +28,20 @@ const (
 	// ConfigFilename is the name of the configuration file
 	ConfigFilename = ".cocli.yaml"
 
-	// DownloadBaseUrl is the base url for downloading files
-	DownloadBaseUrl = "https://download.coscene.cn/"
-
 	// CurrentOrgNameStr is the string for the current profile
 	CurrentOrgNameStr = "organizations/current"
-
-	// BaseApiEndpoint is the base url for the api
-	BaseApiEndpoint = "https://openapi.coscene.cn"
 
 	// MaxPageSize is the maximum page size for the api
 	MaxPageSize = 100
 )
 
 var (
+	// DownloadBaseUrl can be overridden at build time for region-specific releases.
+	DownloadBaseUrl = "https://download.coscene.cn/"
+
+	// BaseApiEndpoint can be overridden at build time for region-specific releases.
+	BaseApiEndpoint = "https://openapi.coscene.cn"
+
 	DefaultConfigPath      = defaultConfigPath()
 	DefaultUploaderDirPath = defaultUploaderDirPath()
 )

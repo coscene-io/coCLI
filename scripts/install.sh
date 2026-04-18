@@ -5,6 +5,8 @@ set -u
 
 VERSION="latest"
 FILE_NAME="cocli"
+DOWNLOAD_BASE_URL_DEFAULT="https://download.coscene.cn"
+DOWNLOAD_BASE_URL="${COCLI_DOWNLOAD_BASE_URL:-$DOWNLOAD_BASE_URL_DEFAULT}"
 
 if [ $# -eq 1 ]; then
     VERSION=$1
@@ -40,7 +42,7 @@ else
     echo "Unsupported OS: $(uname -s)"
     exit 1
 fi
-URL="https://download.coscene.cn/cocli/${VERSION}/${CLI_OS}-${ARCH}.gz"
+URL="${DOWNLOAD_BASE_URL%/}/cocli/${VERSION}/${CLI_OS}-${ARCH}.gz"
 echo "Downloading from: $URL"
 curl -XGET "$URL" > $FILE_NAME.gz
 gzip -d $FILE_NAME.gz
