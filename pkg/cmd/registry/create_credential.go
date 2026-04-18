@@ -37,6 +37,7 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams, getPro
 			if err != nil {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}
+			endpoint := pm.GetCurrentProfile().EndPoint
 
 			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
 			if err != nil {
@@ -44,6 +45,10 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams, getPro
 			}
 
 			if outputFormat == "" {
+				io.Printf("base API endpoint: %s\n", endpoint)
+				if host, inferErr := inferRegistryHost(endpoint, ""); inferErr == nil {
+					io.Printf("registry host: %s\n", host)
+				}
 				io.Printf("username: %s\n", cred.GetUsername())
 				io.Printf("password: %s\n", cred.GetPassword())
 				return

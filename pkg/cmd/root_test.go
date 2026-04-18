@@ -41,6 +41,8 @@ func TestRootCommand(t *testing.T) {
 
 		output := buf.String()
 		assert.Contains(t, output, "cocli version")
+		assert.Contains(t, output, "Release channel:")
+		assert.Contains(t, output, "Base API endpoint:")
 	})
 
 	t.Run("Help flag", func(t *testing.T) {
@@ -54,6 +56,8 @@ func TestRootCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		output := buf.String()
+		assert.Contains(t, output, "Release channel:")
+		assert.Contains(t, output, "Base API endpoint:")
 		assert.Contains(t, output, "Usage:")
 		assert.Contains(t, output, "Available Commands:")
 	})
