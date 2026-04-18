@@ -4,6 +4,10 @@ on:
     branches: [ main, dev ]
   pull_request:
     branches: [ main, dev ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-22.04
