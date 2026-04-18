@@ -85,13 +85,22 @@ jobs:
       
       # Upload to GitHub release
       - name: Upload release artifact
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ matrix.channel == 'cn' && format('bin/cocli-{0}-{1}', matrix.os, matrix.arch) || format('bin/cocli-{0}-{1}-{2}', matrix.channel, matrix.os, matrix.arch) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload \
+            "${{ github.ref_name }}" \
+            "${{ matrix.channel == 'cn' && format('bin/cocli-{0}-{1}', matrix.os, matrix.arch) || format('bin/cocli-{0}-{1}-{2}', matrix.channel, matrix.os, matrix.arch) }}" \
+            --clobber
   
       # Upload release payloads
-      - name: Install gzip
-        run: sudo apt-get update && sudo apt-get install -y gzip
+      - name: Install release upload tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gzip unzip awscli
+          if ! command -v ossutil >/dev/null 2>&1; then
+            curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
+          fi
       - name: Build release metadata files
         if: env.IS_RELEASE == 'true'
         run: |
@@ -104,40 +113,47 @@ jobs:
         run: |
           sed "s#^DOWNLOAD_BASE_URL_DEFAULT=.*#DOWNLOAD_BASE_URL_DEFAULT=\"${{ matrix.download_base_url }}\"#" scripts/install.sh > install.sh
           chmod +x install.sh
+      - name: Configure ossutil
+        if: matrix.channel == 'cn'
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        run: |
+          ossutil config \
+            -e https://oss-cn-hangzhou.aliyuncs.com \
+            -i "$OSS_ACCESS_KEY_ID" \
+            -k "$OSS_ACCESS_KEY_SECRET" \
+            -L EN \
+            -c "$RUNNER_TEMP/.ossutilconfig"
       - name: Upload cocli to oss corresponding version
         if: matrix.channel == 'cn'
-        uses: tvrcgo/oss-action@master
-        with:
-          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          endpoint: https://oss-cn-hangzhou.aliyuncs.com
-          region: oss-cn-hangzhou
-          bucket: coscene-download
-          assets: |
-            cocli.gz:/cocli/${{ github.ref_name }}/${{ matrix.os }}-${{ matrix.arch }}.gz
+        run: |
+          ossutil cp \
+            cocli.gz \
+            oss://coscene-download/cocli/${{ github.ref_name }}/${{ matrix.os }}-${{ matrix.arch }}.gz \
+            --acl public-read \
+            -c "$RUNNER_TEMP/.ossutilconfig"
       - name: Upload install script to oss
         if: matrix.channel == 'cn' && matrix.os == 'linux' && matrix.arch == 'amd64'
-        uses: tvrcgo/oss-action@master
-        with:
-          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          endpoint: https://oss-cn-hangzhou.aliyuncs.com
-          region: oss-cn-hangzhou
-          bucket: coscene-download
-          assets: |
-            install.sh:/cocli/install.sh
+        run: |
+          ossutil cp \
+            install.sh \
+            oss://coscene-download/cocli/install.sh \
+            --acl public-read \
+            -c "$RUNNER_TEMP/.ossutilconfig"
       - name: Upload cocli to oss latest
         if: matrix.channel == 'cn' && env.IS_RELEASE == 'true'
-        uses: tvrcgo/oss-action@master
-        with:
-          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          endpoint: https://oss-cn-hangzhou.aliyuncs.com
-          region: oss-cn-hangzhou
-          bucket: coscene-download
-          assets: |
-            cocli.gz:/cocli/latest/${{ matrix.os }}-${{ matrix.arch }}.gz
-            ${{ matrix.os }}-${{ matrix.arch }}.json:/cocli/${{ matrix.os }}-${{ matrix.arch }}.json
+        run: |
+          ossutil cp \
+            cocli.gz \
+            oss://coscene-download/cocli/latest/${{ matrix.os }}-${{ matrix.arch }}.gz \
+            --acl public-read \
+            -c "$RUNNER_TEMP/.ossutilconfig"
+          ossutil cp \
+            ${{ matrix.os }}-${{ matrix.arch }}.json \
+            oss://coscene-download/cocli/${{ matrix.os }}-${{ matrix.arch }}.json \
+            --acl public-read \
+            -c "$RUNNER_TEMP/.ossutilconfig"
       - name: Prepare io version upload
         if: matrix.channel == 'io'
         run: |
@@ -150,22 +166,32 @@ jobs:
           cp install.sh upload_install/install.sh
       - name: Upload cocli to s3 corresponding version
         if: matrix.channel == 'io'
-        uses: shallwefootball/s3-upload-action@master
-        with:
-          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
-          aws_bucket: coscene-download
-          source_dir: upload_version
-          destination_dir: cocli/${{ github.ref_name }}/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          aws s3 cp \
+            upload_version \
+            s3://coscene-download/cocli/${{ github.ref_name }}/ \
+            --recursive \
+            --acl public-read \
+            --no-progress
       - name: Upload install script to s3
         if: matrix.channel == 'io' && matrix.os == 'linux' && matrix.arch == 'amd64'
-        uses: shallwefootball/s3-upload-action@master
-        with:
-          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
-          aws_bucket: coscene-download
-          source_dir: upload_install
-          destination_dir: cocli/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          aws s3 cp \
+            upload_install \
+            s3://coscene-download/cocli/ \
+            --recursive \
+            --acl public-read \
+            --no-progress
       - name: Prepare io latest payloads
         if: matrix.channel == 'io' && env.IS_RELEASE == 'true'
         run: |
@@ -174,19 +200,29 @@ jobs:
           cp ${{ matrix.os }}-${{ matrix.arch }}.json upload_metadata/${{ matrix.os }}-${{ matrix.arch }}.json
       - name: Upload cocli to s3 latest
         if: matrix.channel == 'io' && env.IS_RELEASE == 'true'
-        uses: shallwefootball/s3-upload-action@master
-        with:
-          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
-          aws_bucket: coscene-download
-          source_dir: upload_latest
-          destination_dir: cocli/latest/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          aws s3 cp \
+            upload_latest \
+            s3://coscene-download/cocli/latest/ \
+            --recursive \
+            --acl public-read \
+            --no-progress
       - name: Upload cocli metadata to s3
         if: matrix.channel == 'io' && env.IS_RELEASE == 'true'
-        uses: shallwefootball/s3-upload-action@master
-        with:
-          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
-          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
-          aws_bucket: coscene-download
-          source_dir: upload_metadata
-          destination_dir: cocli/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: |
+          aws s3 cp \
+            upload_metadata \
+            s3://coscene-download/cocli/ \
+            --recursive \
+            --acl public-read \
+            --no-progress
