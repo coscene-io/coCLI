@@ -47,6 +47,9 @@ func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(
 				log.Fatalf("%v", err)
 			}
 
+			io.Printf("Using base API endpoint: %s\n", endpoint)
+			io.Printf("Resolved registry host: %s\n", host)
+
 			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
 			if err != nil {
 				log.Fatalf("failed to create basic credential: %v", err)

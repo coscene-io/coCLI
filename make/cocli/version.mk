@@ -6,6 +6,8 @@ GIT_TAG               := $(shell git describe --exact-match --tags --abbrev=0  2
 GIT_TREE_STATE        := $(shell if [ -z "`git status --porcelain`" ]; then echo "clean" ; else echo "dirty"; fi)
 RELEASE_TAG           := $(shell if [[ "$(GIT_TAG)" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$$ ]]; then echo "true"; else echo "false"; fi)
 VERSION               := latest
+COCLI_BASE_API_ENDPOINT ?= https://openapi.coscene.cn
+COCLI_DOWNLOAD_BASE_URL ?= https://download.coscene.cn/
 
 # VERSION is the version to be used for files in manifests and should always be latest unless we are releasing
 # we assume HEAD means you are on a tag
@@ -16,7 +18,9 @@ endif
 override LDFLAGS += \
   -X github.com/coscene-io/cocli.version=$(VERSION) \
   -X github.com/coscene-io/cocli.gitCommit=${GIT_COMMIT} \
-  -X github.com/coscene-io/cocli.gitTreeState=${GIT_TREE_STATE}
+  -X github.com/coscene-io/cocli.gitTreeState=${GIT_TREE_STATE} \
+  -X github.com/coscene-io/cocli/internal/constants.BaseApiEndpoint=$(COCLI_BASE_API_ENDPOINT) \
+  -X github.com/coscene-io/cocli/internal/constants.DownloadBaseUrl=$(COCLI_DOWNLOAD_BASE_URL)
 
 ifneq ($(GIT_TAG),)
 override LDFLAGS += -X github.com/coscene-io/cocli.gitTag=${GIT_TAG}

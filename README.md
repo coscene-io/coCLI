@@ -1,186 +1,39 @@
 # coScene CLI (coCLI) [![Tests](https://github.com/coscene-io/cocli/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/coscene-io/cocli/actions/workflows/test.yaml) [![codecov](https://codecov.io/gh/coscene-io/cocli/graph/badge.svg?branch=main)](https://codecov.io/gh/coscene-io/cocli)
 
-`cocli` 是刻行时空（coScene）的命令行工具，方便用户在终端和自动化过程中对刻行时空平台的资源进行管理。完整用法与更多场景见 [coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)。
+English | [简体中文](README.zh-CN.md)
 
----
+`cocli` is the command-line interface for coScene. For full usage and product documentation, use the coScene CLI docs.
 
-## 安装
+## Install
+
+Global / IO:
 
 ```bash
-curl -fL https://download.coscene.cn/cocli/install.sh | sh
+curl -fL https://download.coscene.io/cocli/install.sh | sh
 ```
 
-验证安装：
+Install a specific version:
+
+```bash
+curl -fL https://download.coscene.io/cocli/install.sh | sh -s -- v1.7.0-rc2
+```
+
+Verify installation:
 
 ```bash
 cocli --version
 ```
 
-安装指定版本：
+## Help and Docs
 
-```bash
-curl -fL https://download.coscene.cn/cocli/install.sh | sh -s -- v1.4.4
-```
+- Command help: `cocli <command> -h`
+- Docs: [coScene CLI Docs](https://docs.coscene.io/docs/category/cocli/)
+- China mainland version: [README.zh-CN.md](README.zh-CN.md)
+- Issues: [GitHub Issues](https://github.com/coscene-io/cocli/issues)
 
----
+## Development
 
-## 快速开始
-
-### 1. 登录认证
-
-```bash
-cocli login add
-```
-
-根据提示输入 API endpoint 和 token，或使用已有的 profile。
-
-### 2. 列出项目
-
-```bash
-cocli project list
-```
-
-（默认只显示第一页，最多 100 条；加 `--all` 可列出全部项目。）
-
-### 3. 上传文件到 record
-
-```bash
-cocli record upload <record-id> ./data/ -p <project-slug>
-```
-
-### 4. 下载 record 的所有文件
-
-```bash
-cocli record download <record-id> ./output/ -p <project-slug>
-```
-
----
-
-## 核心场景
-
-### 数据上传工作流
-
-```bash
-# 1. 列出可用 projects
-cocli project list
-
-# 2. 创建新 record
-cocli record create -t <record-title> [-p <project>]
-
-# 3. 上传数据到 record（支持目录、glob 模式）
-cocli record upload <record-id> ./data/ [-p <project>]
-
-# 4. 验证上传
-cocli record file list <record-id> [-p <project>]
-```
-
-### 数据下载工作流
-
-```bash
-# 下载整个 record
-cocli record download <record-id> ./output/ [-p <project>]
-
-# 或选择性下载
-cocli record file download <record-id> ./output/ --dir logs/ [-p <project>]
-```
-
-### 项目级文件管理
-
-```bash
-# 上传资源文件到 project
-cocli project file upload <project> ./shared-data/
-
-# 列出和下载
-cocli project file list <project>
-cocli project file download <project> ./output/
-```
-
----
-
-## Shell 补全
-
-启用 shell 补全可以自动完成命令、flag 和参数，大幅提升使用体验。
-
-### Bash
-
-```bash
-cocli completion bash | sudo tee /etc/bash_completion.d/cocli
-source ~/.bashrc
-```
-
-### Zsh
-
-```bash
-cocli completion zsh > "${fpath[1]}/_cocli"
-# 或
-cocli completion zsh > ~/.zsh/completions/_cocli
-```
-
-重新加载：
-
-```bash
-autoload -U compinit && compinit
-```
-
-### Fish
-
-```bash
-cocli completion fish > ~/.config/fish/completions/cocli.fish
-```
-
----
-
-## 高级功能
-
-### List 与分页
-
-`cocli project list`、`cocli record list` 等 list 类命令**默认只输出第一页**（每页最多 100 条），避免一次性拉取大量数据刷屏。若需全部数据：
-
-- **record list**：加 `--all` 列出所有 record；或按提示用 `--page-token` 逐页查看。
-- **project list**：加 `--all` 列出所有项目；或使用 `--page-size`、`--page` 分页。
-
-其他 list 子命令（如 `record file list`、`project file list`）同理，默认第一页，用 `--all` 或分页参数获取更多。
-
-### 环境变量配置（适用于 CI/CD）
-
-对于 Docker 容器或 CI/CD 环境，可以通过环境变量配置，无需交互式登录。**以下三项均需设置**，才会使用环境变量作为认证来源：
-
-| 环境变量       | 描述             |
-| -------------- | ---------------- |
-| `COS_ENDPOINT` | API 端点地址     |
-| `COS_TOKEN`    | 认证令牌         |
-| `COS_PROJECT`  | 默认项目 slug    |
-
-示例：
-
-```bash
-export COS_ENDPOINT=https://openapi.coscene.cn
-export COS_TOKEN=your-api-token
-export COS_PROJECT=your-project-slug
-
-cocli record list
-```
-
-### Glob 模式上传
-
-使用 glob 模式选择性上传文件：
-
-```bash
-# 上传目录（保留目录名）
-cocli project file upload <project> data/
-
-# 只上传目录内容（不含目录名）
-cocli project file upload <project> "data/*"
-
-# 上传特定类型文件
-cocli project file upload <project> "logs/*.log"
-```
-
----
-
-## 开发
-
-### 本地构建
+Build locally:
 
 ```bash
 git clone https://github.com/coscene-io/cocli.git
@@ -189,20 +42,12 @@ make build-binary
 ./bin/cocli --version
 ```
 
-### 快速测试
+Run locally:
 
 ```bash
-go run cmd/cocli/main.go [command]
+go run ./cmd/cocli --version
 ```
 
----
-
-## 帮助与文档
-
-- 所有命令支持 `-h` 查看帮助：`cocli <command> -h`
-- 详细文档：[coScene CLI 文档](https://docs.coscene.cn/docs/category/cocli)
-- 问题反馈：[GitHub Issues](https://github.com/coscene-io/cocli/issues)
-
-## 许可证
+## License
 
 [Apache-2.0](LICENSE)

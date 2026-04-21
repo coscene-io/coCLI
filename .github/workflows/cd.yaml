@@ -14,18 +14,20 @@ jobs:
   build-and-upload-cli-artifact:
     strategy:
       matrix:
-        include:
-          - arch: amd64
-            os: linux
-          - arch: amd64
-            os: darwin
-          - arch: arm64
-            os: linux
-          - arch: arm64
-            os: darwin
+        channel: [cn, io]
+        os: [linux, darwin]
+        arch: [amd64, arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      BASE_API_ENDPOINT: ${{ matrix.channel == 'cn' && 'https://openapi.coscene.cn' || 'https://openapi.coscene.io' }}
+      DOWNLOAD_BASE_URL: ${{ matrix.channel == 'cn' && 'https://download.coscene.cn/' || 'https://download.coscene.io/' }}
+      RELEASE_ARTIFACT_PATH: ${{ matrix.channel == 'cn' && format('bin/cocli-{0}-{1}', matrix.os, matrix.arch) || format('bin/cocli-{0}-{1}-{2}', matrix.channel, matrix.os, matrix.arch) }}
+      PAYLOAD_NAME: ${{ format('{0}-{1}.gz', matrix.os, matrix.arch) }}
+      METADATA_NAME: ${{ format('{0}-{1}.json', matrix.os, matrix.arch) }}
+      TARGET_OS: ${{ matrix.os }}
+      TARGET_ARCH: ${{ matrix.arch }}
     steps:
       # Check version
       - name: Check if version is semantic
@@ -47,44 +49,110 @@ jobs:
           go-version: 1.25
       - name: Build cocli
         run: |
-          CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} make build-binary
+          CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" COCLI_BASE_API_ENDPOINT="${BASE_API_ENDPOINT}" COCLI_DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL}" make build-binary
           cp bin/cocli cocli
-          cp bin/cocli bin/cocli-${{ matrix.os }}-${{ matrix.arch }}
+          cp bin/cocli "${RELEASE_ARTIFACT_PATH}"
       
       # Upload to GitHub release
       - name: Upload release artifact
         uses: softprops/action-gh-release@v2
         with:
-          files: bin/cocli-${{ matrix.os }}-${{ matrix.arch }}
+          files: ${{ env.RELEASE_ARTIFACT_PATH }}
   
-      # Upload to oss
+      # Upload release payloads
       - name: Install gzip
         run: sudo apt-get update && sudo apt-get install -y gzip
       - name: Build release metadata files
         if: env.IS_RELEASE == 'true'
         run: |
           SHA256SUM=$(sha256sum cocli | awk '{print $1}' | xxd -r -p | base64) 
-          echo "{\"Version\": \"${{ github.ref_name }}\", \"Sha256\": \"$SHA256SUM\"}" > ${{ matrix.os }}-${{ matrix.arch }}.json
+          echo "{\"Version\": \"${{ github.ref_name }}\", \"Sha256\": \"$SHA256SUM\"}" > "${METADATA_NAME}"
       - name: gzip cocli
         run: gzip cocli
-      - name: Upload cocli to oss corresponding version
-        uses: tvrcgo/oss-action@master
-        with:
-          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          region: oss-cn-hangzhou
-          bucket: coscene-download
-          assets: |
-            cocli.gz:/cocli/${{ github.ref_name }}/${{ matrix.os }}-${{ matrix.arch }}.gz
-      - name: Upload cocli to oss latest
-        if: env.IS_RELEASE == 'true'
-        uses: tvrcgo/oss-action@master
-        with:
-          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          region: oss-cn-hangzhou
-          bucket: coscene-download
-          assets: |
-            cocli.gz:/cocli/latest/${{ matrix.os }}-${{ matrix.arch }}.gz
-            ${{ matrix.os }}-${{ matrix.arch }}.json:/cocli/${{ matrix.os }}-${{ matrix.arch }}.json
+      - name: Prepare release payloads
+        run: |
+          mkdir -p upload_version
+          cp cocli.gz "upload_version/${PAYLOAD_NAME}"
 
+          if [ "${IS_RELEASE}" = "true" ]; then
+            mkdir -p upload_latest upload_metadata
+            cp cocli.gz "upload_latest/${PAYLOAD_NAME}"
+            cp "${METADATA_NAME}" "upload_metadata/${METADATA_NAME}"
+          fi
+
+          if [ "${TARGET_OS}" = "linux" ] && [ "${TARGET_ARCH}" = "amd64" ]; then
+            sed "s#^DOWNLOAD_BASE_URL_DEFAULT=.*#DOWNLOAD_BASE_URL_DEFAULT=\"${DOWNLOAD_BASE_URL}\"#" scripts/install.sh > install.sh
+            chmod +x install.sh
+            mkdir -p upload_install
+            cp install.sh upload_install/install.sh
+          fi
+      - name: Upload cocli to oss corresponding version
+        if: matrix.channel == 'cn'
+        uses: tvrcgo/oss-action@master
+        with:
+          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          endpoint: https://oss-cn-hangzhou.aliyuncs.com
+          region: oss-cn-hangzhou
+          bucket: coscene-download
+          assets: |
+            upload_version/${{ env.PAYLOAD_NAME }}:/cocli/${{ github.ref_name }}/${{ env.PAYLOAD_NAME }}
+      - name: Upload install script to oss
+        if: matrix.channel == 'cn' && matrix.os == 'linux' && matrix.arch == 'amd64'
+        uses: tvrcgo/oss-action@master
+        with:
+          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          endpoint: https://oss-cn-hangzhou.aliyuncs.com
+          region: oss-cn-hangzhou
+          bucket: coscene-download
+          assets: |
+            upload_install/install.sh:/cocli/install.sh
+      - name: Upload cocli to oss latest
+        if: matrix.channel == 'cn' && env.IS_RELEASE == 'true'
+        uses: tvrcgo/oss-action@master
+        with:
+          key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          endpoint: https://oss-cn-hangzhou.aliyuncs.com
+          region: oss-cn-hangzhou
+          bucket: coscene-download
+          assets: |
+            upload_latest/${{ env.PAYLOAD_NAME }}:/cocli/latest/${{ env.PAYLOAD_NAME }}
+            upload_metadata/${{ env.METADATA_NAME }}:/cocli/${{ env.METADATA_NAME }}
+      - name: Upload cocli to s3 corresponding version
+        if: matrix.channel == 'io'
+        uses: shallwefootball/s3-upload-action@master
+        with:
+          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          aws_bucket: coscene-download
+          source_dir: upload_version
+          destination_dir: cocli/${{ github.ref_name }}/
+      - name: Upload install script to s3
+        if: matrix.channel == 'io' && matrix.os == 'linux' && matrix.arch == 'amd64'
+        uses: shallwefootball/s3-upload-action@master
+        with:
+          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          aws_bucket: coscene-download
+          source_dir: upload_install
+          destination_dir: cocli/
+      - name: Upload cocli to s3 latest
+        if: matrix.channel == 'io' && env.IS_RELEASE == 'true'
+        uses: shallwefootball/s3-upload-action@master
+        with:
+          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          aws_bucket: coscene-download
+          source_dir: upload_latest
+          destination_dir: cocli/latest/
+      - name: Upload cocli metadata to s3
+        if: matrix.channel == 'io' && env.IS_RELEASE == 'true'
+        uses: shallwefootball/s3-upload-action@master
+        with:
+          aws_key_id: ${{ secrets.S3_ARTIFACTS_ACCESS_KEY }}
+          aws_secret_access_key: ${{ secrets.S3_ARTIFACTS_ACCESS_SECRET }}
+          aws_bucket: coscene-download
+          source_dir: upload_metadata
+          destination_dir: cocli/

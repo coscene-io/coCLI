@@ -34,6 +34,10 @@ func NewUpdateCommand(io *iostreams.IOStreams) *cobra.Command {
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
+			io.Printf("Release channel: %s\n", constants.ReleaseChannelDisplayName())
+			io.Printf("Base API endpoint: %s\n", constants.BaseApiEndpoint)
+			io.Printf("Download base: %s\n", constants.DownloadBaseUrl)
+
 			var updater = &selfupdate.Updater{
 				CurrentVersion: cocli.GetVersion(),
 				ApiURL:         constants.DownloadBaseUrl,

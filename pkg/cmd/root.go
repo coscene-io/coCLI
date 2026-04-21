@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -45,8 +46,9 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 
 	cmd := &cobra.Command{
 		Use:     constants.CLIName,
-		Short:   "",
-		Version: cocli.GetVersion(),
+		Short:   "coScene CLI",
+		Long:    rootLongDescription(),
+		Version: rootVersionString(),
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			log.SetLevel(log.DebugLevel)
 			level, err := log.ParseLevel(logLevel)
@@ -104,7 +106,6 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 			}
 		},
 	}
-
 	cmd.PersistentFlags().StringVar(&cfgPath, "config", constants.DefaultConfigPath, "config file path")
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level, one of: trace|debug|info|warn|error")
 
@@ -119,4 +120,23 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 	cmd.AddCommand(NewUpdateCommand(io))
 
 	return cmd
+}
+
+func rootLongDescription() string {
+	return fmt.Sprintf(
+		"coScene CLI\n\nRelease channel: %s\nBase API endpoint: %s\nDownload base: %s",
+		constants.ReleaseChannelDisplayName(),
+		constants.BaseApiEndpoint,
+		constants.DownloadBaseUrl,
+	)
+}
+
+func rootVersionString() string {
+	return fmt.Sprintf(
+		"%s\nRelease channel: %s\nBase API endpoint: %s\nDownload base: %s",
+		cocli.GetVersion(),
+		constants.ReleaseChannelDisplayName(),
+		constants.BaseApiEndpoint,
+		constants.DownloadBaseUrl,
+	)
 }
