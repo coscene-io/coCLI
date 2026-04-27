@@ -1,0 +1,7 @@
+interface:
+  display_name: "CoScene CLI"
+  short_description: "Operate cocli projects, records, files, and actions."
+  default_prompt: "Use $cocli to inspect my CoScene CLI profile and upload files to a project record."
+
+policy:
+  allow_implicit_invocation: true
