@@ -48,8 +48,8 @@ func TestCreateTestFileTree(t *testing.T) {
 
 func TestCaptureOutput(t *testing.T) {
 	stdout, stderr := CaptureOutput(t, func() {
-		fmt.Fprint(os.Stdout, "out")
-		fmt.Fprint(os.Stderr, "err")
+		_, _ = fmt.Fprint(os.Stdout, "out")
+		_, _ = fmt.Fprint(os.Stderr, "err")
 	})
 
 	assert.Equal(t, "out", stdout)

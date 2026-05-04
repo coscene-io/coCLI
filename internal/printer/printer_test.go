@@ -16,6 +16,7 @@ package printer
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -68,7 +69,10 @@ func TestJSONPrinter_PrintObj(t *testing.T) {
 	err := (&JSONPrinter{}).PrintObj(testPrintable{}, &buf)
 
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), `"name": "demo"`)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &got))
+	assert.Equal(t, "demo", got["name"])
+	assert.Equal(t, float64(42), got["size"])
 	assert.True(t, bytes.HasSuffix(buf.Bytes(), []byte("\n")))
 }
 

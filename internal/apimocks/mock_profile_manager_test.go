@@ -64,7 +64,7 @@ func TestMockProvider(t *testing.T) {
 	assert.Equal(t, provider.ProfileManager().ProfileManager, pm)
 
 	custom := NewMockProfileManager(t)
-	custom.ProfileManager.CurrentProfile = "custom"
+	custom.CurrentProfile = "custom"
 	provider.SetProfileManager(custom)
 	pm, err = provider.GetProfileManager()
 	require.NoError(t, err)
