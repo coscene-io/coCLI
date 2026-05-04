@@ -28,7 +28,7 @@ type File struct {
 }
 
 var (
-	fileRe = regroup.MustCompile(`^projects/(?P<project>.*)/records/(?P<record>.*)/files/(?P<file>.*)$`)
+	fileRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)/records/(?P<record>[^/]+)/files/(?P<file>.*)$`)
 )
 
 func NewFile(file string) (*File, error) {
