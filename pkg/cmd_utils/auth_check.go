@@ -30,7 +30,7 @@ func IsAuthCheckEnabled(cmd *cobra.Command) bool {
 		return false
 	}
 
-	for c := cmd; c.Parent() != nil; c = c.Parent() {
+	for c := cmd; c != nil; c = c.Parent() {
 		if c.Annotations != nil && c.Annotations["skipAuthCheck"] == "true" {
 			return false
 		}

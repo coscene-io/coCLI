@@ -82,22 +82,24 @@ func DownloadFileThroughUrl(file string, downloadUrl string, maxRetries int) err
 		return errors.Wrapf(err, "unable to create directories for file %v", file)
 	}
 
-	fileWriter, err := os.Create(file)
-	if err != nil {
-		return errors.Wrapf(err, "unable to open file %v for writing", file)
-	}
-	defer func() { _ = fileWriter.Close() }()
-
 	var attempt int
 
 	operation := func() error {
+		fileWriter, err := os.Create(file)
+		if err != nil {
+			return errors.Wrapf(err, "unable to open file %v for writing", file)
+		}
+
 		opErr := downloadWithFileWriter(fileWriter, downloadUrl, attempt)
+		closeErr := fileWriter.Close()
 		if opErr != nil {
 			retryPrefix := ""
 			if attempt > 0 {
 				retryPrefix = fmt.Sprintf("(Retry #%d) ", attempt)
 			}
 			log.Errorf("%sUnable to download file: %v", retryPrefix, opErr)
+		} else if closeErr != nil {
+			opErr = errors.Wrapf(closeErr, "unable to close file %v", file)
 		}
 		attempt++
 		return opErr
@@ -127,6 +129,10 @@ func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) 
 		return errors.Wrapf(err, "unable to get file from url %v", downloadUrl)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return errors.Errorf("unexpected HTTP status %s", resp.Status)
+	}
 
 	progress := &Progress{
 		PrintPrefix: "File download in progress",

@@ -32,6 +32,9 @@ type Options struct {
 }
 
 func Printer(format string, opts *Options) (Interface, error) {
+	if opts == nil {
+		opts = &Options{}
+	}
 	tableOpts := opts.TableOpts
 	if tableOpts == nil {
 		tableOpts = &table.PrintOpts{}
