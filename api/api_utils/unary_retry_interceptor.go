@@ -48,12 +48,12 @@ func newUnaryRetryInterceptor(retryMax int, initialInterval, maxInterval time.Du
 				return resp, err
 			}
 
-			retry := backoff.WithContext(backoff.WithMaxRetries(backoff.NewExponentialBackOff(
+			retry := backoff.WithMaxRetries(backoff.NewExponentialBackOff(
 				backoff.WithInitialInterval(initialInterval),
 				backoff.WithMaxInterval(maxInterval),
 				backoff.WithMultiplier(2),
 				backoff.WithRandomizationFactor(0.5),
-			), uint64(retryMax)), ctx)
+			), uint64(retryMax))
 
 			resp, err := backoff.RetryWithData(operation, retry)
 

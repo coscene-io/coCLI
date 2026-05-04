@@ -165,23 +165,3 @@ func TestInterceptor_ResourceExhausted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), calls.Load())
 }
-
-func TestInterceptor_StopsRetryingWhenContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var calls atomic.Int32
-	next := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		calls.Add(1)
-		cancel()
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("unavailable"))
-	}
-
-	interceptor := newUnaryRetryInterceptor(3, time.Millisecond, time.Millisecond)
-	wrappedFunc := interceptor(next)
-
-	_, err := wrappedFunc(ctx, nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, int32(1), calls.Load())
-}

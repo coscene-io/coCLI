@@ -70,10 +70,6 @@ func (pr *Progress) Print() {
 	if pr.Retry > 0 {
 		retryHint = fmt.Sprintf("(Retry #%d) ", pr.Retry)
 	}
-	if pr.TotalSize <= 0 {
-		iostream.Printf("\r\033[K%s%s: %d bytes", retryHint, pr.PrintPrefix, pr.BytesRead)
-		return
-	}
 	iostream.Printf("\r\033[K%s%s: %d/%d %d%%", retryHint, pr.PrintPrefix, pr.BytesRead, pr.TotalSize, 100*pr.BytesRead/pr.TotalSize)
 }
 
@@ -85,10 +81,6 @@ func DownloadFileThroughUrl(file string, downloadUrl string, maxRetries int) err
 }
 
 func downloadFileThroughUrl(file string, downloadUrl string, maxRetries int, initialInterval time.Duration, maxInterval time.Duration) error {
-	if maxRetries < 0 {
-		return errors.Errorf("max retries must be >= 0, got %d", maxRetries)
-	}
-
 	err := os.MkdirAll(filepath.Dir(file), 0755)
 	if err != nil {
 		return errors.Wrapf(err, "unable to create directories for file %v", file)

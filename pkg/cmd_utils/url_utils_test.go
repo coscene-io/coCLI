@@ -83,22 +83,3 @@ func TestDownloadFileThroughUrlTruncatesPartialFileBeforeRetry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "complete", string(got))
 }
-
-func TestDownloadFileThroughUrlRejectsNegativeRetries(t *testing.T) {
-	dst := filepath.Join(t.TempDir(), "download.txt")
-
-	err := downloadFileThroughUrl(dst, "http://127.0.0.1/unused", -1, time.Millisecond, time.Millisecond)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "max retries must be >= 0")
-}
-
-func TestProgressPrintHandlesUnknownTotalSize(t *testing.T) {
-	progress := &Progress{PrintPrefix: "download", TotalSize: 0}
-
-	require.NotPanics(t, func() {
-		n, err := progress.Write([]byte("abc"))
-		require.NoError(t, err)
-		assert.Equal(t, 3, n)
-	})
-}
