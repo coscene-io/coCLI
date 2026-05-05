@@ -350,8 +350,19 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <project-resource-name/slug> <path>... [--dir <target-dir>] [-H]",
-		Short:                 "Upload files or directory to a project",
+		Use:   "upload <project-resource-name/slug> <path>... [--dir <target-dir>] [-H]",
+		Short: "Upload files or directory to a project",
+		Long: `Upload one or more files or directories to a project.
+
+Each path can be a file, directory, or glob pattern. Directories are expanded
+recursively. Hidden files are skipped unless --include-hidden is set.
+
+The --parallel value is the maximum number of upload workers. For many small
+files, workers usually upload different files at the same time. For large files,
+workers may upload multipart parts from the same file.`,
+		Example: `  cocli project file upload <project-slug> ./data --parallel 8
+  cocli project file upload <project-slug> ./a ./b/file.mcap ./c --dir raw/
+  cocli project file upload <project-slug> ./data --no-tty`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -403,7 +414,7 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVarP(&targetDir, "dir", "d", "", "target directory in remote (e.g., 'backup/' to upload to backup/ subdirectory)")
-	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
+	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "maximum upload workers; small files upload as separate files, large files may upload as multipart parts")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
 	cmd.Flags().BoolVar(&uploadManagerOpts.TTY, "tty", false, "force interactive mode even in headless environments")

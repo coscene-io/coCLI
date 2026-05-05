@@ -107,4 +107,29 @@ func TestProjectCommand(t *testing.T) {
 			assert.True(t, found, "File subcommand %s not found", expected)
 		}
 	})
+
+	t.Run("File upload help explains recursive multi-path parallel upload", func(t *testing.T) {
+		cfgPath := setupTestConfig(t)
+		var buf bytes.Buffer
+		io := iostreams.Test(nil, &buf, &buf)
+		cmd := project.NewRootCommand(&cfgPath, io, config.Provide)
+
+		uploadCmd, _, err := cmd.Find([]string{"file", "upload"})
+		require.NoError(t, err)
+
+		buf.Reset()
+		uploadCmd.SetOut(&buf)
+		uploadCmd.SetErr(&buf)
+		require.NoError(t, uploadCmd.Help())
+
+		help := buf.String()
+		assert.Contains(t, help, "Each path can be a file, directory, or glob pattern.")
+		assert.Contains(t, help, "Directories are expanded")
+		assert.Contains(t, help, "Hidden files are skipped unless --include-hidden is set.")
+		assert.Contains(t, help, "maximum number of upload workers")
+		assert.Contains(t, help, "different files at the same time")
+		assert.Contains(t, help, "multipart parts from the same file")
+		assert.Contains(t, help, "cocli project file upload <project-slug> ./data --parallel 8")
+		assert.Contains(t, help, "cocli project file upload <project-slug> ./a ./b/file.mcap ./c --dir raw/")
+	})
 }

@@ -37,8 +37,19 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "upload <record-resource-name/id> <path>... [-p <working-project-slug>] [--dir <target-dir>] [-H]",
-		Short:                 "Upload files or directory to a record",
+		Use:   "upload <record-resource-name/id> <path>... [-p <working-project-slug>] [--dir <target-dir>] [-H]",
+		Short: "Upload files or directory to a record",
+		Long: `Upload one or more files or directories to a record.
+
+Each path can be a file, directory, or glob pattern. Directories are expanded
+recursively. Hidden files are skipped unless --include-hidden is set.
+
+The --parallel value is the maximum number of upload workers. For many small
+files, workers usually upload different files at the same time. For large files,
+workers may upload multipart parts from the same file.`,
+		Example: `  cocli record upload <record-id> ./data --parallel 8
+  cocli record upload <record-id> ./a ./b/file.mcap ./c --dir raw/
+  cocli record upload <record-id> ./data --no-tty`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -102,7 +113,7 @@ func NewUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	cmd.Flags().BoolVarP(&includeHidden, "include-hidden", "H", false, "include hidden files (\"dot\" files) in the upload")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
 	cmd.Flags().StringVarP(&targetDir, "dir", "d", "", "target directory in remote (e.g., 'backup/' to upload to backup/ subdirectory)")
-	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "number of uploads (could be part) in parallel")
+	cmd.Flags().IntVarP(&uploadManagerOpts.Threads, "parallel", "P", 4, "maximum upload workers; small files upload as separate files, large files may upload as multipart parts")
 	cmd.Flags().StringVarP(&uploadManagerOpts.PartSize, "part-size", "s", "128Mib", "each part size")
 	cmd.Flags().DurationVar(&timeout, "response-timeout", 5*time.Minute, "server response time out")
 	cmd.Flags().BoolVar(&uploadManagerOpts.NoTTY, "no-tty", false, "disable interactive mode for headless environments")
