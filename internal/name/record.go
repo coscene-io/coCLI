@@ -27,7 +27,7 @@ type Record struct {
 }
 
 var (
-	recordRe = regroup.MustCompile(`^projects/(?P<project>.*)/records/(?P<record>.*)$`)
+	recordRe = regroup.MustCompile(`^projects/(?P<project>[^/]*)/records/(?P<record>[^/]*)$`)
 )
 
 func NewRecord(record string) (*Record, error) {
