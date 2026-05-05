@@ -89,6 +89,7 @@ func TestNewFile(t *testing.T) {
 	}{
 		{"valid", "projects/p1/records/r1/files/data.bin", "p1", "r1", "data.bin", false},
 		{"nested path", "projects/p1/records/r1/files/dir/sub/file.txt", "p1", "r1", "dir/sub/file.txt", false},
+		{"nested reserved segments", "projects/p1/records/r1/files/dir/files/records/data.bin", "p1", "r1", "dir/files/records/data.bin", false},
 		{"missing files segment", "projects/p1/records/r1/data.bin", "", "", "", true},
 		{"empty", "", "", "", "", true},
 	}
@@ -247,6 +248,7 @@ func TestNewProjectFile(t *testing.T) {
 	}{
 		{"valid", "projects/p1/files/readme.md", "p1", "readme.md", false},
 		{"nested path", "projects/p1/files/dir/sub/file.txt", "p1", "dir/sub/file.txt", false},
+		{"nested files segment", "projects/p1/files/dir/files/readme.md", "p1", "dir/files/readme.md", false},
 		{"missing files segment", "projects/p1/readme.md", "", "", true},
 		{"empty", "", "", "", true},
 	}
