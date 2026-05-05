@@ -77,35 +77,41 @@ func (pr *Progress) Print() {
 // file is the absolute path of the file to be downloaded.
 // downloadUrl is the pre-signed url to download the file from.
 func DownloadFileThroughUrl(file string, downloadUrl string, maxRetries int) error {
+	return downloadFileThroughUrl(file, downloadUrl, maxRetries, retryWaitMin, retryWaitMax)
+}
+
+func downloadFileThroughUrl(file string, downloadUrl string, maxRetries int, initialInterval time.Duration, maxInterval time.Duration) error {
 	err := os.MkdirAll(filepath.Dir(file), 0755)
 	if err != nil {
 		return errors.Wrapf(err, "unable to create directories for file %v", file)
 	}
 
-	fileWriter, err := os.Create(file)
-	if err != nil {
-		return errors.Wrapf(err, "unable to open file %v for writing", file)
-	}
-	defer func() { _ = fileWriter.Close() }()
-
 	var attempt int
 
 	operation := func() error {
+		fileWriter, err := os.Create(file)
+		if err != nil {
+			return errors.Wrapf(err, "unable to open file %v for writing", file)
+		}
+
 		opErr := downloadWithFileWriter(fileWriter, downloadUrl, attempt)
+		closeErr := fileWriter.Close()
 		if opErr != nil {
 			retryPrefix := ""
 			if attempt > 0 {
 				retryPrefix = fmt.Sprintf("(Retry #%d) ", attempt)
 			}
 			log.Errorf("%sUnable to download file: %v", retryPrefix, opErr)
+		} else if closeErr != nil {
+			opErr = errors.Wrapf(closeErr, "unable to close file %v after writing", file)
 		}
 		attempt++
 		return opErr
 	}
 
 	retry := backoff.WithMaxRetries(backoff.NewExponentialBackOff(
-		backoff.WithInitialInterval(retryWaitMin),
-		backoff.WithMaxInterval(retryWaitMax),
+		backoff.WithInitialInterval(initialInterval),
+		backoff.WithMaxInterval(maxInterval),
 		backoff.WithMultiplier(2),
 		backoff.WithRandomizationFactor(0.5),
 	), uint64(maxRetries))
@@ -127,6 +133,9 @@ func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) 
 		return errors.Wrapf(err, "unable to get file from url %v", downloadUrl)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return errors.Errorf("download url returned HTTP status %s", resp.Status)
+	}
 
 	progress := &Progress{
 		PrintPrefix: "File download in progress",
