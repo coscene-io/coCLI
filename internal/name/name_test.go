@@ -221,6 +221,9 @@ func TestNewUser(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid", "users/user-123", "user-123", false},
+		{"current", "users/current", "current", false},
+		{"extra path", "users/user-123/projects/p1", "", true},
+		{"empty user id", "users/", "", true},
 		{"invalid prefix", "people/user-123", "", true},
 		{"empty", "", "", true},
 	}
