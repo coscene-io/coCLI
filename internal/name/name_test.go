@@ -59,6 +59,8 @@ func TestNewRecord(t *testing.T) {
 	}{
 		{"valid", "projects/p1/records/r1", "p1", "r1", false},
 		{"uuid ids", "projects/aaa-bbb/records/ccc-ddd", "aaa-bbb", "ccc-ddd", false},
+		{"empty project", "projects//records/r1", "", "", true},
+		{"empty record", "projects/p1/records/", "", "", true},
 		{"missing records segment", "projects/p1/r1", "", "", true},
 		{"empty string", "", "", "", true},
 	}
