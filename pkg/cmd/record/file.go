@@ -15,7 +15,6 @@
 package record
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,16 +96,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 
 			var files []*openv1alpha1resource.File
 
-			// Build filter
-			var filterParts []string
-			if recursive {
-				filterParts = append(filterParts, "recursive=\"true\"")
-			}
-			if dir != "" {
-				normalizedDir := strings.TrimSuffix(dir, "/")
-				filterParts = append(filterParts, fmt.Sprintf("dir=\"%s\"", normalizedDir))
-			}
-			filterStr := strings.Join(filterParts, " AND ")
+			filterStr := cmd_utils.FileDirFilter(dir, recursive)
 
 			if all {
 				if filterStr != "" {
@@ -239,8 +229,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 			var files []*openv1alpha1resource.File
 			if dir != "" {
 				// Download specific directory recursively
-				normalizedDir := strings.TrimSuffix(dir, "/")
-				files, err = pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
+				files, err = pm.RecordCli().ListAllFilesWithFilter(cmd.Context(), recordName, cmd_utils.FileDirFilter(dir, true))
 				if err != nil {
 					log.Fatalf("unable to list record files: %v", err)
 				}
