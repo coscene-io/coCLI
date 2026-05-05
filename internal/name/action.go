@@ -27,7 +27,7 @@ type Action struct {
 }
 
 var (
-	actionNameRe = regroup.MustCompile(`(^projects/(?P<project>.*)/actions/(?P<id>.*)$)|(^wftmpls/(?P<wftmplID>.*)$)`)
+	actionNameRe = regroup.MustCompile(`(^projects/(?P<project>[^/]+)/actions/(?P<id>[^/]+)$)|(^wftmpls/(?P<wftmplID>[^/]+)$)`)
 )
 
 func NewAction(action string) (*Action, error) {
