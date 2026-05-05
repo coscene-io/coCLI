@@ -26,7 +26,7 @@ type Project struct {
 }
 
 var (
-	projectRe = regroup.MustCompile(`^projects/(?P<project>[^/]*)$`)
+	projectRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)$`)
 )
 
 func NewProject(project string) (*Project, error) {
