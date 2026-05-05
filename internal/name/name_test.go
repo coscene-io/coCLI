@@ -30,7 +30,7 @@ func TestNewProject(t *testing.T) {
 	}{
 		{"valid", "projects/abc-123", "abc-123", false},
 		{"valid uuid", "projects/d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", false},
-		{"empty id", "projects/", "", false},
+		{"empty id", "projects/", "", true},
 		{"invalid prefix", "repos/abc", "", true},
 		{"empty string", "", "", true},
 		{"no slash", "projects", "", true},
