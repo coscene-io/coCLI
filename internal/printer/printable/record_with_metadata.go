@@ -98,7 +98,7 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 			labels := lo.Map(r.Record.Labels, func(l *openv1alpha1resource.Label, _ int) string {
 				return l.DisplayName
 			})
-			rows = append(rows, []string{"Labels:", strings.Join(labels, ", ")})
+			rows = append(rows, []string{"Labels:", strings.Join(labels, ",")})
 		}
 
 		// Custom field values
@@ -106,8 +106,8 @@ func (r *RecordWithMetadata) ToTable(opts *table.PrintOpts) table.Table {
 			customFieldValues := utils.GetCustomFieldStructs(r.Record.CustomFieldValues)
 			rows = append(rows, []string{"Custom Field Values:", strings.Join(lo.Map(customFieldValues, func(c *structpb.Value, _ int) string {
 				m := c.AsInterface().(map[string]any)
-				return fmt.Sprintf("(%s: %v)", m["property"], m["value"])
-			}), ", ")})
+				return fmt.Sprintf("%s=%v", m["property"], m["value"])
+			}), ",")})
 		}
 
 		// Creator
