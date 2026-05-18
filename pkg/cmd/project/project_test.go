@@ -43,7 +43,7 @@ func TestProjectCommand(t *testing.T) {
 		assert.Equal(t, "project", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
 
-		expectedSubcommands := []string{"list", "create", "file"}
+		expectedSubcommands := []string{"list", "create", "file", "s3-info"}
 
 		for _, expected := range expectedSubcommands {
 			found := false
@@ -106,5 +106,17 @@ func TestProjectCommand(t *testing.T) {
 			}
 			assert.True(t, found, "File subcommand %s not found", expected)
 		}
+	})
+
+	t.Run("S3 info command flags", func(t *testing.T) {
+		cfgPath := setupTestConfig(t)
+		var buf bytes.Buffer
+		io := iostreams.Test(nil, &buf, &buf)
+		cmd := project.NewRootCommand(&cfgPath, io, config.Provide)
+
+		s3InfoCmd, _, err := cmd.Find([]string{"s3-info"})
+		require.NoError(t, err)
+
+		assert.NotNil(t, s3InfoCmd.Flag("output"))
 	})
 }

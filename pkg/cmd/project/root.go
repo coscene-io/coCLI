@@ -30,6 +30,7 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewFileCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewS3InfoCommand(cfgPath, io, getProvider))
 	return cmd
 }
 
