@@ -27,7 +27,7 @@ type ActionRun struct {
 }
 
 var (
-	actionRunNameRe = regroup.MustCompile(`^projects/(?P<project>.*)/actionRuns/(?P<acr>.*)$`)
+	actionRunNameRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)/actionRuns/(?P<acr>[^/]+)$`)
 )
 
 func NewActionRun(acr string) (*ActionRun, error) {

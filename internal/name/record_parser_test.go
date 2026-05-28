@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2026 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,28 +15,19 @@
 package name
 
 import (
-	"fmt"
+	"testing"
 
-	"github.com/oriser/regroup"
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
-type Project struct {
-	ProjectID string
+func TestNewRecordRejectsNestedResourcePath(t *testing.T) {
+	_, err := NewRecord("projects/p1/records/r1/files/data.bin")
+
+	require.Error(t, err)
 }
 
-var (
-	projectRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)$`)
-)
+func TestNewRecordRejectsProjectIDWithSlash(t *testing.T) {
+	_, err := NewRecord("projects/p1/records/r1/records/r2")
 
-func NewProject(project string) (*Project, error) {
-	if match, err := projectRe.Groups(project); err != nil {
-		return nil, errors.Wrap(err, "parse project name")
-	} else {
-		return &Project{ProjectID: match["project"]}, nil
-	}
-}
-
-func (p Project) String() string {
-	return fmt.Sprintf("projects/%s", p.ProjectID)
+	require.Error(t, err)
 }

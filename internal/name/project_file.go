@@ -29,7 +29,7 @@ type ProjectFile struct {
 }
 
 var (
-	projectFileRe = regroup.MustCompile(`^projects/(?P<project>.*)/files/(?P<file>.*)$`)
+	projectFileRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)/files/(?P<file>.*)$`)
 )
 
 func NewProjectFile(file string) (*ProjectFile, error) {

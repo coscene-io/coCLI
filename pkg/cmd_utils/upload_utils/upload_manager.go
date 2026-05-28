@@ -1158,6 +1158,7 @@ func tick() tea.Cmd {
 type uploadProgressReader struct {
 	*os.File
 	fileInfo   *FileInfo
+	uploaded   int64
 	progressCh chan IncUploadedMsg
 }
 
@@ -1166,15 +1167,34 @@ func (r *uploadProgressReader) Read(b []byte) (int, error) {
 	if err != nil && err != io.EOF {
 		r.progressCh <- IncUploadedMsg{
 			Path:        r.fileInfo.Path,
-			UploadedInc: -r.fileInfo.Uploaded,
+			UploadedInc: -r.uploaded,
 		}
+		r.uploaded = 0
 	} else {
 		r.progressCh <- IncUploadedMsg{
 			Path:        r.fileInfo.Path,
 			UploadedInc: int64(n),
 		}
+		r.uploaded += int64(n)
 	}
 	return n, err
+}
+
+func (r *uploadProgressReader) Seek(offset int64, whence int) (int64, error) {
+	pos, err := r.File.Seek(offset, whence)
+	if err != nil {
+		return pos, err
+	}
+	// When seeking back (the minio SDK seeks to 0 on retry), undo the
+	// progress counted so far so that the re-read does not double-count.
+	if whence == 0 && offset == 0 && r.uploaded > 0 {
+		r.progressCh <- IncUploadedMsg{
+			Path:        r.fileInfo.Path,
+			UploadedInc: -r.uploaded,
+		}
+		r.uploaded = 0
+	}
+	return pos, nil
 }
 
 // uploadProgressSectionReader is a SectionReader that also sends progress updates to a channel.
@@ -1201,6 +1221,23 @@ func (r *uploadProgressSectionReader) Read(b []byte) (int, error) {
 		r.uploaded += int64(n)
 	}
 	return n, err
+}
+
+func (r *uploadProgressSectionReader) Seek(offset int64, whence int) (int64, error) {
+	pos, err := r.SectionReader.Seek(offset, whence)
+	if err != nil {
+		return pos, err
+	}
+	// When seeking back (the minio SDK seeks to 0 on retry), undo the
+	// progress counted so far so that the re-read does not double-count.
+	if whence == 0 && offset == 0 && r.uploaded > 0 {
+		r.progressCh <- IncUploadedMsg{
+			Path:        r.fileInfo.Path,
+			UploadedInc: -r.uploaded,
+		}
+		r.uploaded = 0
+	}
+	return pos, nil
 }
 
 // nonInteractiveProgressReporter reports progress in non-interactive mode

@@ -15,6 +15,10 @@
 package upload_utils
 
 import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -134,4 +138,151 @@ func TestUploadManager_View(t *testing.T) {
 		u := model.(*UploadManager)
 		assert.Equal(t, 120, u.windowWidth)
 	})
+}
+
+// collectProgress drains the progress channel and returns the net sum of UploadedInc.
+func collectProgress(ch chan IncUploadedMsg) int64 {
+	var total int64
+	for {
+		select {
+		case msg := <-ch:
+			total += msg.UploadedInc
+		default:
+			return total
+		}
+	}
+}
+
+// TestUploadProgressSectionReader_SeekRetryDoesNotDoubleCount reproduces the
+// upload-progress-exceeds-100% bug. The minio SDK retries failed PUT requests
+// by calling Seek(0, 0) on the reader and re-reading. Before the fix, the
+// progress reader did not override Seek, so re-read bytes were double-counted.
+func TestUploadProgressSectionReader_SeekRetryDoesNotDoubleCount(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 1000)
+	sectionReader := io.NewSectionReader(bytes.NewReader(data), 0, int64(len(data)))
+
+	progressCh := make(chan IncUploadedMsg, 1000)
+	fi := &FileInfo{Path: "test.dat", Size: int64(len(data))}
+
+	reader := &uploadProgressSectionReader{
+		SectionReader: sectionReader,
+		fileInfo:      fi,
+		progressCh:    progressCh,
+	}
+
+	// 1. First read: read all data (simulates first upload attempt)
+	buf := make([]byte, len(data))
+	_, err := io.ReadFull(reader, buf)
+	require.NoError(t, err)
+
+	firstPass := collectProgress(progressCh)
+	assert.Equal(t, int64(len(data)), firstPass, "progress should equal data size after first read")
+
+	// 2. Simulate minio SDK retry: seek back to 0
+	_, err = reader.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
+	seekCorrection := collectProgress(progressCh)
+	assert.Equal(t, -int64(len(data)), seekCorrection,
+		"Seek(0,0) must send a negative correction equal to data size")
+
+	// 3. Second read (retry): read all data again
+	_, err = io.ReadFull(reader, buf)
+	require.NoError(t, err)
+
+	retryPass := collectProgress(progressCh)
+	assert.Equal(t, int64(len(data)), retryPass, "progress should equal data size after retry read")
+
+	// Total across the entire retry cycle must equal exactly data size.
+	total := firstPass + seekCorrection + retryPass
+	assert.Equal(t, int64(len(data)), total,
+		"total progress should be data size, not 2×data size")
+}
+
+// TestUploadProgressSectionReader_MultipleRetries ensures progress stays
+// bounded even after several consecutive seek+re-read cycles.
+func TestUploadProgressSectionReader_MultipleRetries(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 1000)
+	sectionReader := io.NewSectionReader(bytes.NewReader(data), 0, int64(len(data)))
+
+	progressCh := make(chan IncUploadedMsg, 10000)
+	fi := &FileInfo{Path: "test.dat", Size: int64(len(data))}
+
+	reader := &uploadProgressSectionReader{
+		SectionReader: sectionReader,
+		fileInfo:      fi,
+		progressCh:    progressCh,
+	}
+
+	buf := make([]byte, len(data))
+
+	// Simulate 5 retries (minio SDK maxRetry = 10)
+	for i := 0; i < 5; i++ {
+		_, err := io.ReadFull(reader, buf)
+		require.NoError(t, err)
+
+		_, err = reader.Seek(0, io.SeekStart)
+		require.NoError(t, err)
+	}
+	// One final successful read (no seek after)
+	_, err := io.ReadFull(reader, buf)
+	require.NoError(t, err)
+
+	// Drain all remaining messages
+	var totalProgress int64
+	for len(progressCh) > 0 {
+		msg := <-progressCh
+		totalProgress += msg.UploadedInc
+	}
+
+	assert.Equal(t, int64(len(data)), totalProgress,
+		"after 5 retries + 1 final read, progress should equal data size, not 6×data size")
+}
+
+// TestUploadProgressReader_SeekRetryDoesNotDoubleCount is the same test
+// for the single-upload (*os.File based) progress reader.
+func TestUploadProgressReader_SeekRetryDoesNotDoubleCount(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 1000)
+	tmpFile := filepath.Join(t.TempDir(), "test.dat")
+	err := os.WriteFile(tmpFile, data, 0644)
+	require.NoError(t, err)
+
+	f, err := os.Open(tmpFile)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+
+	progressCh := make(chan IncUploadedMsg, 1000)
+	fi := &FileInfo{Path: tmpFile, Size: int64(len(data))}
+
+	reader := &uploadProgressReader{
+		File:       f,
+		fileInfo:   fi,
+		progressCh: progressCh,
+	}
+
+	// 1. First read
+	buf := make([]byte, len(data))
+	_, err = io.ReadFull(reader, buf)
+	require.NoError(t, err)
+
+	firstPass := collectProgress(progressCh)
+	assert.Equal(t, int64(len(data)), firstPass)
+
+	// 2. Seek back (SDK retry)
+	_, err = reader.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
+	seekCorrection := collectProgress(progressCh)
+	assert.Equal(t, -int64(len(data)), seekCorrection)
+
+	// 3. Re-read
+	_, err = io.ReadFull(reader, buf)
+	require.NoError(t, err)
+
+	retryPass := collectProgress(progressCh)
+	assert.Equal(t, int64(len(data)), retryPass)
+
+	total := firstPass + seekCorrection + retryPass
+	assert.Equal(t, int64(len(data)), total,
+		"total progress should equal data size, not double-count")
 }

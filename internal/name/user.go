@@ -26,12 +26,12 @@ type User struct {
 }
 
 var (
-	userRe = regroup.MustCompile(`^users\/(?P<user>.*)$`)
+	userRe = regroup.MustCompile(`^users/(?P<user>[^/]+)$`)
 )
 
 func NewUser(user string) (*User, error) {
 	if match, err := userRe.Groups(user); err != nil {
-		return nil, errors.Wrap(err, "parse workflow template name")
+		return nil, errors.Wrap(err, "parse user name")
 	} else {
 		return &User{UserID: match["user"]}, nil
 	}

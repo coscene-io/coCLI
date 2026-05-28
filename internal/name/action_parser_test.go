@@ -1,4 +1,4 @@
-// Copyright 2024 coScene
+// Copyright 2026 coScene
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,28 +15,25 @@
 package name
 
 import (
-	"fmt"
+	"testing"
 
-	"github.com/oriser/regroup"
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
-type Project struct {
-	ProjectID string
+func TestNewActionRejectsNestedResourcePath(t *testing.T) {
+	_, err := NewAction("projects/p1/actions/a1/runs/run1")
+
+	require.Error(t, err)
 }
 
-var (
-	projectRe = regroup.MustCompile(`^projects/(?P<project>[^/]+)$`)
-)
+func TestNewActionRejectsNestedWftmplPath(t *testing.T) {
+	_, err := NewAction("wftmpls/tmpl1/actions/a1")
 
-func NewProject(project string) (*Project, error) {
-	if match, err := projectRe.Groups(project); err != nil {
-		return nil, errors.Wrap(err, "parse project name")
-	} else {
-		return &Project{ProjectID: match["project"]}, nil
-	}
+	require.Error(t, err)
 }
 
-func (p Project) String() string {
-	return fmt.Sprintf("projects/%s", p.ProjectID)
+func TestNewActionRunRejectsNestedResourcePath(t *testing.T) {
+	_, err := NewActionRun("projects/p1/actionRuns/run1/logs/log1")
+
+	require.Error(t, err)
 }

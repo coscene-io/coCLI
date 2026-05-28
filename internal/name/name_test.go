@@ -30,7 +30,7 @@ func TestNewProject(t *testing.T) {
 	}{
 		{"valid", "projects/abc-123", "abc-123", false},
 		{"valid uuid", "projects/d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", false},
-		{"empty id", "projects/", "", false},
+		{"empty id", "projects/", "", true},
 		{"invalid prefix", "repos/abc", "", true},
 		{"empty string", "", "", true},
 		{"no slash", "projects", "", true},
@@ -89,6 +89,7 @@ func TestNewFile(t *testing.T) {
 	}{
 		{"valid", "projects/p1/records/r1/files/data.bin", "p1", "r1", "data.bin", false},
 		{"nested path", "projects/p1/records/r1/files/dir/sub/file.txt", "p1", "r1", "dir/sub/file.txt", false},
+		{"nested reserved segments", "projects/p1/records/r1/files/dir/files/records/data.bin", "p1", "r1", "dir/files/records/data.bin", false},
 		{"missing files segment", "projects/p1/records/r1/data.bin", "", "", "", true},
 		{"empty", "", "", "", "", true},
 	}
@@ -220,6 +221,9 @@ func TestNewUser(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid", "users/user-123", "user-123", false},
+		{"current", "users/current", "current", false},
+		{"extra path", "users/user-123/projects/p1", "", true},
+		{"empty user id", "users/", "", true},
 		{"invalid prefix", "people/user-123", "", true},
 		{"empty", "", "", true},
 	}
@@ -247,6 +251,7 @@ func TestNewProjectFile(t *testing.T) {
 	}{
 		{"valid", "projects/p1/files/readme.md", "p1", "readme.md", false},
 		{"nested path", "projects/p1/files/dir/sub/file.txt", "p1", "dir/sub/file.txt", false},
+		{"nested files segment", "projects/p1/files/dir/files/readme.md", "p1", "dir/files/readme.md", false},
 		{"missing files segment", "projects/p1/readme.md", "", "", true},
 		{"empty", "", "", "", true},
 	}
