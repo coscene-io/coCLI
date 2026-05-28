@@ -249,7 +249,7 @@ func TestUploadProgressReader_SeekRetryDoesNotDoubleCount(t *testing.T) {
 
 	f, err := os.Open(tmpFile)
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() { require.NoError(t, f.Close()) }()
 
 	progressCh := make(chan IncUploadedMsg, 1000)
 	fi := &FileInfo{Path: tmpFile, Size: int64(len(data))}
