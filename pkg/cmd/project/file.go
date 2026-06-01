@@ -15,7 +15,6 @@
 package project
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,18 +82,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			var files []*openv1alpha1resource.File
-			var filterParts []string
-
-			// Build filter
-			if recursive {
-				filterParts = append(filterParts, "recursive=\"true\"")
-			}
-			if dir != "" {
-				// Normalize: ensure no trailing slash for filter consistency
-				normalizedDir := strings.TrimSuffix(dir, "/")
-				filterParts = append(filterParts, fmt.Sprintf("dir=\"%s\"", normalizedDir))
-			}
-			additionalFilter := strings.Join(filterParts, " AND ")
+			additionalFilter := cmd_utils.FileDirFilter(dir, recursive)
 
 			if all {
 				if additionalFilter != "" {
@@ -217,8 +205,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 			var files []*openv1alpha1resource.File
 			if dir != "" {
 				// Download specific directory recursively
-				normalizedDir := strings.TrimSuffix(dir, "/")
-				files, err = pm.ProjectCli().ListAllFilesWithFilter(cmd.Context(), projectName, fmt.Sprintf("dir=\"%s\" AND recursive=\"true\"", normalizedDir))
+				files, err = pm.ProjectCli().ListAllFilesWithFilter(cmd.Context(), projectName, cmd_utils.FileDirFilter(dir, true))
 				if err != nil {
 					log.Fatalf("unable to list project files: %v", err)
 				}
