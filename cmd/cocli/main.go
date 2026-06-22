@@ -15,7 +15,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/coscene-io/cocli"
@@ -49,10 +52,34 @@ func main() {
 
 	io := iostreams.System()
 
-	if err := cmd.NewCommand(io, config.Provide).Execute(); err != nil {
+	// Cancel the root context on the first SIGINT/SIGTERM so long-lived
+	// commands (e.g. streaming `action logs -f`) exit cleanly. A second
+	// signal force-kills, matching docker/kubectl behavior.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done() // first signal: graceful cancel requested
+		<-forceQuitSignals()
+		sentry.Flush(500 * time.Millisecond) // bounded — user is force-quitting
+		os.Exit(130)                         // second signal: force quit (128 + SIGINT)
+	}()
+
+	if err := cmd.NewCommand(io, config.Provide).ExecuteContext(ctx); err != nil {
 		io.Println(err)
+		// os.Exit skips deferred sentry.Flush; flush explicitly so errored runs
+		// still report telemetry.
+		sentry.Flush(2 * time.Second)
 		os.Exit(1)
 	}
+}
+
+// forceQuitSignals returns a channel that fires on the next interrupt/termination
+// signal, used to implement double-Ctrl-C force-quit.
+func forceQuitSignals() <-chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	return ch
 }
 
 func newSentryClientOptions() sentry.ClientOptions {
