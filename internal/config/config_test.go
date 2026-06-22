@@ -42,6 +42,10 @@ func TestProfile_Validate(t *testing.T) {
 			wantErr: "endpoint should start with https://openapi.",
 		},
 		{
+			name:    "valid env-scoped endpoint",
+			profile: &Profile{Name: "dev", EndPoint: "https://openapi-e2e.dev.example.com", Token: "tok", ProjectSlug: "proj"},
+		},
+		{
 			name:    "empty token",
 			profile: &Profile{Name: "dev", EndPoint: "https://openapi.dev.coscene.cn", Token: "", ProjectSlug: "proj"},
 			wantErr: "token cannot be empty",
