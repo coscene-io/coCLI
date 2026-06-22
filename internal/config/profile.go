@@ -90,7 +90,13 @@ func (p *Profile) Validate() error {
 	if p.Name == "" {
 		return errors.Errorf("profile name cannot be empty")
 	}
-	if !strings.HasPrefix(p.EndPoint, "https://openapi.") {
+	// Endpoints address the public openapi gateway. The canonical form is
+	// `https://openapi.<base>`; shared dev hosts give each env its own
+	// gateway subdomain prefixed with the env name
+	// (`https://openapi-<env>.<base>`). Accept either — the leading host
+	// label must be `openapi` or `openapi-<env>`.
+	if !strings.HasPrefix(p.EndPoint, "https://openapi.") &&
+		!strings.HasPrefix(p.EndPoint, "https://openapi-") {
 		return errors.Errorf("profile %s's endpoint should start with https://openapi.", p.Name)
 	}
 	if p.Token == "" {
