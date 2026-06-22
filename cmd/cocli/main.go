@@ -58,12 +58,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		<-ctx.Done() // first signal: graceful cancel requested
-		<-forceQuitSignals()
+	go watchForceQuit(ctx, forceQuitSignals(), func() {
 		sentry.Flush(500 * time.Millisecond) // bounded — user is force-quitting
 		os.Exit(130)                         // second signal: force quit (128 + SIGINT)
-	}()
+	})
 
 	if err := cmd.NewCommand(io, config.Provide).ExecuteContext(ctx); err != nil {
 		io.Println(err)
@@ -80,6 +78,15 @@ func forceQuitSignals() <-chan os.Signal {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	return ch
+}
+
+// watchForceQuit blocks until the context is cancelled (first signal) and then
+// a value arrives on quit (second signal), at which point onForceQuit is invoked.
+// Extracted from main for testability — the production callback calls os.Exit.
+func watchForceQuit(ctx context.Context, quit <-chan os.Signal, onForceQuit func()) {
+	<-ctx.Done() // first signal: graceful cancel requested
+	<-quit       // second signal: user insists
+	onForceQuit()
 }
 
 func newSentryClientOptions() sentry.ClientOptions {
