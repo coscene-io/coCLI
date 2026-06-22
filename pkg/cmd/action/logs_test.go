@@ -15,13 +15,176 @@
 package action
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/pkg/errors"
 )
+
+// fakeJobRunClient is a test double for api.JobRunInterface.
+type fakeJobRunClient struct {
+	listResult []*openv1alpha1resource.JobRun
+	listErr    error
+	dag        *openv1alpha1resource.JobRunDag
+	dagErr     error
+}
+
+func (f *fakeJobRunClient) ListJobRuns(_ context.Context, _ *name.ActionRun) ([]*openv1alpha1resource.JobRun, error) {
+	return f.listResult, f.listErr
+}
+
+func (f *fakeJobRunClient) GetJobRun(_ context.Context, _ string) (*openv1alpha1resource.JobRun, error) {
+	return nil, nil
+}
+
+func (f *fakeJobRunClient) GetJobRunDag(_ context.Context, _ string) (*openv1alpha1resource.JobRunDag, error) {
+	return f.dag, f.dagErr
+}
+
+func (f *fakeJobRunClient) LogJobRun(_ context.Context, _ string, _ string) (*connect.ServerStreamForClient[openv1alpha1service.LogJobRunResponse], error) {
+	return nil, nil
+}
+
+func discardIO() *iostreams.IOStreams {
+	return iostreams.Test(nil, &discardWriter{}, &discardWriter{})
+}
+
+type discardWriter struct{}
+
+func (*discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestFollowLogs_CleanEnd(t *testing.T) {
+	calls := 0
+	streamFn := func(_ context.Context, _ string) error { calls++; return nil }
+	dagFn := func(_ context.Context) (string, error) { return "", nil }
+
+	if err := followLogs(context.Background(), "", false, discardIO(), streamFn, dagFn); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("streamFn calls = %d, want 1", calls)
+	}
+}
+
+func TestFollowLogs_CanceledExitsClean(t *testing.T) {
+	streamFn := func(_ context.Context, _ string) error { return context.Canceled }
+	dagFn := func(_ context.Context) (string, error) { return "", nil }
+
+	err := followLogs(context.Background(), "", true, discardIO(), streamFn, dagFn)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+}
+
+func TestFollowLogs_NodeNotFoundResolvesViaDag(t *testing.T) {
+	var nodes []string
+	streamFn := func(_ context.Context, node string) error {
+		nodes = append(nodes, node)
+		if node == "" {
+			return connect.NewError(connect.CodeInvalidArgument, errors.New("pod node not found"))
+		}
+		return nil // succeeds once a real node is supplied
+	}
+	dagFn := func(_ context.Context) (string, error) { return "resolved-node", nil }
+
+	if err := followLogs(context.Background(), "", false, discardIO(), streamFn, dagFn); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodes) != 2 || nodes[0] != "" || nodes[1] != "resolved-node" {
+		t.Fatalf("unexpected node sequence: %v", nodes)
+	}
+}
+
+func TestFollowLogs_NonRetriableReturns(t *testing.T) {
+	wantErr := connect.NewError(connect.CodeNotFound, errors.New("gone"))
+	streamFn := func(_ context.Context, _ string) error { return wantErr }
+	dagFn := func(_ context.Context) (string, error) { return "", nil }
+
+	err := followLogs(context.Background(), "n", true, discardIO(), streamFn, dagFn)
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("want NotFound, got %v", err)
+	}
+}
+
+func TestFollowLogs_RetriableReconnectStopsOnCanceledBackoff(t *testing.T) {
+	// Cancelled context makes the backoff sleep return immediately, exercising
+	// the reconnect branch without a real delay.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	streamFn := func(_ context.Context, _ string) error {
+		return connect.NewError(connect.CodeUnavailable, errors.New("flaky"))
+	}
+	dagFn := func(_ context.Context) (string, error) { return "", nil }
+
+	err := followLogs(ctx, "n", true, discardIO(), streamFn, dagFn)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled from backoff, got %v", err)
+	}
+}
+
+func TestResolveDefaultNode(t *testing.T) {
+	t.Run("single node auto-filled", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{"only": {Name: "only"}},
+		}}
+		got, err := resolveDefaultNode(context.Background(), cli, "jr")
+		if err != nil || got != "only" {
+			t.Fatalf("got %q, err %v", got, err)
+		}
+	})
+
+	t.Run("multiple nodes errors", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{"a": {}, "b": {}},
+		}}
+		if _, err := resolveDefaultNode(context.Background(), cli, "jr"); err == nil {
+			t.Fatal("expected error for multiple nodes")
+		}
+	})
+
+	t.Run("dag error propagates", func(t *testing.T) {
+		cli := &fakeJobRunClient{dagErr: errors.New("boom")}
+		if _, err := resolveDefaultNode(context.Background(), cli, "jr"); err == nil {
+			t.Fatal("expected dag error")
+		}
+	})
+}
+
+func TestListJobRunsWithWait(t *testing.T) {
+	actionRun := &name.ActionRun{ProjectID: "p", ID: "ar"}
+
+	t.Run("returns runs immediately", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: []*openv1alpha1resource.JobRun{{Name: "jr1"}}}
+		got, err := listJobRunsWithWait(context.Background(), cli, actionRun, false, discardIO())
+		if err != nil || len(got) != 1 {
+			t.Fatalf("got %d runs, err %v", len(got), err)
+		}
+	})
+
+	t.Run("empty without follow returns empty", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: nil}
+		got, err := listJobRunsWithWait(context.Background(), cli, actionRun, false, discardIO())
+		if err != nil || len(got) != 0 {
+			t.Fatalf("got %d runs, err %v", len(got), err)
+		}
+	})
+
+	t.Run("empty with follow polls then gives up on canceled ctx", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		cli := &fakeJobRunClient{listResult: nil}
+		_, err := listJobRunsWithWait(ctx, cli, actionRun, true, discardIO())
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("want context.Canceled, got %v", err)
+		}
+	})
+}
 
 func TestResolveActionRun(t *testing.T) {
 	proj := &name.Project{ProjectID: "11111111-1111-1111-1111-111111111111"}

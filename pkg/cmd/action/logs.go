@@ -71,7 +71,15 @@ func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				return // already reported (no job runs / pending without --follow)
 			}
 
-			if err = followLogs(cmd.Context(), pm.JobRunCli(), jobRun.GetName(), node, follow, io); err != nil {
+			cli := pm.JobRunCli()
+			jobRunName := jobRun.GetName()
+			streamFn := func(ctx context.Context, n string) error {
+				return streamOnce(ctx, cli, jobRunName, n, io)
+			}
+			dagFn := func(ctx context.Context) (string, error) {
+				return resolveDefaultNode(ctx, cli, jobRunName)
+			}
+			if err = followLogs(cmd.Context(), node, follow, io, streamFn, dagFn); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return // clean Ctrl-C exit
 				}
@@ -137,14 +145,23 @@ func listJobRunsWithWait(ctx context.Context, cli api.JobRunInterface, actionRun
 	}
 }
 
-// followLogs streams the job run's logs, resolving the DAG node if needed and
-// reconnecting on transient errors when follow is set.
-func followLogs(ctx context.Context, cli api.JobRunInterface, jobRunName, node string, follow bool, io *iostreams.IOStreams) error {
+// followLogs drives the log stream state machine: it resolves the DAG node when
+// an empty node is rejected (multi-node workflows) and reconnects on transient
+// errors when follow is set. streamFn opens and relays a single stream for the
+// given node; dagFn resolves the default node. Both are injected for testability.
+func followLogs(
+	ctx context.Context,
+	node string,
+	follow bool,
+	io *iostreams.IOStreams,
+	streamFn func(ctx context.Context, node string) error,
+	dagFn func(ctx context.Context) (string, error),
+) error {
 	resolvedNode := node
 	delay := reconnectBaseDelay
 
 	for attempt := 0; ; attempt++ {
-		err := streamOnce(ctx, cli, jobRunName, resolvedNode, io)
+		err := streamFn(ctx, resolvedNode)
 		switch {
 		case err == nil:
 			return nil // stream ended cleanly (job finished)
@@ -152,7 +169,7 @@ func followLogs(ctx context.Context, cli api.JobRunInterface, jobRunName, node s
 			return context.Canceled
 		case isNodeNotFound(err) && resolvedNode == "":
 			// Multi-node (Steps) workflow: empty node is rejected. Resolve via DAG.
-			n, resolveErr := resolveDefaultNode(ctx, cli, jobRunName)
+			n, resolveErr := dagFn(ctx)
 			if resolveErr != nil {
 				return resolveErr
 			}
