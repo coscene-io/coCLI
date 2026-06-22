@@ -15,9 +15,11 @@
 package action
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
@@ -189,6 +191,10 @@ func followLogs(
 }
 
 // streamOnce opens a single log stream and relays lines until it ends or errors.
+// A running job streams live log lines (message). A finished job whose pod has
+// been garbage collected has no live logs; the server then sends a single
+// response carrying a presigned URL for the archived log, which we download and
+// print so `action logs` works transparently regardless of job state.
 func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node string, io *iostreams.IOStreams) error {
 	stream, err := cli.LogJobRun(ctx, jobRunName, node)
 	if err != nil {
@@ -197,9 +203,46 @@ func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node s
 	defer func() { _ = stream.Close() }()
 
 	for stream.Receive() {
-		io.Println(stream.Msg().GetMessage())
+		msg := stream.Msg()
+		if downloadURL := msg.GetLogDownloadUri(); downloadURL != "" {
+			if err = printArchivedLog(ctx, downloadURL, io); err != nil {
+				return err
+			}
+			continue
+		}
+		io.Println(msg.GetMessage())
 	}
 	return stream.Err()
+}
+
+// printArchivedLog downloads the archived job-run log from the presigned URL the
+// server returned and writes it to stdout, line by line.
+func printArchivedLog(ctx context.Context, downloadURL string, io *iostreams.IOStreams) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("build archived log request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download archived log: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download archived log: unexpected status %d", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	// Job logs can carry long lines (stack traces, serialized payloads); raise
+	// the token cap well above bufio's 64KiB default.
+	const maxLogLineBytes = 4 * 1024 * 1024
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLineBytes)
+	for scanner.Scan() {
+		io.Println(scanner.Text())
+	}
+	if err = scanner.Err(); err != nil {
+		return fmt.Errorf("read archived log: %w", err)
+	}
+	return nil
 }
 
 // resolveDefaultNode picks a node name when the job run is a multi-node DAG.
