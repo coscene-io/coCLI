@@ -49,6 +49,7 @@ type Profile struct {
 	usercli              api.UserInterface
 	filecli              api.FileInterface
 	actioncli            api.ActionInterface
+	jobruncli            api.JobRunInterface
 	securitytokencli     api.SecurityTokenInterface
 	eventcli             api.EventInterface
 	taskcli              api.TaskInterface
@@ -209,6 +210,12 @@ func (p *Profile) ActionCli() api.ActionInterface {
 	return p.actioncli
 }
 
+// JobRunCli return job run api interface used profile.
+func (p *Profile) JobRunCli() api.JobRunInterface {
+	p.initCli()
+	return p.jobruncli
+}
+
 // SecurityTokenCli return security token api interface used profile.
 func (p *Profile) SecurityTokenCli() api.SecurityTokenInterface {
 	p.initCli()
@@ -263,6 +270,7 @@ func (p *Profile) initCli() {
 		var (
 			actionServiceClient            = openv1alpha1connect.NewActionServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			actionRunServiceClient         = openv1alpha1connect.NewActionRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			jobRunServiceClient            = openv1alpha1connect.NewJobRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			eventServiceClient             = openv1alpha1connect.NewEventServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			organizationServiceClient      = openv1alpha1connect.NewOrganizationServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			projectServiceClient           = openv1alpha1connect.NewProjectServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
@@ -285,6 +293,7 @@ func (p *Profile) initCli() {
 		p.usercli = api.NewUserClient(userServiceClient)
 		p.filecli = api.NewFileClient(fileServiceClient)
 		p.actioncli = api.NewActionClient(actionServiceClient, actionRunServiceClient)
+		p.jobruncli = api.NewJobRunClient(jobRunServiceClient)
 		p.securitytokencli = api.NewSecurityTokenClient(securityTokenServiceClient)
 		p.eventcli = api.NewEventClient(eventServiceClient)
 		p.taskcli = api.NewTaskClient(taskServiceClient)
