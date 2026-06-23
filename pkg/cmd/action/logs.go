@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"time"
 
+	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
@@ -75,6 +76,23 @@ func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 			cli := pm.JobRunCli()
 			jobRunName := jobRun.GetName()
+
+			// A job run that hasn't started yet (queued/scheduling) has no
+			// pod to stream and no archived log to download. Wait for it to
+			// start when following; otherwise report and exit cleanly rather
+			// than appearing to "finish" with no output.
+			started, err := awaitJobRunStart(cmd.Context(), cli, jobRunName, jobRun.GetState(), follow, io)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				exitf(io, "%v", err)
+				return
+			}
+			if !started {
+				return
+			}
+
 			streamFn := func(ctx context.Context, n string) error {
 				return streamOnce(ctx, cli, jobRunName, n, io)
 			}
@@ -142,6 +160,62 @@ func listJobRunsWithWait(ctx context.Context, cli api.JobRunInterface, actionRun
 		io.Eprintln(fmt.Sprintf("Waiting for job runs... (attempt %d/%d)", attempt+1, reconnectMaxAttempts))
 		if err = sleepCtx(ctx, delay); err != nil {
 			return nil, err
+		}
+		delay = nextDelay(delay)
+	}
+}
+
+// jobRunNotStarted reports whether a job run has not begun executing yet
+// (queued/scheduling/unspecified) — no pod exists to stream and no log has
+// been archived.
+func jobRunNotStarted(state openv1alpha1enums.JobRunStateEnum_JobRunState) bool {
+	switch state {
+	case openv1alpha1enums.JobRunStateEnum_JOB_RUN_STATE_UNSPECIFIED,
+		openv1alpha1enums.JobRunStateEnum_QUEUED,
+		openv1alpha1enums.JobRunStateEnum_SCHEDULING:
+		return true
+	default:
+		return false
+	}
+}
+
+// awaitJobRunStart blocks until a not-yet-started job run begins (running or
+// terminal) when follow is set, polling its state. Without follow it reports
+// the state and returns started=false so the caller exits cleanly instead of
+// treating an empty stream as a finished job. Returns started=true immediately
+// when the run has already started.
+func awaitJobRunStart(
+	ctx context.Context,
+	cli api.JobRunInterface,
+	jobRunName string,
+	state openv1alpha1enums.JobRunStateEnum_JobRunState,
+	follow bool,
+	io *iostreams.IOStreams,
+) (bool, error) {
+	if !jobRunNotStarted(state) {
+		return true, nil
+	}
+	if !follow {
+		io.Println(fmt.Sprintf(
+			"Job run has not started yet (state: %s). Pass -f to wait for logs.",
+			state.String(),
+		))
+		return false, nil
+	}
+
+	delay := reconnectBaseDelay
+	for {
+		io.Eprintln(fmt.Sprintf("Waiting for job run to start (state: %s)...", state.String()))
+		if err := sleepCtx(ctx, delay); err != nil {
+			return false, err
+		}
+		jobRun, err := cli.GetJobRun(ctx, jobRunName)
+		if err != nil {
+			return false, err
+		}
+		state = jobRun.GetState()
+		if !jobRunNotStarted(state) {
+			return true, nil
 		}
 		delay = nextDelay(delay)
 	}

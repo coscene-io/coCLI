@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -58,6 +59,62 @@ func discardIO() *iostreams.IOStreams {
 type discardWriter struct{}
 
 func (*discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestJobRunNotStarted(t *testing.T) {
+	notStarted := []openv1alpha1enums.JobRunStateEnum_JobRunState{
+		openv1alpha1enums.JobRunStateEnum_JOB_RUN_STATE_UNSPECIFIED,
+		openv1alpha1enums.JobRunStateEnum_QUEUED,
+		openv1alpha1enums.JobRunStateEnum_SCHEDULING,
+	}
+	for _, s := range notStarted {
+		if !jobRunNotStarted(s) {
+			t.Errorf("state %s should be not-started", s.String())
+		}
+	}
+	started := []openv1alpha1enums.JobRunStateEnum_JobRunState{
+		openv1alpha1enums.JobRunStateEnum_RUNNING,
+		openv1alpha1enums.JobRunStateEnum_SUCCEEDED,
+		openv1alpha1enums.JobRunStateEnum_FAILED,
+		openv1alpha1enums.JobRunStateEnum_ABORTED,
+	}
+	for _, s := range started {
+		if jobRunNotStarted(s) {
+			t.Errorf("state %s should be started", s.String())
+		}
+	}
+}
+
+func TestAwaitJobRunStart_AlreadyStarted(t *testing.T) {
+	started, err := awaitJobRunStart(context.Background(), &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_RUNNING, true, discardIO())
+	if err != nil || !started {
+		t.Fatalf("running job should be started immediately: started=%v err=%v", started, err)
+	}
+}
+
+func TestAwaitJobRunStart_NoFollowReports(t *testing.T) {
+	started, err := awaitJobRunStart(context.Background(), &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, false, discardIO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if started {
+		t.Fatal("queued job without follow should not be started")
+	}
+}
+
+func TestAwaitJobRunStart_FollowCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // canceled before the first wait
+	started, err := awaitJobRunStart(ctx, &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if started {
+		t.Fatal("expected not started on canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
 
 func TestFollowLogs_CleanEnd(t *testing.T) {
 	calls := 0
