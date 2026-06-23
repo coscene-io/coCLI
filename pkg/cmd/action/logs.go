@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -420,6 +421,12 @@ func nextDelay(d time.Duration) time.Duration {
 	return next
 }
 
+// exitf prints an error message to stderr and terminates with a non-zero exit
+// code. The command uses cobra's Run (not RunE), so returning would exit 0 and
+// hide failures from scripts/CI; exiting here mirrors the sibling commands'
+// log.Fatalf behavior while preserving the iostreams-formatted message. Clean
+// Ctrl-C (context.Canceled) paths return before reaching exitf and still exit 0.
 func exitf(io *iostreams.IOStreams, format string, a ...interface{}) {
 	io.Eprintln(fmt.Sprintf(format, a...))
+	os.Exit(1)
 }
