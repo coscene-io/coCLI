@@ -15,10 +15,15 @@
 package action
 
 import (
+	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -33,6 +38,10 @@ type fakeJobRunClient struct {
 	listErr    error
 	dag        *openv1alpha1resource.JobRunDag
 	dagErr     error
+	// getQueue is popped one entry per GetJobRun call (last entry repeats);
+	// getErr is returned instead when set.
+	getQueue []*openv1alpha1resource.JobRun
+	getErr   error
 }
 
 func (f *fakeJobRunClient) ListJobRuns(_ context.Context, _ *name.ActionRun) ([]*openv1alpha1resource.JobRun, error) {
@@ -40,7 +49,17 @@ func (f *fakeJobRunClient) ListJobRuns(_ context.Context, _ *name.ActionRun) ([]
 }
 
 func (f *fakeJobRunClient) GetJobRun(_ context.Context, _ string) (*openv1alpha1resource.JobRun, error) {
-	return nil, nil
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if len(f.getQueue) == 0 {
+		return &openv1alpha1resource.JobRun{}, nil
+	}
+	jr := f.getQueue[0]
+	if len(f.getQueue) > 1 {
+		f.getQueue = f.getQueue[1:]
+	}
+	return jr, nil
 }
 
 func (f *fakeJobRunClient) GetJobRunDag(_ context.Context, _ string) (*openv1alpha1resource.JobRunDag, error) {
@@ -58,6 +77,160 @@ func discardIO() *iostreams.IOStreams {
 type discardWriter struct{}
 
 func (*discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestHandleLogMessage_LiveLine(t *testing.T) {
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	err := handleLogMessage(context.Background(),
+		&openv1alpha1service.LogJobRunResponse{Message: "hello"}, io)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(out.String(), "hello") {
+		t.Fatalf("live line not printed: %q", out.String())
+	}
+}
+
+func TestHandleLogMessage_DownloadURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("archived-line\n"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	err := handleLogMessage(context.Background(),
+		&openv1alpha1service.LogJobRunResponse{LogDownloadUri: srv.URL}, io)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(out.String(), "archived-line") {
+		t.Fatalf("archived log not printed: %q", out.String())
+	}
+}
+
+func TestPrintArchivedLog_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("line-one\nline-two\n"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	if err := printArchivedLog(context.Background(), srv.URL, io); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "line-one") || !strings.Contains(got, "line-two") {
+		t.Fatalf("archived log not printed: %q", got)
+	}
+}
+
+func TestPrintArchivedLog_Non200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	err := printArchivedLog(context.Background(), srv.URL, discardIO())
+	if err == nil || !strings.Contains(err.Error(), "unexpected status") {
+		t.Fatalf("expected non-200 error, got %v", err)
+	}
+}
+
+func TestPrintArchivedLog_NotFoundIsClean(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	if err := printArchivedLog(context.Background(), srv.URL, io); err != nil {
+		t.Fatalf("404 should be handled cleanly, got err: %v", err)
+	}
+	if !strings.Contains(out.String(), "No logs available") {
+		t.Fatalf("expected 'No logs available' message, got %q", out.String())
+	}
+}
+
+func TestAwaitJobRunStart_FollowPollsUntilRunning(t *testing.T) {
+	cli := &fakeJobRunClient{
+		getQueue: []*openv1alpha1resource.JobRun{
+			{State: openv1alpha1enums.JobRunStateEnum_RUNNING},
+		},
+	}
+	started, err := awaitJobRunStart(context.Background(), cli, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if err != nil || !started {
+		t.Fatalf("expected started after poll: started=%v err=%v", started, err)
+	}
+}
+
+func TestAwaitJobRunStart_FollowGetError(t *testing.T) {
+	cli := &fakeJobRunClient{getErr: errors.New("boom")}
+	started, err := awaitJobRunStart(context.Background(), cli, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if started || err == nil {
+		t.Fatalf("expected error from GetJobRun: started=%v err=%v", started, err)
+	}
+}
+
+func TestJobRunNotStarted(t *testing.T) {
+	notStarted := []openv1alpha1enums.JobRunStateEnum_JobRunState{
+		openv1alpha1enums.JobRunStateEnum_JOB_RUN_STATE_UNSPECIFIED,
+		openv1alpha1enums.JobRunStateEnum_QUEUED,
+		openv1alpha1enums.JobRunStateEnum_SCHEDULING,
+	}
+	for _, s := range notStarted {
+		if !jobRunNotStarted(s) {
+			t.Errorf("state %s should be not-started", s.String())
+		}
+	}
+	started := []openv1alpha1enums.JobRunStateEnum_JobRunState{
+		openv1alpha1enums.JobRunStateEnum_RUNNING,
+		openv1alpha1enums.JobRunStateEnum_SUCCEEDED,
+		openv1alpha1enums.JobRunStateEnum_FAILED,
+		openv1alpha1enums.JobRunStateEnum_ABORTED,
+	}
+	for _, s := range started {
+		if jobRunNotStarted(s) {
+			t.Errorf("state %s should be started", s.String())
+		}
+	}
+}
+
+func TestAwaitJobRunStart_AlreadyStarted(t *testing.T) {
+	started, err := awaitJobRunStart(context.Background(), &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_RUNNING, true, discardIO())
+	if err != nil || !started {
+		t.Fatalf("running job should be started immediately: started=%v err=%v", started, err)
+	}
+}
+
+func TestAwaitJobRunStart_NoFollowReports(t *testing.T) {
+	started, err := awaitJobRunStart(context.Background(), &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, false, discardIO())
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if started {
+		t.Fatal("queued job without follow should not be started")
+	}
+}
+
+func TestAwaitJobRunStart_FollowCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // canceled before the first wait
+	started, err := awaitJobRunStart(ctx, &fakeJobRunClient{}, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if started {
+		t.Fatal("expected not started on canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
 
 func TestFollowLogs_CleanEnd(t *testing.T) {
 	calls := 0

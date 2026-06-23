@@ -15,12 +15,16 @@
 package action
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -44,8 +48,33 @@ func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "logs <action-run-name/id> [-j <job-index>] [--node <node>] [-f] [-p <working-project-slug>]",
-		Short:                 "Stream logs of an action run's job run",
+		Use:   "logs <action-run-name/id> [-j <job-index>] [--node <node>] [-f] [-p <working-project-slug>]",
+		Short: "Stream logs of an action run's job run",
+		Long: `Stream the logs of an action run's job run.
+
+The action run is given as a full resource name
+(projects/<project>/actionRuns/<uuid>) or a bare UUID.
+
+While the job run is running, its pod logs are streamed live. Once the job
+run has finished and its pod has been cleaned up, the archived log is
+downloaded and printed instead — so the command works the same regardless
+of whether the run is in progress or already completed.
+
+  -j  select which job run to read when an action run has several
+      (default 0 = the first).
+  --node  select a node to read for multi-node (DAG) job runs; not needed
+      for single-step jobs.
+  -f  follow: keep the stream open and reconnect on transient errors. If
+      the job run has not started yet, wait for it to start. Without -f, a
+      not-yet-started run is reported and the command exits.`,
+		Example: `  # Print logs for a finished or running action run (first job run)
+  cocli action logs projects/my-project/actionRuns/<uuid> -p my-project
+
+  # By bare UUID, following a running job and waiting if it hasn't started
+  cocli action logs <uuid> -p my-project -f
+
+  # A specific job run and DAG node
+  cocli action logs <uuid> -p my-project -j 1 --node encode`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -73,6 +102,23 @@ func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 
 			cli := pm.JobRunCli()
 			jobRunName := jobRun.GetName()
+
+			// A job run that hasn't started yet (queued/scheduling) has no
+			// pod to stream and no archived log to download. Wait for it to
+			// start when following; otherwise report and exit cleanly rather
+			// than appearing to "finish" with no output.
+			started, err := awaitJobRunStart(cmd.Context(), cli, jobRunName, jobRun.GetState(), follow, io)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				exitf(io, "%v", err)
+				return
+			}
+			if !started {
+				return
+			}
+
 			streamFn := func(ctx context.Context, n string) error {
 				return streamOnce(ctx, cli, jobRunName, n, io)
 			}
@@ -145,6 +191,62 @@ func listJobRunsWithWait(ctx context.Context, cli api.JobRunInterface, actionRun
 	}
 }
 
+// jobRunNotStarted reports whether a job run has not begun executing yet
+// (queued/scheduling/unspecified) — no pod exists to stream and no log has
+// been archived.
+func jobRunNotStarted(state openv1alpha1enums.JobRunStateEnum_JobRunState) bool {
+	switch state {
+	case openv1alpha1enums.JobRunStateEnum_JOB_RUN_STATE_UNSPECIFIED,
+		openv1alpha1enums.JobRunStateEnum_QUEUED,
+		openv1alpha1enums.JobRunStateEnum_SCHEDULING:
+		return true
+	default:
+		return false
+	}
+}
+
+// awaitJobRunStart blocks until a not-yet-started job run begins (running or
+// terminal) when follow is set, polling its state. Without follow it reports
+// the state and returns started=false so the caller exits cleanly instead of
+// treating an empty stream as a finished job. Returns started=true immediately
+// when the run has already started.
+func awaitJobRunStart(
+	ctx context.Context,
+	cli api.JobRunInterface,
+	jobRunName string,
+	state openv1alpha1enums.JobRunStateEnum_JobRunState,
+	follow bool,
+	io *iostreams.IOStreams,
+) (bool, error) {
+	if !jobRunNotStarted(state) {
+		return true, nil
+	}
+	if !follow {
+		io.Println(fmt.Sprintf(
+			"Job run has not started yet (state: %s). Pass -f to wait for logs.",
+			state.String(),
+		))
+		return false, nil
+	}
+
+	delay := reconnectBaseDelay
+	for {
+		io.Eprintln(fmt.Sprintf("Waiting for job run to start (state: %s)...", state.String()))
+		if err := sleepCtx(ctx, delay); err != nil {
+			return false, err
+		}
+		jobRun, err := cli.GetJobRun(ctx, jobRunName)
+		if err != nil {
+			return false, err
+		}
+		state = jobRun.GetState()
+		if !jobRunNotStarted(state) {
+			return true, nil
+		}
+		delay = nextDelay(delay)
+	}
+}
+
 // followLogs drives the log stream state machine: it resolves the DAG node when
 // an empty node is rejected (multi-node workflows) and reconnects on transient
 // errors when follow is set. streamFn opens and relays a single stream for the
@@ -189,6 +291,10 @@ func followLogs(
 }
 
 // streamOnce opens a single log stream and relays lines until it ends or errors.
+// A running job streams live log lines (message). A finished job whose pod has
+// been garbage collected has no live logs; the server then sends a single
+// response carrying a presigned URL for the archived log, which we download and
+// print so `action logs` works transparently regardless of job state.
 func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node string, io *iostreams.IOStreams) error {
 	stream, err := cli.LogJobRun(ctx, jobRunName, node)
 	if err != nil {
@@ -197,9 +303,59 @@ func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node s
 	defer func() { _ = stream.Close() }()
 
 	for stream.Receive() {
-		io.Println(stream.Msg().GetMessage())
+		if err = handleLogMessage(ctx, stream.Msg(), io); err != nil {
+			return err
+		}
 	}
 	return stream.Err()
+}
+
+// handleLogMessage renders one LogJobRun response: a live log line (message),
+// or — for a finished job run — a presigned URL (log_download_uri) whose
+// archived log is downloaded and printed.
+func handleLogMessage(ctx context.Context, msg *openv1alpha1service.LogJobRunResponse, io *iostreams.IOStreams) error {
+	if downloadURL := msg.GetLogDownloadUri(); downloadURL != "" {
+		return printArchivedLog(ctx, downloadURL, io)
+	}
+	io.Println(msg.GetMessage())
+	return nil
+}
+
+// printArchivedLog downloads the archived job-run log from the presigned URL the
+// server returned and writes it to stdout, line by line.
+func printArchivedLog(ctx context.Context, downloadURL string, io *iostreams.IOStreams) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("build archived log request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download archived log: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		// The job run finished but no log was archived (e.g. the pod produced
+		// none, or archival wasn't enabled when it ran). Report cleanly rather
+		// than surfacing a raw 404.
+		io.Println("No logs available for this job run.")
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download archived log: unexpected status %d", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	// Job logs can carry long lines (stack traces, serialized payloads); raise
+	// the token cap well above bufio's 64KiB default.
+	const maxLogLineBytes = 4 * 1024 * 1024
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLineBytes)
+	for scanner.Scan() {
+		io.Println(scanner.Text())
+	}
+	if err = scanner.Err(); err != nil {
+		return fmt.Errorf("read archived log: %w", err)
+	}
+	return nil
 }
 
 // resolveDefaultNode picks a node name when the job run is a multi-node DAG.
