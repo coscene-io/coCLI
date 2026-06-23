@@ -78,6 +78,37 @@ type discardWriter struct{}
 
 func (*discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 
+func TestHandleLogMessage_LiveLine(t *testing.T) {
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	err := handleLogMessage(context.Background(),
+		&openv1alpha1service.LogJobRunResponse{Message: "hello"}, io)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(out.String(), "hello") {
+		t.Fatalf("live line not printed: %q", out.String())
+	}
+}
+
+func TestHandleLogMessage_DownloadURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("archived-line\n"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	err := handleLogMessage(context.Background(),
+		&openv1alpha1service.LogJobRunResponse{LogDownloadUri: srv.URL}, io)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(out.String(), "archived-line") {
+		t.Fatalf("archived log not printed: %q", out.String())
+	}
+}
+
 func TestPrintArchivedLog_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("line-one\nline-two\n"))

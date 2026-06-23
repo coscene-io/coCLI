@@ -24,6 +24,7 @@ import (
 
 	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
@@ -47,8 +48,33 @@ func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "logs <action-run-name/id> [-j <job-index>] [--node <node>] [-f] [-p <working-project-slug>]",
-		Short:                 "Stream logs of an action run's job run",
+		Use:   "logs <action-run-name/id> [-j <job-index>] [--node <node>] [-f] [-p <working-project-slug>]",
+		Short: "Stream logs of an action run's job run",
+		Long: `Stream the logs of an action run's job run.
+
+The action run is given as a full resource name
+(projects/<project>/actionRuns/<uuid>) or a bare UUID.
+
+While the job run is running, its pod logs are streamed live. Once the job
+run has finished and its pod has been cleaned up, the archived log is
+downloaded and printed instead — so the command works the same regardless
+of whether the run is in progress or already completed.
+
+  -j  select which job run to read when an action run has several
+      (default 0 = the first).
+  --node  select a node to read for multi-node (DAG) job runs; not needed
+      for single-step jobs.
+  -f  follow: keep the stream open and reconnect on transient errors. If
+      the job run has not started yet, wait for it to start. Without -f, a
+      not-yet-started run is reported and the command exits.`,
+		Example: `  # Print logs for a finished or running action run (first job run)
+  cocli action logs projects/my-project/actionRuns/<uuid> -p my-project
+
+  # By bare UUID, following a running job and waiting if it hasn't started
+  cocli action logs <uuid> -p my-project -f
+
+  # A specific job run and DAG node
+  cocli action logs <uuid> -p my-project -j 1 --node encode`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -277,16 +303,22 @@ func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node s
 	defer func() { _ = stream.Close() }()
 
 	for stream.Receive() {
-		msg := stream.Msg()
-		if downloadURL := msg.GetLogDownloadUri(); downloadURL != "" {
-			if err = printArchivedLog(ctx, downloadURL, io); err != nil {
-				return err
-			}
-			continue
+		if err = handleLogMessage(ctx, stream.Msg(), io); err != nil {
+			return err
 		}
-		io.Println(msg.GetMessage())
 	}
 	return stream.Err()
+}
+
+// handleLogMessage renders one LogJobRun response: a live log line (message),
+// or — for a finished job run — a presigned URL (log_download_uri) whose
+// archived log is downloaded and printed.
+func handleLogMessage(ctx context.Context, msg *openv1alpha1service.LogJobRunResponse, io *iostreams.IOStreams) error {
+	if downloadURL := msg.GetLogDownloadUri(); downloadURL != "" {
+		return printArchivedLog(ctx, downloadURL, io)
+	}
+	io.Println(msg.GetMessage())
+	return nil
 }
 
 // printArchivedLog downloads the archived job-run log from the presigned URL the
