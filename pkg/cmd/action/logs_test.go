@@ -15,7 +15,11 @@
 package action
 
 import (
+	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +38,10 @@ type fakeJobRunClient struct {
 	listErr    error
 	dag        *openv1alpha1resource.JobRunDag
 	dagErr     error
+	// getQueue is popped one entry per GetJobRun call (last entry repeats);
+	// getErr is returned instead when set.
+	getQueue []*openv1alpha1resource.JobRun
+	getErr   error
 }
 
 func (f *fakeJobRunClient) ListJobRuns(_ context.Context, _ *name.ActionRun) ([]*openv1alpha1resource.JobRun, error) {
@@ -41,7 +49,17 @@ func (f *fakeJobRunClient) ListJobRuns(_ context.Context, _ *name.ActionRun) ([]
 }
 
 func (f *fakeJobRunClient) GetJobRun(_ context.Context, _ string) (*openv1alpha1resource.JobRun, error) {
-	return nil, nil
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if len(f.getQueue) == 0 {
+		return &openv1alpha1resource.JobRun{}, nil
+	}
+	jr := f.getQueue[0]
+	if len(f.getQueue) > 1 {
+		f.getQueue = f.getQueue[1:]
+	}
+	return jr, nil
 }
 
 func (f *fakeJobRunClient) GetJobRunDag(_ context.Context, _ string) (*openv1alpha1resource.JobRunDag, error) {
@@ -59,6 +77,57 @@ func discardIO() *iostreams.IOStreams {
 type discardWriter struct{}
 
 func (*discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestPrintArchivedLog_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("line-one\nline-two\n"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	if err := printArchivedLog(context.Background(), srv.URL, io); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "line-one") || !strings.Contains(got, "line-two") {
+		t.Fatalf("archived log not printed: %q", got)
+	}
+}
+
+func TestPrintArchivedLog_Non200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	err := printArchivedLog(context.Background(), srv.URL, discardIO())
+	if err == nil || !strings.Contains(err.Error(), "unexpected status") {
+		t.Fatalf("expected non-200 error, got %v", err)
+	}
+}
+
+func TestAwaitJobRunStart_FollowPollsUntilRunning(t *testing.T) {
+	cli := &fakeJobRunClient{
+		getQueue: []*openv1alpha1resource.JobRun{
+			{State: openv1alpha1enums.JobRunStateEnum_RUNNING},
+		},
+	}
+	started, err := awaitJobRunStart(context.Background(), cli, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if err != nil || !started {
+		t.Fatalf("expected started after poll: started=%v err=%v", started, err)
+	}
+}
+
+func TestAwaitJobRunStart_FollowGetError(t *testing.T) {
+	cli := &fakeJobRunClient{getErr: errors.New("boom")}
+	started, err := awaitJobRunStart(context.Background(), cli, "jr",
+		openv1alpha1enums.JobRunStateEnum_QUEUED, true, discardIO())
+	if started || err == nil {
+		t.Fatalf("expected error from GetJobRun: started=%v err=%v", started, err)
+	}
+}
 
 func TestJobRunNotStarted(t *testing.T) {
 	notStarted := []openv1alpha1enums.JobRunStateEnum_JobRunState{
