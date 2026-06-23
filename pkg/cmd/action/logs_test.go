@@ -107,6 +107,22 @@ func TestPrintArchivedLog_Non200(t *testing.T) {
 	}
 }
 
+func TestPrintArchivedLog_NotFoundIsClean(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &discardWriter{})
+	if err := printArchivedLog(context.Background(), srv.URL, io); err != nil {
+		t.Fatalf("404 should be handled cleanly, got err: %v", err)
+	}
+	if !strings.Contains(out.String(), "No logs available") {
+		t.Fatalf("expected 'No logs available' message, got %q", out.String())
+	}
+}
+
 func TestAwaitJobRunStart_FollowPollsUntilRunning(t *testing.T) {
 	cli := &fakeJobRunClient{
 		getQueue: []*openv1alpha1resource.JobRun{

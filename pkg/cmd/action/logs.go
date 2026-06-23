@@ -301,6 +301,13 @@ func printArchivedLog(ctx context.Context, downloadURL string, io *iostreams.IOS
 		return fmt.Errorf("download archived log: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		// The job run finished but no log was archived (e.g. the pod produced
+		// none, or archival wasn't enabled when it ran). Report cleanly rather
+		// than surfacing a raw 404.
+		io.Println("No logs available for this job run.")
+		return nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download archived log: unexpected status %d", resp.StatusCode)
 	}
