@@ -49,6 +49,7 @@ type Profile struct {
 	usercli              api.UserInterface
 	filecli              api.FileInterface
 	actioncli            api.ActionInterface
+	jobruncli            api.JobRunInterface
 	securitytokencli     api.SecurityTokenInterface
 	eventcli             api.EventInterface
 	taskcli              api.TaskInterface
@@ -89,7 +90,13 @@ func (p *Profile) Validate() error {
 	if p.Name == "" {
 		return errors.Errorf("profile name cannot be empty")
 	}
-	if !strings.HasPrefix(p.EndPoint, "https://openapi.") {
+	// Endpoints address the public openapi gateway. The canonical form is
+	// `https://openapi.<base>`; shared dev hosts give each env its own
+	// gateway subdomain prefixed with the env name
+	// (`https://openapi-<env>.<base>`). Accept either — the leading host
+	// label must be `openapi` or `openapi-<env>`.
+	if !strings.HasPrefix(p.EndPoint, "https://openapi.") &&
+		!strings.HasPrefix(p.EndPoint, "https://openapi-") {
 		return errors.Errorf("profile %s's endpoint should start with https://openapi.", p.Name)
 	}
 	if p.Token == "" {
@@ -103,6 +110,9 @@ func (p *Profile) Validate() error {
 
 // CheckAuth checks if the profile has the org and project name set.
 func (p *Profile) CheckAuth() bool {
+	if p == nil {
+		return false
+	}
 	return p.Org != "" && p.ProjectName != ""
 }
 
@@ -209,6 +219,12 @@ func (p *Profile) ActionCli() api.ActionInterface {
 	return p.actioncli
 }
 
+// JobRunCli return job run api interface used profile.
+func (p *Profile) JobRunCli() api.JobRunInterface {
+	p.initCli()
+	return p.jobruncli
+}
+
 // SecurityTokenCli return security token api interface used profile.
 func (p *Profile) SecurityTokenCli() api.SecurityTokenInterface {
 	p.initCli()
@@ -263,6 +279,7 @@ func (p *Profile) initCli() {
 		var (
 			actionServiceClient            = openv1alpha1connect.NewActionServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			actionRunServiceClient         = openv1alpha1connect.NewActionRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
+			jobRunServiceClient            = openv1alpha1connect.NewJobRunServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			eventServiceClient             = openv1alpha1connect.NewEventServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			organizationServiceClient      = openv1alpha1connect.NewOrganizationServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
 			projectServiceClient           = openv1alpha1connect.NewProjectServiceClient(conncli, p.EndPoint, connect.WithGRPC(), interceptorsFactory())
@@ -285,6 +302,7 @@ func (p *Profile) initCli() {
 		p.usercli = api.NewUserClient(userServiceClient)
 		p.filecli = api.NewFileClient(fileServiceClient)
 		p.actioncli = api.NewActionClient(actionServiceClient, actionRunServiceClient)
+		p.jobruncli = api.NewJobRunClient(jobRunServiceClient)
 		p.securitytokencli = api.NewSecurityTokenClient(securityTokenServiceClient)
 		p.eventcli = api.NewEventClient(eventServiceClient)
 		p.taskcli = api.NewTaskClient(taskServiceClient)

@@ -29,6 +29,7 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewListRunCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewRunCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewLogsCommand(cfgPath, io, getProvider))
 
 	return cmd
 }

@@ -135,6 +135,11 @@ func (pm *ProfileManager) ActionCli() api.ActionInterface {
 	return pm.GetCurrentProfile().ActionCli()
 }
 
+// JobRunCli return job run client of current profile.
+func (pm *ProfileManager) JobRunCli() api.JobRunInterface {
+	return pm.GetCurrentProfile().JobRunCli()
+}
+
 // SecurityTokenCli return security token client of current profile.
 func (pm *ProfileManager) SecurityTokenCli() api.SecurityTokenInterface {
 	return pm.GetCurrentProfile().SecurityTokenCli()

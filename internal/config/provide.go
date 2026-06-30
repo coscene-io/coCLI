@@ -45,13 +45,19 @@ func Provide(path string) Provider {
 	return &globalConfig{path: path}
 }
 
-// GetProfileManager loads the profile manager from the config file
-// Note that loading from config have higher priority and that loading from env have the following format:
-// COS_ENDPOINT,
-// COS_TOKEN,
-// COS_PROJECT
-// Note that loading profile from env will change the config file
-// Also if COS_PROJECTID is set in the
+// EnvProfileName is the synthetic profile name assigned to a profile that is
+// built entirely from COS_* environment variables (env-inject). It never
+// appears in the on-disk config and is never persisted.
+const EnvProfileName = "ENV_LOADED_PROFILE"
+
+// GetProfileManager loads the profile manager from the config file only.
+//
+// Env-inject (building a profile from COS_ENDPOINT / COS_TOKEN / COS_PROJECT)
+// and the --profile override are handled by ResolveProfileManager, which wraps
+// this method. Callers that need override/env precedence (all data-plane
+// commands and the root auth check) must go through ResolveProfileManager.
+// Config-plane commands (login *) call this directly so they always operate on
+// the real on-disk config.
 func (cfg *globalConfig) GetProfileManager() (*ProfileManager, error) {
 	if err := cfg.loadYaml("current-profile", &cfg.CurrentProfile); err != nil {
 		return nil, errors.Wrapf(err, "unable to load current-profile from %s", cfg.path)
@@ -66,32 +72,48 @@ func (cfg *globalConfig) GetProfileManager() (*ProfileManager, error) {
 
 	if err := pm.Validate(); err != nil {
 		return nil, errors.Wrapf(err, "profile validation failed")
-	} else if !pm.IsEmpty() {
-		return pm, nil
-	}
-
-	// Config profile empty, loading from env
-	envLoadedProfile := &Profile{Name: "ENV_LOADED_PROFILE"}
-	if err := cfg.loadEnv("", envLoadedProfile); err != nil {
-		return nil, errors.Wrapf(err, "unable to load profile from env")
-	}
-	// Hack to prioritize filling project name with project id
-	if projectID := os.Getenv("COS_PROJECTID"); projectID != "" {
-		envLoadedProfile.ProjectName = name.Project{ProjectID: projectID}.String()
-	}
-
-	if envLoadedProfile.EndPoint == "" || envLoadedProfile.Token == "" || envLoadedProfile.ProjectSlug == "" {
-		return pm, nil
-	}
-	pm = new(ProfileManager)
-	pm.CurrentProfile = envLoadedProfile.Name
-	pm.Profiles = []*Profile{envLoadedProfile}
-
-	if err := pm.Validate(); err != nil {
-		return nil, errors.Wrapf(err, "profile validation failed")
 	}
 
 	return pm, nil
+}
+
+// buildEnvProfileFromOS builds a profile from the COS_* environment variables.
+// It returns (nil, nil) when the env set is incomplete — i.e. any of endpoint,
+// token, or project slug is missing — so partial COS_* is silently ignored.
+// The COS_PROJECTID hack fills the project name directly when present.
+func buildEnvProfileFromOS() (*Profile, error) {
+	k := koanf.New(".")
+	if err := k.Load(
+		env.Provider(
+			"COS",
+			"_",
+			func(s string) string {
+				return strings.ToLower(strings.TrimPrefix(s, "COS_"))
+			},
+		),
+		nil,
+	); err != nil {
+		return nil, errors.Wrap(err, "load config from env")
+	}
+
+	p := &Profile{}
+	if err := k.Unmarshal("", p); err != nil {
+		return nil, errors.Wrap(err, "unmarshal env")
+	}
+	// Force the synthetic name after unmarshal so a stray COS_NAME cannot
+	// rename (and thereby alias) the env-inject profile.
+	p.Name = EnvProfileName
+
+	// Hack to prioritize filling project name with project id
+	if projectID := os.Getenv("COS_PROJECTID"); projectID != "" {
+		p.ProjectName = name.Project{ProjectID: projectID}.String()
+	}
+
+	if p.EndPoint == "" || p.Token == "" || p.ProjectSlug == "" {
+		return nil, nil
+	}
+
+	return p, nil
 }
 
 // Persist saves the profile manager to the config file
@@ -146,28 +168,6 @@ func (cfg *globalConfig) persist() error {
 	err = os.WriteFile(originalConfig.path, yamlStr, 0644)
 	if err != nil {
 		return errors.Wrapf(err, "unable to write yaml to %s", originalConfig.path)
-	}
-	return nil
-}
-
-// loadEnv loads the config from environment variables
-func (cfg *globalConfig) loadEnv(path string, any interface{}) error {
-	k := koanf.New(".")
-	if err := k.Load(
-		env.Provider(
-			"COS",
-			"_",
-			func(s string) string {
-				return strings.ToLower(strings.TrimPrefix(s, "COS_"))
-			},
-		),
-		nil,
-	); err != nil {
-		return errors.Wrapf(err, "load config from env")
-	}
-
-	if err := k.Unmarshal(path, any); err != nil {
-		return errors.Wrap(err, "unmarshal env")
 	}
 	return nil
 }
