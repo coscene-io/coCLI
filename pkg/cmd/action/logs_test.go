@@ -301,6 +301,39 @@ func TestFollowLogs_RetriableReconnectStopsOnCanceledBackoff(t *testing.T) {
 	}
 }
 
+func TestResolveLogNode(t *testing.T) {
+	t.Run("explicit node validates against dag", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
+		}}
+		got, err := resolveLogNode(context.Background(), cli, "jr", "echo")
+		if err != nil || got != "echo" {
+			t.Fatalf("got %q, err %v", got, err)
+		}
+	})
+
+	t.Run("empty node resolves from dag", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
+		}}
+		got, err := resolveLogNode(context.Background(), cli, "jr", "")
+		if err != nil || got != "echo" {
+			t.Fatalf("got %q, err %v", got, err)
+		}
+	})
+
+	t.Run("explicit unknown node errors before streaming", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
+		}}
+		_, err := resolveLogNode(context.Background(), cli, "jr", "missing")
+		if err == nil || !strings.Contains(err.Error(), `job run node "missing" not found`) ||
+			!strings.Contains(err.Error(), "Available: [echo]") {
+			t.Fatalf("expected invalid node error with available nodes, got %v", err)
+		}
+	})
+}
+
 func TestResolveDefaultNode(t *testing.T) {
 	t.Run("single node auto-filled", func(t *testing.T) {
 		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{

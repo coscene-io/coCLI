@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
@@ -120,13 +121,21 @@ of whether the run is in progress or already completed.
 				return
 			}
 
+			resolvedNode, err := resolveLogNode(cmd.Context(), cli, jobRunName, node)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				exitf(io, "%v", err)
+				return
+			}
 			streamFn := func(ctx context.Context, n string) error {
 				return streamOnce(ctx, cli, jobRunName, n, io)
 			}
 			dagFn := func(ctx context.Context) (string, error) {
 				return resolveDefaultNode(ctx, cli, jobRunName)
 			}
-			if err = followLogs(cmd.Context(), node, follow, io, streamFn, dagFn); err != nil {
+			if err = followLogs(cmd.Context(), resolvedNode, follow, io, streamFn, dagFn); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return // clean Ctrl-C exit
 				}
@@ -311,6 +320,21 @@ func streamOnce(ctx context.Context, cli api.JobRunInterface, jobRunName, node s
 	return stream.Err()
 }
 
+func resolveLogNode(ctx context.Context, cli api.JobRunInterface, jobRunName, node string) (string, error) {
+	dag, err := cli.GetJobRunDag(ctx, jobRunName)
+	if err != nil {
+		return "", err
+	}
+	nodes := dag.GetNodes()
+	if node != "" {
+		if _, ok := nodes[node]; ok {
+			return node, nil
+		}
+		return "", fmt.Errorf("job run node %q not found. Available: %v", node, nodeNames(nodes))
+	}
+	return resolveDefaultNodeFromNodes(nodes)
+}
+
 // handleLogMessage renders one LogJobRun response: a live log line (message),
 // or — for a finished job run — a presigned URL (log_download_uri) whose
 // archived log is downloaded and printed.
@@ -365,17 +389,25 @@ func resolveDefaultNode(ctx context.Context, cli api.JobRunInterface, jobRunName
 	if err != nil {
 		return "", err
 	}
-	nodes := dag.GetNodes()
+	return resolveDefaultNodeFromNodes(dag.GetNodes())
+}
+
+func resolveDefaultNodeFromNodes(nodes map[string]*openv1alpha1resource.JobRunNode) (string, error) {
 	if len(nodes) == 1 {
 		for nodeName := range nodes {
 			return nodeName, nil
 		}
 	}
+	return "", fmt.Errorf("job run has multiple nodes; specify one with --node. Available: %v", nodeNames(nodes))
+}
+
+func nodeNames(nodes map[string]*openv1alpha1resource.JobRunNode) []string {
 	nodeNames := make([]string, 0, len(nodes))
 	for nodeName := range nodes {
 		nodeNames = append(nodeNames, nodeName)
 	}
-	return "", fmt.Errorf("job run has multiple nodes; specify one with --node. Available: %v", nodeNames)
+	sort.Strings(nodeNames)
+	return nodeNames
 }
 
 func isNodeNotFound(err error) bool {
