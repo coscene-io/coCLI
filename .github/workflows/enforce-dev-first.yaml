@@ -1,0 +1,22 @@
+name: Enforce dev-first branch model
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-base:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block PRs to main that don't come from dev
+        run: |
+          HEAD="${{ github.head_ref }}"
+          if [ "$HEAD" != "dev" ]; then
+            echo "::error::PRs to main must come from the dev branch. Got: $HEAD"
+            echo ""
+            echo "Branch model: feature/fix → dev → main"
+            echo "Please retarget this PR to dev, or merge to dev first."
+            exit 1
+          fi
+          echo "✓ PR from dev to main — allowed"
