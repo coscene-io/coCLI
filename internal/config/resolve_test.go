@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// assertAnErr is a sentinel error for stubbed auth-failure tests.
-var assertAnErr = errors.New("stub auth failure")
+// errStubAuth is a sentinel error for stubbed auth-failure tests.
+var errStubAuth = errors.New("stub auth failure")
 
 // fakeProvider returns a fixed ProfileManager, implementing Provider.
 type fakeProvider struct {
@@ -206,7 +206,7 @@ func TestResolveProfileManager_EphemeralAuthError_Override(t *testing.T) {
 	clearCosEnv(t)
 	orig := ephemeralAuth
 	ephemeralAuth = func(_ context.Context, _ *ProfileManager) error {
-		return assertAnErr
+		return errStubAuth
 	}
 	t.Cleanup(func() { ephemeralAuth = orig })
 
@@ -223,7 +223,7 @@ func TestResolveProfileManager_EphemeralAuthError_Env(t *testing.T) {
 	t.Setenv("COS_PROJECT", "env-slug")
 	orig := ephemeralAuth
 	ephemeralAuth = func(_ context.Context, _ *ProfileManager) error {
-		return assertAnErr
+		return errStubAuth
 	}
 	t.Cleanup(func() { ephemeralAuth = orig })
 
