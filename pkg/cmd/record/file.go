@@ -80,7 +80,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -211,7 +211,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -377,7 +377,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -461,7 +461,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
@@ -567,7 +567,7 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)

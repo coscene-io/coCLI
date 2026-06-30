@@ -73,7 +73,7 @@ func NewMomentCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -235,7 +235,7 @@ func NewMomentListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -287,7 +287,7 @@ func NewMomentDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvi
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

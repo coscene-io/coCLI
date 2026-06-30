@@ -24,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -53,7 +54,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			opts := &api.ListProjectsOptions{
 				DisplayNames:   keywords,

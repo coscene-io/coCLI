@@ -40,8 +40,9 @@ type ProviderGetter func(path string) config.Provider
 
 func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Command {
 	var (
-		cfgPath  string
-		logLevel string
+		cfgPath     string
+		logLevel    string
+		profileName string
 	)
 
 	cmd := &cobra.Command{
@@ -83,13 +84,13 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 			}
 
 			cfg := getProvider(cfgPath)
-			pm, err := cfg.GetProfileManager()
-			if err != nil {
-				log.Fatalf("Failed to get profile manager from config: %v", err)
-			}
 
 			// Auth Check
 			if cmd_utils.IsAuthCheckEnabled(cmd) {
+				pm, ephemeral, err := config.ResolveProfileManager(cmd.Context(), cfg, profileName)
+				if err != nil {
+					log.Fatalf("Failed to resolve profile: %v", err)
+				}
 				if pm.IsEmpty() {
 					io.Eprintf("Config file is empty, please run `cocli login set` to initialize your login profile.\n")
 					os.Exit(0)
@@ -98,16 +99,25 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 					if err = pm.Auth(cmd.Context()); err != nil {
 						log.Fatalf("Failed to authenticate current login profile: %v", err)
 					}
-
+				}
+				// Never persist when resolution was driven by --profile or a
+				// COS_* env profile — overrides are in-memory only so concurrent
+				// invocations with different profiles don't clobber the config.
+				if !ephemeral {
 					if err = cfg.Persist(pm); err != nil {
 						log.Fatalf("Failed to persist profile manager: %v", err)
 					}
 				}
+				// Stash the resolved (and authenticated) manager so subcommands
+				// reuse it via cmd_utils.ProfileManager instead of re-resolving
+				// and re-authenticating.
+				cmd.SetContext(config.ContextWithProfileManager(cmd.Context(), pm))
 			}
 		},
 	}
 	cmd.PersistentFlags().StringVar(&cfgPath, "config", constants.DefaultConfigPath, "config file path")
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level, one of: trace|debug|info|warn|error")
+	cmd.PersistentFlags().StringVar(&profileName, "profile", "", "profile to use for this invocation (overrides config current-profile; in-memory only, not persisted; ignored by login commands)")
 
 	cmd.AddCommand(NewCompletionCommand())
 	cmd.AddCommand(action.NewRootCommand(&cfgPath, io, getProvider))

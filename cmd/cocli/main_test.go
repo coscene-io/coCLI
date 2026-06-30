@@ -15,7 +15,10 @@
 package main
 
 import (
+	"context"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/coscene-io/cocli"
 )
@@ -34,5 +37,39 @@ func TestNewSentryClientOptions(t *testing.T) {
 	}
 	if !opts.AttachStacktrace {
 		t.Fatalf("expected AttachStacktrace to be true")
+	}
+}
+
+func TestForceQuitSignals(t *testing.T) {
+	ch := forceQuitSignals()
+	if ch == nil {
+		t.Fatal("expected non-nil channel")
+	}
+	if cap(ch) != 1 {
+		t.Fatalf("expected buffered channel of cap 1, got cap %d", cap(ch))
+	}
+}
+
+func TestWatchForceQuit_InvokesCallbackAfterSecondSignal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	quit := make(chan os.Signal, 1)
+	done := make(chan struct{})
+
+	go watchForceQuit(ctx, quit, func() { close(done) })
+
+	// First signal: cancel the context. Callback must NOT fire yet.
+	cancel()
+	select {
+	case <-done:
+		t.Fatal("callback fired after first signal; expected it to wait for the second")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Second signal: deliver on quit. Callback must fire.
+	quit <- os.Interrupt
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("callback did not fire after second signal")
 	}
 }

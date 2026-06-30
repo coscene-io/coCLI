@@ -20,6 +20,7 @@ import (
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -33,10 +34,7 @@ func NewCreateCredentialCommand(cfgPath *string, io *iostreams.IOStreams, getPro
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, err := getProvider(*cfgPath).GetProfileManager()
-			if err != nil {
-				log.Fatalf("failed to load profile manager: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			endpoint := pm.GetCurrentProfile().EndPoint
 
 			cred, err := pm.ContainerRegistryCli().CreateBasicCredential(cmd.Context())
