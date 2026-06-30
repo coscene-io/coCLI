@@ -24,6 +24,33 @@ Verify installation:
 cocli --version
 ```
 
+## Profiles
+
+`cocli` stores named login profiles in its config file and uses the configured
+`current-profile` by default (switch with `cocli login switch <name>`).
+
+To target a different profile for a single command without changing the config,
+use the global `--profile` flag:
+
+```bash
+cocli record list --profile staging
+```
+
+You can also drive a one-off profile entirely from environment variables by
+setting the complete `COS_*` set (`COS_ENDPOINT`, `COS_TOKEN`, `COS_PROJECT`;
+optional `COS_PROJECTID`). A partial set is ignored.
+
+Resolution precedence (highest first):
+
+```
+--profile NAME  >  complete COS_* env  >  config current-profile
+```
+
+`--profile` and `COS_*` overrides are applied in memory only and are never
+written back to the config file, so different profiles can be used concurrently.
+The `--profile` flag has no effect on `cocli login` subcommands, which always
+operate on the on-disk config.
+
 ## Help and Docs
 
 - Command help: `cocli <command> -h`

@@ -32,6 +32,7 @@ import (
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/spf13/cobra"
 )
 
@@ -80,7 +81,7 @@ of whether the run is in progress or already completed.
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				exitf(io, "unable to get project name: %v", err)

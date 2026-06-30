@@ -21,6 +21,7 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func NewCopyCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)

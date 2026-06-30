@@ -75,7 +75,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 				log.Fatalf("--page must be >= 1")
 			}
 
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -195,7 +195,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Handle args and flags.
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
@@ -355,7 +355,7 @@ func NewFileUploadCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {
@@ -425,7 +425,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			projectName, err := pm.ProjectName(cmd.Context(), args[0])
 			if err != nil {

@@ -110,6 +110,9 @@ func (p *Profile) Validate() error {
 
 // CheckAuth checks if the profile has the org and project name set.
 func (p *Profile) CheckAuth() bool {
+	if p == nil {
+		return false
+	}
 	return p.Org != "" && p.ProjectName != ""
 }
 
