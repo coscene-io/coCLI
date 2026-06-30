@@ -234,10 +234,9 @@ func TestAwaitJobRunStart_FollowCanceled(t *testing.T) {
 
 func TestFollowLogs_CleanEnd(t *testing.T) {
 	calls := 0
-	streamFn := func(_ context.Context, _ string) error { calls++; return nil }
-	dagFn := func(_ context.Context) (string, error) { return "", nil }
+	streamFn := func(_ context.Context, _ string, _ *iostreams.IOStreams) error { calls++; return nil }
 
-	if err := followLogs(context.Background(), "", false, discardIO(), streamFn, dagFn); err != nil {
+	if err := followLogs(context.Background(), []string{"n"}, false, discardIO(), streamFn); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if calls != 1 {
@@ -246,42 +245,41 @@ func TestFollowLogs_CleanEnd(t *testing.T) {
 }
 
 func TestFollowLogs_CanceledExitsClean(t *testing.T) {
-	streamFn := func(_ context.Context, _ string) error { return context.Canceled }
-	dagFn := func(_ context.Context) (string, error) { return "", nil }
+	streamFn := func(_ context.Context, _ string, _ *iostreams.IOStreams) error { return context.Canceled }
 
-	err := followLogs(context.Background(), "", true, discardIO(), streamFn, dagFn)
+	err := followLogs(context.Background(), []string{"n"}, true, discardIO(), streamFn)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled, got %v", err)
 	}
 }
 
-func TestFollowLogs_NodeNotFoundResolvesViaDag(t *testing.T) {
-	var nodes []string
-	streamFn := func(_ context.Context, node string) error {
-		nodes = append(nodes, node)
-		if node == "" {
-			return connect.NewError(connect.CodeInvalidArgument, errors.New("pod node not found"))
-		}
-		return nil // succeeds once a real node is supplied
+func TestFollowLogs_NodeNotFoundWithoutFollowSkipsNode(t *testing.T) {
+	calls := 0
+	var errOut bytes.Buffer
+	io := iostreams.Test(nil, &discardWriter{}, &errOut)
+	streamFn := func(_ context.Context, _ string, _ *iostreams.IOStreams) error {
+		calls++
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("pod node not found"))
 	}
-	dagFn := func(_ context.Context) (string, error) { return "resolved-node", nil }
 
-	if err := followLogs(context.Background(), "", false, discardIO(), streamFn, dagFn); err != nil {
+	if err := followLogs(context.Background(), []string{"pending"}, false, io, streamFn); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(nodes) != 2 || nodes[0] != "" || nodes[1] != "resolved-node" {
-		t.Fatalf("unexpected node sequence: %v", nodes)
+	if calls != 1 {
+		t.Fatalf("streamFn calls = %d, want 1", calls)
+	}
+	if !strings.Contains(errOut.String(), `node "pending"`) {
+		t.Fatalf("expected node-specific stderr, got %q", errOut.String())
 	}
 }
 
 func TestFollowLogs_NonRetriableReturns(t *testing.T) {
-	wantErr := connect.NewError(connect.CodeNotFound, errors.New("gone"))
-	streamFn := func(_ context.Context, _ string) error { return wantErr }
-	dagFn := func(_ context.Context) (string, error) { return "", nil }
+	wantErr := connect.NewError(connect.CodeUnauthenticated, errors.New("nope"))
+	streamFn := func(_ context.Context, _ string, _ *iostreams.IOStreams) error { return wantErr }
 
-	err := followLogs(context.Background(), "n", true, discardIO(), streamFn, dagFn)
-	if connect.CodeOf(err) != connect.CodeNotFound {
-		t.Fatalf("want NotFound, got %v", err)
+	err := followLogs(context.Background(), []string{"n"}, true, discardIO(), streamFn)
+	if connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("want Unauthenticated, got %v", err)
 	}
 }
 
@@ -290,35 +288,27 @@ func TestFollowLogs_RetriableReconnectStopsOnCanceledBackoff(t *testing.T) {
 	// the reconnect branch without a real delay.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	streamFn := func(_ context.Context, _ string) error {
+	streamFn := func(_ context.Context, _ string, _ *iostreams.IOStreams) error {
 		return connect.NewError(connect.CodeUnavailable, errors.New("flaky"))
 	}
-	dagFn := func(_ context.Context) (string, error) { return "", nil }
 
-	err := followLogs(ctx, "n", true, discardIO(), streamFn, dagFn)
+	err := followLogs(ctx, []string{"n"}, true, discardIO(), streamFn)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled from backoff, got %v", err)
 	}
 }
 
-func TestResolveLogNode(t *testing.T) {
+func TestResolveLogNodes(t *testing.T) {
 	t.Run("explicit node validates against dag", func(t *testing.T) {
 		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
 			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
 		}}
-		got, err := resolveLogNode(context.Background(), cli, "jr", "echo")
-		if err != nil || got != "echo" {
-			t.Fatalf("got %q, err %v", got, err)
+		got, err := resolveLogNodes(context.Background(), cli, "jr", "echo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-	})
-
-	t.Run("empty node resolves from dag", func(t *testing.T) {
-		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
-			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
-		}}
-		got, err := resolveLogNode(context.Background(), cli, "jr", "")
-		if err != nil || got != "echo" {
-			t.Fatalf("got %q, err %v", got, err)
+		if strings.Join(got, ",") != "echo" {
+			t.Fatalf("got %v, want [echo]", got)
 		}
 	})
 
@@ -326,38 +316,132 @@ func TestResolveLogNode(t *testing.T) {
 		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
 			Nodes: map[string]*openv1alpha1resource.JobRunNode{"echo": {Name: "echo"}},
 		}}
-		_, err := resolveLogNode(context.Background(), cli, "jr", "missing")
+		_, err := resolveLogNodes(context.Background(), cli, "jr", "missing")
 		if err == nil || !strings.Contains(err.Error(), `job run node "missing" not found`) ||
 			!strings.Contains(err.Error(), "Available: [echo]") {
 			t.Fatalf("expected invalid node error with available nodes, got %v", err)
 		}
 	})
-}
 
-func TestResolveDefaultNode(t *testing.T) {
-	t.Run("single node auto-filled", func(t *testing.T) {
+	t.Run("dependency order", func(t *testing.T) {
 		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
-			Nodes: map[string]*openv1alpha1resource.JobRunNode{"only": {Name: "only"}},
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{
+				"c": {Name: "c", DependentNodes: []string{"b"}},
+				"a": {Name: "a"},
+				"b": {Name: "b", DependentNodes: []string{"a"}},
+			},
 		}}
-		got, err := resolveDefaultNode(context.Background(), cli, "jr")
-		if err != nil || got != "only" {
-			t.Fatalf("got %q, err %v", got, err)
+		got, err := resolveLogNodes(context.Background(), cli, "jr", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Join(got, ",") != "a,b,c" {
+			t.Fatalf("got %v, want [a b c]", got)
 		}
 	})
 
-	t.Run("multiple nodes errors", func(t *testing.T) {
+	t.Run("parallel layer sorted by name", func(t *testing.T) {
 		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
-			Nodes: map[string]*openv1alpha1resource.JobRunNode{"a": {}, "b": {}},
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{
+				"z": {Name: "z"},
+				"a": {Name: "a"},
+				"m": {Name: "m", DependentNodes: []string{"a", "z"}},
+			},
 		}}
-		if _, err := resolveDefaultNode(context.Background(), cli, "jr"); err == nil {
-			t.Fatal("expected error for multiple nodes")
+		got, err := resolveLogNodes(context.Background(), cli, "jr", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Join(got, ",") != "a,z,m" {
+			t.Fatalf("got %v, want [a z m]", got)
+		}
+	})
+
+	t.Run("missing dependencies ignored", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{
+				"b": {Name: "b", DependentNodes: []string{"missing"}},
+				"a": {Name: "a"},
+			},
+		}}
+		got, err := resolveLogNodes(context.Background(), cli, "jr", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Join(got, ",") != "a,b" {
+			t.Fatalf("got %v, want [a b]", got)
+		}
+	})
+
+	t.Run("cycle errors", func(t *testing.T) {
+		cli := &fakeJobRunClient{dag: &openv1alpha1resource.JobRunDag{
+			Nodes: map[string]*openv1alpha1resource.JobRunNode{
+				"a": {Name: "a", DependentNodes: []string{"b"}},
+				"b": {Name: "b", DependentNodes: []string{"a"}},
+			},
+		}}
+		_, err := resolveLogNodes(context.Background(), cli, "jr", "")
+		if err == nil || !strings.Contains(err.Error(), "dependency cycle") {
+			t.Fatalf("expected cycle error, got %v", err)
 		}
 	})
 
 	t.Run("dag error propagates", func(t *testing.T) {
 		cli := &fakeJobRunClient{dagErr: errors.New("boom")}
-		if _, err := resolveDefaultNode(context.Background(), cli, "jr"); err == nil {
+		if _, err := resolveLogNodes(context.Background(), cli, "jr", ""); err == nil {
 			t.Fatal("expected dag error")
+		}
+	})
+}
+
+func TestNodePrefixOutput(t *testing.T) {
+	t.Run("live line", func(t *testing.T) {
+		var out bytes.Buffer
+		base := iostreams.Test(nil, &out, &discardWriter{})
+		io := withNodePrefix(base, "b", len("build"))
+		err := handleLogMessage(context.Background(),
+			&openv1alpha1service.LogJobRunResponse{Message: "hello"}, io)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got, want := out.String(), "b      hello\n"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("archived lines", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("line-one\nline-two\n"))
+		}))
+		defer srv.Close()
+
+		var out bytes.Buffer
+		base := iostreams.Test(nil, &out, &discardWriter{})
+		io := withNodePrefix(base, "archive", len("archive"))
+		err := handleLogMessage(context.Background(),
+			&openv1alpha1service.LogJobRunResponse{LogDownloadUri: srv.URL}, io)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got, want := out.String(), "archive  line-one\narchive  line-two\n"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("no logs line", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		var out bytes.Buffer
+		base := iostreams.Test(nil, &out, &discardWriter{})
+		io := withNodePrefix(base, "node", len("node"))
+		if err := printArchivedLog(context.Background(), srv.URL, io); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !strings.HasPrefix(out.String(), "node  No logs available") {
+			t.Fatalf("expected prefixed no-log line, got %q", out.String())
 		}
 	})
 }
