@@ -24,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -53,15 +54,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("--page must be >= 1")
 			}
 
-			profileOverride, _ := cmd.Flags().GetString("profile")
-
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-
-			if err != nil {
-
-				log.Fatalf("Failed to resolve profile: %v", err)
-
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			opts := &api.ListProjectsOptions{
 				DisplayNames:   keywords,
@@ -69,6 +62,7 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 			}
 
 			var projects []*openv1alpha1resource.Project
+			var err error
 
 			if all {
 				projects, err = pm.ProjectCli().ListAllUserProjects(context.Background(), opts)

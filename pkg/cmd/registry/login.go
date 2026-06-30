@@ -23,6 +23,7 @@ import (
 
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -36,11 +37,7 @@ func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("failed to load profile manager: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			endpoint := pm.GetCurrentProfile().EndPoint
 			host, err := inferRegistryHost(endpoint, registry)

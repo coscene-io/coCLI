@@ -108,6 +108,10 @@ func NewCommand(io *iostreams.IOStreams, getProvider ProviderGetter) *cobra.Comm
 						log.Fatalf("Failed to persist profile manager: %v", err)
 					}
 				}
+				// Stash the resolved (and authenticated) manager so subcommands
+				// reuse it via cmd_utils.ProfileManager instead of re-resolving
+				// and re-authenticating.
+				cmd.SetContext(config.ContextWithProfileManager(cmd.Context(), pm))
 			}
 		},
 	}

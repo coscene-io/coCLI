@@ -24,6 +24,7 @@ import (
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/utils"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -41,11 +42,7 @@ func NewGetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			userName := "users/current"
 			if len(args) == 1 {

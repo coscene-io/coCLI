@@ -80,11 +80,7 @@ func NewFileListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 			}
 
 			// Get current profile.
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -215,11 +211,7 @@ func NewFileDownloadCommand(cfgPath *string, io *iostreams.IOStreams, getProvide
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -385,11 +377,7 @@ func NewFileDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider 
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.RangeArgs(1, 2),
 		Run: func(cmd *cobra.Command, args []string) {
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)
@@ -473,11 +461,7 @@ func NewFileCopyCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
@@ -583,11 +567,7 @@ func NewFileMoveCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 		Args:                  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			profileOverride, _ := cmd.Flags().GetString("profile")
-			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
-			if err != nil {
-				log.Fatalf("Failed to resolve profile: %v", err)
-			}
+			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 
 			// Get working project.
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
