@@ -16,11 +16,15 @@ package config
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// assertAnErr is a sentinel error for stubbed auth-failure tests.
+var assertAnErr = errors.New("stub auth failure")
 
 // fakeProvider returns a fixed ProfileManager, implementing Provider.
 type fakeProvider struct {
@@ -184,6 +188,49 @@ func TestBuildEnvProfileFromOS_IgnoresCosName(t *testing.T) {
 func TestProfileCheckAuth_NilSafe(t *testing.T) {
 	var p *Profile
 	assert.False(t, p.CheckAuth(), "CheckAuth on nil profile must not panic")
+}
+
+func TestAuthEphemeral_AlreadyAuthed_NoNetwork(t *testing.T) {
+	// A profile already carrying Org + ProjectName passes CheckAuth, so
+	// authEphemeral must short-circuit and return nil without any network call.
+	pm := &ProfileManager{
+		CurrentProfile: "p1",
+		Profiles: []*Profile{
+			{Name: "p1", EndPoint: "https://openapi.a.coscene.cn", Token: "t1", ProjectSlug: "s1", Org: "o1", ProjectName: "projects/1"},
+		},
+	}
+	require.NoError(t, authEphemeral(context.Background(), pm))
+}
+
+func TestResolveProfileManager_EphemeralAuthError_Override(t *testing.T) {
+	clearCosEnv(t)
+	orig := ephemeralAuth
+	ephemeralAuth = func(_ context.Context, _ *ProfileManager) error {
+		return assertAnErr
+	}
+	t.Cleanup(func() { ephemeralAuth = orig })
+
+	pm, ephemeral, err := ResolveProfileManager(context.Background(), &fakeProvider{pm: twoProfilePM()}, "p2")
+	require.Error(t, err, "auth failure on override path must propagate")
+	assert.Nil(t, pm)
+	assert.False(t, ephemeral)
+}
+
+func TestResolveProfileManager_EphemeralAuthError_Env(t *testing.T) {
+	clearCosEnv(t)
+	t.Setenv("COS_ENDPOINT", "https://openapi.env.coscene.cn")
+	t.Setenv("COS_TOKEN", "env-token")
+	t.Setenv("COS_PROJECT", "env-slug")
+	orig := ephemeralAuth
+	ephemeralAuth = func(_ context.Context, _ *ProfileManager) error {
+		return assertAnErr
+	}
+	t.Cleanup(func() { ephemeralAuth = orig })
+
+	pm, ephemeral, err := ResolveProfileManager(context.Background(), &fakeProvider{pm: twoProfilePM()}, "")
+	require.Error(t, err, "auth failure on env path must propagate")
+	assert.Nil(t, pm)
+	assert.False(t, ephemeral)
 }
 
 func TestBuildEnvProfileFromOS(t *testing.T) {
