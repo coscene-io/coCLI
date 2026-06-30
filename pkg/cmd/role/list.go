@@ -47,7 +47,15 @@ func NewListCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 				log.Fatalf("--page-size must be between 10 and 100")
 			}
 
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			profileOverride, _ := cmd.Flags().GetString("profile")
+
+			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
+
+			if err != nil {
+
+				log.Fatalf("Failed to resolve profile: %v", err)
+
+			}
 
 			effectivePageSize := int32(pageSize)
 			if effectivePageSize <= 0 {

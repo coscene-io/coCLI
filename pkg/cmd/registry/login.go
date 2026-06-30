@@ -36,7 +36,8 @@ func NewLoginCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, err := getProvider(*cfgPath).GetProfileManager()
+			profileOverride, _ := cmd.Flags().GetString("profile")
+			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
 			if err != nil {
 				log.Fatalf("failed to load profile manager: %v", err)
 			}

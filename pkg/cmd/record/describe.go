@@ -43,7 +43,11 @@ func NewDescribeCommand(cfgPath *string, io *iostreams.IOStreams, getProvider fu
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			profileOverride, _ := cmd.Flags().GetString("profile")
+			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
+			if err != nil {
+				log.Fatalf("Failed to resolve profile: %v", err)
+			}
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				log.Fatalf("unable to get project name: %v", err)

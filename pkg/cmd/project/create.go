@@ -54,16 +54,17 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			profileOverride, _ := cmd.Flags().GetString("profile")
+			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
+			if err != nil {
+				log.Fatalf("Failed to resolve profile: %v", err)
+			}
 
 			if projectSlug == "" {
 				log.Fatalf("project name cannot be empty")
 			}
 
-			var (
-				projectRes *openv1alpha1resource.Project
-				err        error
-			)
+			var projectRes *openv1alpha1resource.Project
 
 			// Visibility is required
 			if visibility != "private" && visibility != "internal" {

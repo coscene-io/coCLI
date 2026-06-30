@@ -80,7 +80,12 @@ of whether the run is in progress or already completed.
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			pm, _ := getProvider(*cfgPath).GetProfileManager()
+			profileOverride, _ := cmd.Flags().GetString("profile")
+			pm, _, err := config.ResolveProfileManager(cmd.Context(), getProvider(*cfgPath), profileOverride)
+			if err != nil {
+				exitf(io, "unable to resolve profile: %v", err)
+				return
+			}
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {
 				exitf(io, "unable to get project name: %v", err)
