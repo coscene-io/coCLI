@@ -81,7 +81,7 @@ func NewCreateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			recordName, _ := name.NewRecord(res.Name)
 
 			// Display record in the requested format
-			DisplayRecordWithFormat(cmd.Context(), res, pm, outputFormat, true, io)
+			DisplayRecordWithFormat(cmd.Context(), res, pm, customfield.NewDeresolver(pm.UserCli()), outputFormat, true, io)
 
 			if thumbnail != "" {
 				// Upload thumbnail.
