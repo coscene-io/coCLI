@@ -26,6 +26,7 @@ func NewRootCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(s
 		Short: "Work with coScene action.",
 	}
 
+	cmd.AddCommand(NewCreateCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewListCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewListRunCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewRunCommand(cfgPath, io, getProvider))

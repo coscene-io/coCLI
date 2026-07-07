@@ -36,6 +36,9 @@ type ActionInterface interface {
 	// ListAllActions lists all actions in the current organization.
 	ListAllActions(ctx context.Context, listOpts *ListActionsOptions) ([]*openv1alpha1resource.Action, error)
 
+	// CreateAction creates an action in a project.
+	CreateAction(ctx context.Context, parent string, action *openv1alpha1resource.Action) (*openv1alpha1resource.Action, error)
+
 	// CreateActionRun creates an action run.
 	CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error
 
@@ -114,6 +117,19 @@ func (c *actionClient) ListAllActions(ctx context.Context, listOpts *ListActions
 
 func (c *actionClient) filter(opt *ListActionsOptions) string {
 	return ""
+}
+
+func (c *actionClient) CreateAction(ctx context.Context, parent string, action *openv1alpha1resource.Action) (*openv1alpha1resource.Action, error) {
+	req := connect.NewRequest(&openv1alpha1service.CreateActionRequest{
+		Parent: parent,
+		Action: action,
+	})
+	res, err := c.actionServiceClient.CreateAction(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create action: %w", err)
+	}
+
+	return res.Msg, nil
 }
 
 func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error {

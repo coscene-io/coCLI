@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
+	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
@@ -33,8 +34,9 @@ type mockActionServiceClient struct {
 	openv1alpha1connect.ActionServiceClient
 	ctrl *gomock.Controller
 
-	getActionFunc   func(context.Context, *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
-	listActionsFunc func(context.Context, *connect.Request[openv1alpha1service.ListActionsRequest]) (*connect.Response[openv1alpha1service.ListActionsResponse], error)
+	getActionFunc    func(context.Context, *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
+	listActionsFunc  func(context.Context, *connect.Request[openv1alpha1service.ListActionsRequest]) (*connect.Response[openv1alpha1service.ListActionsResponse], error)
+	createActionFunc func(context.Context, *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
 }
 
 func (m *mockActionServiceClient) GetAction(ctx context.Context, req *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
@@ -47,6 +49,13 @@ func (m *mockActionServiceClient) GetAction(ctx context.Context, req *connect.Re
 func (m *mockActionServiceClient) ListActions(ctx context.Context, req *connect.Request[openv1alpha1service.ListActionsRequest]) (*connect.Response[openv1alpha1service.ListActionsResponse], error) {
 	if m.listActionsFunc != nil {
 		return m.listActionsFunc(ctx, req)
+	}
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func (m *mockActionServiceClient) CreateAction(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+	if m.createActionFunc != nil {
+		return m.createActionFunc(ctx, req)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
@@ -118,6 +127,46 @@ func TestActionClient_ListAllActions(t *testing.T) {
 		}
 		client := NewActionClient(mock, nil)
 		_, err := client.ListAllActions(ctx, &ListActionsOptions{Parent: "projects/p1"})
+		assert.Error(t, err)
+	})
+}
+
+func TestActionClient_CreateAction(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	t.Run("success", func(t *testing.T) {
+		input := &openv1alpha1resource.Action{
+			Spec: &openv1alpha1commons.ActionSpec{Name: "diagnose", Jobs: []*openv1alpha1commons.JobSpec{{Name: "job"}}},
+		}
+		expected := &openv1alpha1resource.Action{
+			Name: "projects/p1/actions/a1",
+			Spec: input.Spec,
+		}
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			createActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				assert.Equal(t, "projects/p1", req.Msg.Parent)
+				assert.Equal(t, input, req.Msg.Action)
+				return connect.NewResponse(expected), nil
+			},
+		}
+		client := NewActionClient(mock, nil)
+		action, err := client.CreateAction(ctx, "projects/p1", input)
+		require.NoError(t, err)
+		assert.Equal(t, expected, action)
+	})
+
+	t.Run("error", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			createActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				return nil, connect.NewError(connect.CodePermissionDenied, nil)
+			},
+		}
+		client := NewActionClient(mock, nil)
+		_, err := client.CreateAction(ctx, "projects/p1", &openv1alpha1resource.Action{})
 		assert.Error(t, err)
 	})
 }

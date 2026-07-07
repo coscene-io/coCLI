@@ -43,7 +43,7 @@ func TestActionCommand(t *testing.T) {
 		assert.Equal(t, "action", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
 
-		expectedSubcommands := []string{"list", "list-run", "run"}
+		expectedSubcommands := []string{"create", "list", "list-run", "logs", "run"}
 
 		for _, expected := range expectedSubcommands {
 			found := false
@@ -69,6 +69,24 @@ func TestActionCommand(t *testing.T) {
 
 		assert.NotNil(t, listCmd.Flag("project"), "Flag --project not found")
 		assert.NotNil(t, listCmd.Flag("output"), "Flag --output not found")
+	})
+
+	t.Run("Create command flags", func(t *testing.T) {
+		cfgPath := setupTestConfig(t)
+		var buf bytes.Buffer
+		io := iostreams.Test(nil, &buf, &buf)
+		cmd := action.NewRootCommand(&cfgPath, io, config.Provide)
+
+		createCmd, _, err := cmd.Find([]string{"create"})
+		require.NoError(t, err)
+
+		assert.NotNil(t, createCmd.Flag("project"), "Flag --project not found")
+		assert.NotNil(t, createCmd.Flag("file"), "Flag --file not found")
+		assert.NotNil(t, createCmd.Flag("dry-run"), "Flag --dry-run not found")
+		assert.NotNil(t, createCmd.Flag("example"), "Flag --example not found")
+		assert.NotNil(t, createCmd.Flag("output"), "Flag --output not found")
+		assert.NotNil(t, createCmd.Flag("image"), "Flag --image not found")
+		assert.NotNil(t, createCmd.Flag("command"), "Flag --command not found")
 	})
 
 	t.Run("Run command flags", func(t *testing.T) {

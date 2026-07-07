@@ -17,6 +17,7 @@ package printable
 import (
 	"time"
 
+	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"github.com/coscene-io/cocli/internal/name"
@@ -36,9 +37,29 @@ type Action struct {
 	Delegate []*openv1alpha1resource.Action
 }
 
+type SingleAction struct {
+	Delegate *openv1alpha1resource.Action
+}
+
+type ActionSpec struct {
+	Delegate *openv1alpha1commons.ActionSpec
+}
+
 func NewAction(actions []*openv1alpha1resource.Action) *Action {
 	return &Action{
 		Delegate: actions,
+	}
+}
+
+func NewSingleAction(action *openv1alpha1resource.Action) *SingleAction {
+	return &SingleAction{
+		Delegate: action,
+	}
+}
+
+func NewActionSpec(spec *openv1alpha1commons.ActionSpec) *ActionSpec {
+	return &ActionSpec{
+		Delegate: spec,
 	}
 }
 
@@ -47,6 +68,28 @@ func (p *Action) ToProtoMessage() proto.Message {
 		Actions:   p.Delegate,
 		TotalSize: int64(len(p.Delegate)),
 	}
+}
+
+func (p *SingleAction) ToProtoMessage() proto.Message {
+	return p.Delegate
+}
+
+func (p *ActionSpec) ToProtoMessage() proto.Message {
+	if p.Delegate == nil {
+		return &openv1alpha1commons.ActionSpec{}
+	}
+	return p.Delegate
+}
+
+func (p *SingleAction) ToTable(opts *table.PrintOpts) table.Table {
+	if p.Delegate == nil {
+		return table.ColumnDefs2Table([]table.ColumnDefinitionFull[*openv1alpha1resource.Action]{}, nil, opts)
+	}
+	return NewAction([]*openv1alpha1resource.Action{p.Delegate}).ToTable(opts)
+}
+
+func (p *ActionSpec) ToTable(opts *table.PrintOpts) table.Table {
+	return NewSingleAction(&openv1alpha1resource.Action{Spec: p.Delegate}).ToTable(opts)
 }
 
 func (p *Action) ToTable(opts *table.PrintOpts) table.Table {
@@ -63,6 +106,9 @@ func (p *Action) ToTable(opts *table.PrintOpts) table.Table {
 					return a.Name
 				}
 				actionName, _ := name.NewAction(a.Name)
+				if actionName == nil {
+					return ""
+				}
 				return actionName.ID
 			},
 			TrimSize: actionIdTrimSize,
@@ -71,6 +117,9 @@ func (p *Action) ToTable(opts *table.PrintOpts) table.Table {
 			FieldName: "CATEGORY",
 			FieldValueFunc: func(a *openv1alpha1resource.Action, opts *table.PrintOpts) string {
 				actionName, _ := name.NewAction(a.Name)
+				if actionName == nil {
+					return "custom"
+				}
 				if actionName.IsWftmpl() {
 					return "system"
 				}
@@ -81,6 +130,9 @@ func (p *Action) ToTable(opts *table.PrintOpts) table.Table {
 		{
 			FieldName: "TITLE",
 			FieldValueFunc: func(a *openv1alpha1resource.Action, opts *table.PrintOpts) string {
+				if a.Spec == nil {
+					return ""
+				}
 				return a.Spec.Name
 			},
 			TrimSize: actionTitleTrimSize,
@@ -95,6 +147,9 @@ func (p *Action) ToTable(opts *table.PrintOpts) table.Table {
 		{
 			FieldName: "UPDATE TIME",
 			FieldValueFunc: func(a *openv1alpha1resource.Action, opts *table.PrintOpts) string {
+				if a.UpdateTime == nil {
+					return ""
+				}
 				return a.UpdateTime.AsTime().In(time.Local).Format(time.RFC3339)
 			},
 			TrimSize: actionTimeTrimSize,
