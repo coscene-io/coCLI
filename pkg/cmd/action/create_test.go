@@ -136,8 +136,7 @@ jobs:
 parameters:
   X: old
 quota:
-  cpu: CPU_QUOTA_2C
-  memory: MEMORY_QUOTA_4G
+  profile: large
 `
 	ioStreams := iostreams.Test(io.NopCloser(strings.NewReader(spec)), &out, &bytes.Buffer{})
 	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
@@ -157,7 +156,7 @@ quota:
 	assert.Contains(t, got, `"image":"new-image"`)
 	assert.Contains(t, got, `"A":"B"`)
 	assert.Contains(t, got, `"X":"old"`)
-	assert.Contains(t, got, `"cpu":"CPU_QUOTA_2C"`)
+	assert.Contains(t, got, `"cpu":"CPU_QUOTA_4C"`)
 	assert.NotContains(t, got, "old-image")
 }
 
@@ -197,18 +196,14 @@ func TestLoadActionCreateSpecAcceptsProtoJSONWrapper(t *testing.T) {
 }
 
 func TestLowerActionCreateQuota(t *testing.T) {
-	profile, err := lowerActionCreateQuota(&actionCreateQuota{Profile: "xlarge"})
+	quota, err := lowerActionCreateQuota(&actionCreateQuota{Profile: "xlarge"})
 	require.NoError(t, err)
-	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_8C, profile.Cpu)
-	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_16G, profile.Memory)
+	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_8C, quota.Cpu)
+	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_16G, quota.Memory)
 
-	raw, err := lowerActionCreateQuota(&actionCreateQuota{CPU: "4C", Memory: "MEMORY_QUOTA_8G"})
-	require.NoError(t, err)
-	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_4C, raw.Cpu)
-	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_8G, raw.Memory)
-
-	_, err = lowerActionCreateQuota(&actionCreateQuota{Profile: "small", CPU: "CPU_QUOTA_1C"})
+	_, err = lowerActionCreateQuota(&actionCreateQuota{Profile: "huge"})
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "valid: small, medium, large, xlarge")
 }
 
 func TestLowerActionCreateRejectsBothJobKinds(t *testing.T) {

@@ -60,7 +60,7 @@ jobs:
 parameters:
   X: "default"
 quota:
-  profile: small # small|medium|large|xlarge. Or use raw cpu/memory enum fields.
+  profile: small # small|medium|large|xlarge
 output_options:
   save_mode: APPEND
 `
@@ -85,8 +85,6 @@ type actionCreateOptions struct {
 	env          []string
 	params       []string
 	quotaProfile string
-	cpuQuota     string
-	memoryQuota  string
 }
 
 type actionCreateSpec struct {
@@ -132,8 +130,6 @@ type actionCreateHTTPSpec struct {
 
 type actionCreateQuota struct {
 	Profile string `yaml:"profile"`
-	CPU     string `yaml:"cpu"`
-	Memory  string `yaml:"memory"`
 }
 
 type actionCreateMountOptions struct {
@@ -278,8 +274,6 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
 	cmd.Flags().StringVar(&opts.quotaProfile, "quota", "", "quota profile: small|medium|large|xlarge")
-	cmd.Flags().StringVar(&opts.cpuQuota, "cpu-quota", "", "raw CPU quota enum override, e.g. CPU_QUOTA_1C")
-	cmd.Flags().StringVar(&opts.memoryQuota, "memory-quota", "", "raw memory quota enum override, e.g. MEMORY_QUOTA_2G")
 
 	return cmd
 }
@@ -358,19 +352,11 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 			spec.Parameters[k] = v
 		}
 	}
-	if changed("quota") || changed("cpu-quota") || changed("memory-quota") {
+	if changed("quota") {
 		if spec.Quota == nil {
 			spec.Quota = &actionCreateQuota{}
 		}
-		if changed("quota") {
-			spec.Quota.Profile = opts.quotaProfile
-		}
-		if changed("cpu-quota") {
-			spec.Quota.CPU = opts.cpuQuota
-		}
-		if changed("memory-quota") {
-			spec.Quota.Memory = opts.memoryQuota
-		}
+		spec.Quota.Profile = opts.quotaProfile
 	}
 
 	if !changed("job-name") && !changed("image") && !changed("command") && !changed("args") && !changed("env") {
@@ -582,39 +568,21 @@ func lowerActionCreateJob(job *actionCreateJobSpec) (*openv1alpha1commons.JobSpe
 }
 
 func lowerActionCreateQuota(quota *actionCreateQuota) (*openv1alpha1commons.Quota, error) {
-	if quota.Profile != "" && (quota.CPU != "" || quota.Memory != "") {
-		return nil, errors.New("quota.profile cannot be combined with quota.cpu or quota.memory")
+	if quota.Profile == "" {
+		return &openv1alpha1commons.Quota{}, nil
 	}
-	if quota.Profile != "" {
-		switch strings.ToLower(quota.Profile) {
-		case "small":
-			return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_1C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_2G}, nil
-		case "medium":
-			return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_2C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_4G}, nil
-		case "large":
-			return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_4C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_8G}, nil
-		case "xlarge":
-			return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_8C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_16G}, nil
-		default:
-			return nil, fmt.Errorf("unknown quota profile %q", quota.Profile)
-		}
+	switch strings.ToLower(quota.Profile) {
+	case "small":
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_1C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_2G}, nil
+	case "medium":
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_2C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_4G}, nil
+	case "large":
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_4C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_8G}, nil
+	case "xlarge":
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_8C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_16G}, nil
+	default:
+		return nil, fmt.Errorf("unknown quota profile %q (valid: small, medium, large, xlarge)", quota.Profile)
 	}
-
-	out := &openv1alpha1commons.Quota{}
-	var err error
-	if quota.CPU != "" {
-		out.Cpu, err = parseActionCreateCPUQuota(quota.CPU)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if quota.Memory != "" {
-		out.Memory, err = parseActionCreateMemoryQuota(quota.Memory)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
 }
 
 func validateActionForCreate(action *openv1alpha1resource.Action) error {
@@ -722,28 +690,6 @@ func parseActionCreateKeyValues(items []string, flagName string) (map[string]str
 		values[key] = value
 	}
 	return values, nil
-}
-
-func parseActionCreateCPUQuota(value string) (openv1alpha1commons.Quota_CPUQuota, error) {
-	key := strings.ToUpper(strings.TrimSpace(value))
-	if !strings.HasPrefix(key, "CPU_QUOTA_") {
-		key = "CPU_QUOTA_" + key
-	}
-	if v, ok := openv1alpha1commons.Quota_CPUQuota_value[key]; ok {
-		return openv1alpha1commons.Quota_CPUQuota(v), nil
-	}
-	return openv1alpha1commons.Quota_CPU_QUOTA_UNSPECIFIED, fmt.Errorf("unknown CPU quota %q", value)
-}
-
-func parseActionCreateMemoryQuota(value string) (openv1alpha1commons.Quota_MemoryQuota, error) {
-	key := strings.ToUpper(strings.TrimSpace(value))
-	if !strings.HasPrefix(key, "MEMORY_QUOTA_") {
-		key = "MEMORY_QUOTA_" + key
-	}
-	if v, ok := openv1alpha1commons.Quota_MemoryQuota_value[key]; ok {
-		return openv1alpha1commons.Quota_MemoryQuota(v), nil
-	}
-	return openv1alpha1commons.Quota_MEMORY_QUOTA_UNSPECIFIED, fmt.Errorf("unknown memory quota %q", value)
 }
 
 func parseActionCreateHTTPMethod(value string) (openv1alpha1commons.HttpJobSpec_HttpMethod, error) {
