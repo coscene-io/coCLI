@@ -67,7 +67,7 @@ output_options:
 
 var (
 	actionCreateJobNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-	actionCreateEnvRe     = regexp.MustCompile(`[-._a-zA-Z][-._a-zA-Z0-9]*`)
+	actionCreateEnvRe     = regexp.MustCompile(`^[-._a-zA-Z][-._a-zA-Z0-9]*$`)
 	actionCreateParamRe   = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
 )
 
@@ -268,6 +268,8 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
 	cmd.Flags().StringVar(&opts.quotaProfile, "quota", "", "quota profile: small|medium|large|xlarge")
+
+	cmd_utils.DisableAuthCheckForBoolFlags(cmd, "example", "dry-run")
 
 	return cmd
 }

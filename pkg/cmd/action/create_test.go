@@ -241,6 +241,27 @@ func TestValidateActionForCreate(t *testing.T) {
 	assert.Contains(t, err.Error(), `parameter "X" is referenced but not defined`)
 }
 
+func TestValidateActionForCreateRejectsInvalidEnvNames(t *testing.T) {
+	for _, envName := range []string{"1BAD", "BAD!"} {
+		t.Run(envName, func(t *testing.T) {
+			action := &openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{
+				Name: "valid",
+				Jobs: []*openv1alpha1commons.JobSpec{{
+					Name: "main",
+					JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{
+						Image: "img",
+						Env:   map[string]string{envName: "value"},
+					}},
+				}},
+			}}
+
+			err := validateActionForCreate(action)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), fmt.Sprintf("env name %q", envName))
+		})
+	}
+}
+
 func TestSplitActionCreateWords(t *testing.T) {
 	words, err := splitActionCreateWords(`python "run script.py" --flag=value`)
 	require.NoError(t, err)
