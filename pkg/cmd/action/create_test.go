@@ -16,6 +16,8 @@ package action
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +26,7 @@ import (
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/stretchr/testify/assert"
@@ -89,7 +92,7 @@ func TestCreateCommandDryRunInlineJSON(t *testing.T) {
 		"--command", `python "run script.py"`,
 		"--env", "FOO=bar",
 		"--param", "X=default",
-		"--quota-profile", "small",
+		"--quota", "small",
 		"-o", "json",
 	})
 
@@ -251,4 +254,112 @@ func TestSplitActionCreateWords(t *testing.T) {
 
 func compactActionCreateJSON(input string) string {
 	return strings.Join(strings.Fields(input), "")
+}
+
+// --- fix-wave (Worker E) tests --------------------------------------------
+
+// The --example skeleton must ship the obvious sentinel so an unedited example
+// is easy to spot (warnActionCreateSentinels keys on exactly this string).
+func TestCreateCommandExampleUsesSentinel(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	var out bytes.Buffer
+	ioStreams := iostreams.Test(nil, &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{"create", "--example"})
+
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), actionCreateSentinelImage)
+}
+
+// A surviving sentinel image warns to stderr but does not fail the command.
+func TestWarnActionCreateSentinels(t *testing.T) {
+	t.Run("sentinel warns", func(t *testing.T) {
+		var errOut bytes.Buffer
+		ioStreams := iostreams.Test(nil, &bytes.Buffer{}, &errOut)
+		action := &openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{
+			Name: "a",
+			Jobs: []*openv1alpha1commons.JobSpec{{
+				Name: "job",
+				JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{
+					Image: actionCreateSentinelImage,
+				}},
+			}},
+		}}
+		warnActionCreateSentinels(action, ioStreams)
+		assert.Contains(t, errOut.String(), "sentinel")
+		assert.Contains(t, errOut.String(), `job "job"`)
+	})
+
+	t.Run("real image is silent", func(t *testing.T) {
+		var errOut bytes.Buffer
+		ioStreams := iostreams.Test(nil, &bytes.Buffer{}, &errOut)
+		action := &openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{
+			Name: "a",
+			Jobs: []*openv1alpha1commons.JobSpec{{
+				Name: "job",
+				JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{
+					Image: "ubuntu:22.04",
+				}},
+			}},
+		}}
+		warnActionCreateSentinels(action, ioStreams)
+		assert.Empty(t, errOut.String())
+	})
+}
+
+// Dry-run with the sentinel image emits the stderr warning end-to-end.
+func TestCreateCommandDryRunWarnsOnSentinel(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	var out, errOut bytes.Buffer
+	ioStreams := iostreams.Test(nil, &out, &errOut)
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"--name", "sentinel-action",
+		"--image", actionCreateSentinelImage,
+		"-o", "json",
+	})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, errOut.String(), "sentinel")
+}
+
+// D14: a ResourceExhausted / NO_SUBSCRIPTION connect error is classified as
+// "do not retry"; unrelated errors are not.
+func TestIsNoSubscriptionError(t *testing.T) {
+	// ResourceExhausted code -> true, even wrapped (mirrors api/action.go's %w).
+	re := connect.NewError(connect.CodeResourceExhausted, errors.New("quota exceeded"))
+	assert.True(t, isNoSubscriptionError(fmt.Errorf("failed to create action: %w", re)))
+
+	// NO_SUBSCRIPTION marker in the message -> true, regardless of code.
+	ns := connect.NewError(connect.CodeFailedPrecondition, errors.New("reason: NO_SUBSCRIPTION for org"))
+	assert.True(t, isNoSubscriptionError(ns))
+
+	// A different connect code without the marker -> false.
+	nf := connect.NewError(connect.CodeNotFound, errors.New("missing"))
+	assert.False(t, isNoSubscriptionError(nf))
+
+	// A non-connect error -> false.
+	assert.False(t, isNoSubscriptionError(errors.New("boom")))
+}
+
+// -P is the cocli shorthand for --param (D6); --args is the reconciled plan
+// flag name (was --arg). Both flow through to the lowered spec.
+func TestCreateCommandParamShorthandAndArgs(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	var out bytes.Buffer
+	ioStreams := iostreams.Test(nil, &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"--name", "flag-action",
+		"--image", "ubuntu:22.04",
+		"--command", "echo hi",
+		"-P", "X=default",
+		"--args=--verbose",
+		"-o", "json",
+	})
+	require.NoError(t, cmd.Execute())
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"X":"default"`)
+	assert.Contains(t, got, `"--verbose"`)
 }

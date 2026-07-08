@@ -16,6 +16,7 @@ package action
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/printer"
@@ -37,6 +39,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// actionCreateSentinelImage is an obvious placeholder used in the --example
+// skeleton. If it survives unedited into a real create, the action would be
+// junk, so we warn at create-time (see warnActionCreateSentinels).
+const actionCreateSentinelImage = "REPLACE-ME/image:tag"
+
 const actionCreateExample = `# ActionSpec - use with: cocli action create --project <slug> -f spec.yaml
 name: my-action
 description: ""
@@ -45,7 +52,7 @@ jobs:
   - name: job
     depends: []
     container:
-      image: registry.example.com/my-image:tag
+      image: REPLACE-ME/image:tag # <-- replace before creating (see warning)
       command: ["python", "run.py"]
       args: []
       env:
@@ -209,6 +216,10 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 				log.Fatalf("invalid action spec: %v", err)
 			}
 
+			// Warn (non-fatal) if an unedited --example sentinel survived; both
+			// dry-run and real create surface this so agents catch it early.
+			warnActionCreateSentinels(action, ioStreams)
+
 			printFormat := outputFormat
 			if opts.dryRun && !cmd.Flags().Changed("output") {
 				printFormat = "yaml"
@@ -232,6 +243,17 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 			}
 			action, err = pm.ActionCli().CreateAction(cmd.Context(), proj.String(), action)
 			if err != nil {
+				// Quiet exit on Ctrl-C / cancellation (mirror logs.go). No noisy
+				// stack — the user already knows they cancelled.
+				if errors.Is(err, context.Canceled) {
+					os.Exit(1)
+				}
+				// D14: a ResourceExhausted / NO_SUBSCRIPTION failure is almost
+				// always a missing subscription or permission grant, NOT a real
+				// quota limit — retrying will not help, so say so and stop.
+				if isNoSubscriptionError(err) {
+					exitf(ioStreams, "failed to create action: %v\nlikely a missing permission grant, not a quota limit — do not retry", err)
+				}
 				log.Fatalf("failed to create action: %v", err)
 			}
 			if err = p.PrintObj(printable.NewSingleAction(action), ioStreams.Out); err != nil {
@@ -252,12 +274,12 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd.Flags().StringVar(&opts.jobName, "job-name", "", "single container job name")
 	cmd.Flags().StringVar(&opts.image, "image", "", "container image for inline single-container creation")
 	cmd.Flags().StringVar(&opts.command, "command", "", "container command, split like a shell command line")
-	cmd.Flags().StringArrayVar(&opts.args, "arg", []string{}, "container argument (repeatable)")
+	cmd.Flags().StringArrayVar(&opts.args, "args", []string{}, "container argument (repeatable)")
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
-	cmd.Flags().StringArrayVar(&opts.params, "param", []string{}, "action parameter default in key=value format (repeatable)")
-	cmd.Flags().StringVar(&opts.quotaProfile, "quota-profile", "", "quota profile: small|medium|large|xlarge")
-	cmd.Flags().StringVar(&opts.cpuQuota, "cpu-quota", "", "raw CPU quota enum, e.g. CPU_QUOTA_1C")
-	cmd.Flags().StringVar(&opts.memoryQuota, "memory-quota", "", "raw memory quota enum, e.g. MEMORY_QUOTA_2G")
+	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
+	cmd.Flags().StringVar(&opts.quotaProfile, "quota", "", "quota profile: small|medium|large|xlarge")
+	cmd.Flags().StringVar(&opts.cpuQuota, "cpu-quota", "", "raw CPU quota enum override, e.g. CPU_QUOTA_1C")
+	cmd.Flags().StringVar(&opts.memoryQuota, "memory-quota", "", "raw memory quota enum override, e.g. MEMORY_QUOTA_2G")
 
 	return cmd
 }
@@ -336,11 +358,11 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 			spec.Parameters[k] = v
 		}
 	}
-	if changed("quota-profile") || changed("cpu-quota") || changed("memory-quota") {
+	if changed("quota") || changed("cpu-quota") || changed("memory-quota") {
 		if spec.Quota == nil {
 			spec.Quota = &actionCreateQuota{}
 		}
-		if changed("quota-profile") {
+		if changed("quota") {
 			spec.Quota.Profile = opts.quotaProfile
 		}
 		if changed("cpu-quota") {
@@ -351,7 +373,7 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 		}
 	}
 
-	if !changed("job-name") && !changed("image") && !changed("command") && !changed("arg") && !changed("env") {
+	if !changed("job-name") && !changed("image") && !changed("command") && !changed("args") && !changed("env") {
 		return nil
 	}
 	job, err := singleActionCreateJob(spec)
@@ -361,7 +383,7 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 	if changed("job-name") {
 		job.Name = opts.jobName
 	}
-	if changed("image") || changed("command") || changed("arg") || changed("env") {
+	if changed("image") || changed("command") || changed("args") || changed("env") {
 		if job.Container == nil {
 			job.Container = &actionCreateContainerSpec{}
 		}
@@ -377,7 +399,7 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 		}
 		job.Container.Command = words
 	}
-	if changed("arg") {
+	if changed("args") {
 		job.Container.Args = append([]string(nil), opts.args...)
 	}
 	if changed("env") {
@@ -651,6 +673,43 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 		return errors.New(strings.Join(msgs, "; "))
 	}
 	return nil
+}
+
+// isNoSubscriptionError reports whether a CreateAction failure is the D14
+// "no subscription / missing permission grant" case rather than a genuine
+// transient quota limit. The backend signals this with a ResourceExhausted
+// connect code and/or a NO_SUBSCRIPTION detail; either way, retrying will not
+// help. Mirrors the connect-code inspection style in logs.go (errors.As +
+// connErr.Code()).
+func isNoSubscriptionError(err error) bool {
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) {
+		return false
+	}
+	if strings.Contains(strings.ToUpper(err.Error()), "NO_SUBSCRIPTION") {
+		return true
+	}
+	return connErr.Code() == connect.CodeResourceExhausted
+}
+
+// warnActionCreateSentinels warns to stderr when an unedited --example sentinel
+// (e.g. the placeholder image) survives into the spec. It does not block: the
+// server-side validation is authoritative, but a surviving sentinel almost
+// always means the user forgot to fill in the skeleton and would otherwise
+// create a junk action.
+func warnActionCreateSentinels(action *openv1alpha1resource.Action, io *iostreams.IOStreams) {
+	if action == nil || action.GetSpec() == nil {
+		return
+	}
+	for _, job := range action.GetSpec().GetJobs() {
+		container := job.GetContainer()
+		if container == nil {
+			continue
+		}
+		if container.GetImage() == actionCreateSentinelImage {
+			io.Eprintf("warning: job %q still uses the example sentinel image %q — edit the spec before creating a real action\n", job.GetName(), actionCreateSentinelImage)
+		}
+	}
 }
 
 func parseActionCreateKeyValues(items []string, flagName string) (map[string]string, error) {
