@@ -76,7 +76,10 @@ func TestCreateCommandDryRunDoesNotRequireConfig(t *testing.T) {
 	})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, compactActionCreateJSON(out.String()), `"name":"local-action"`)
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"name":"local-action"`)
+	// CLI-built single job defaults to "main" (no --job-name flag anymore).
+	assert.Contains(t, got, `"name":"main"`)
 }
 
 func TestCreateCommandDryRunInlineJSON(t *testing.T) {
@@ -230,7 +233,7 @@ func TestValidateActionForCreate(t *testing.T) {
 		Parameters: map[string]string{"X": "default"},
 	}}
 	require.NoError(t, validateActionForCreate(action))
-	assert.Equal(t, "job", action.Spec.Jobs[0].Name)
+	assert.Equal(t, "main", action.Spec.Jobs[0].Name)
 
 	action.Spec.Parameters = nil
 	err := validateActionForCreate(action)
@@ -337,9 +340,10 @@ func TestIsNoSubscriptionError(t *testing.T) {
 	assert.False(t, isNoSubscriptionError(errors.New("boom")))
 }
 
-// -P is the cocli shorthand for --param (D6); --args is the reconciled plan
-// flag name (was --arg). Both flow through to the lowered spec.
-func TestCreateCommandParamShorthandAndArgs(t *testing.T) {
+// -P is the cocli shorthand for --param (D6). --command is shell-split
+// (quote-aware) into the job's command token list, so flags ride inside the
+// command line instead of a separate --args flag.
+func TestCreateCommandParamShorthandAndCommandSplit(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
 	var out bytes.Buffer
 	ioStreams := iostreams.Test(nil, &out, &bytes.Buffer{})
@@ -348,9 +352,8 @@ func TestCreateCommandParamShorthandAndArgs(t *testing.T) {
 		"create", "--dry-run",
 		"--name", "flag-action",
 		"--image", "ubuntu:22.04",
-		"--command", "echo hi",
+		"--command", "echo hi --verbose",
 		"-P", "X=default",
-		"--args=--verbose",
 		"-o", "json",
 	})
 	require.NoError(t, cmd.Execute())

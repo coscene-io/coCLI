@@ -49,7 +49,7 @@ name: my-action
 description: ""
 labels: []
 jobs:
-  - name: job
+  - name: main
     depends: []
     container:
       image: REPLACE-ME/image:tag # <-- replace before creating (see warning)
@@ -77,11 +77,8 @@ type actionCreateOptions struct {
 	example      bool
 	name         string
 	description  string
-	labels       []string
-	jobName      string
 	image        string
 	command      string
-	args         []string
 	env          []string
 	params       []string
 	quotaProfile string
@@ -266,11 +263,8 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 
 	cmd.Flags().StringVar(&opts.name, "name", "", "action name for inline single-container creation")
 	cmd.Flags().StringVar(&opts.description, "description", "", "action description for inline single-container creation")
-	cmd.Flags().StringArrayVar(&opts.labels, "label", []string{}, "action label (repeatable)")
-	cmd.Flags().StringVar(&opts.jobName, "job-name", "", "single container job name")
 	cmd.Flags().StringVar(&opts.image, "image", "", "container image for inline single-container creation")
-	cmd.Flags().StringVar(&opts.command, "command", "", "container command, split like a shell command line")
-	cmd.Flags().StringArrayVar(&opts.args, "args", []string{}, "container argument (repeatable)")
+	cmd.Flags().StringVar(&opts.command, "command", "", "container command line (shell-split, quote-aware; e.g. 'python train.py --epochs 10')")
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
 	cmd.Flags().StringVar(&opts.quotaProfile, "quota", "", "quota profile: small|medium|large|xlarge")
@@ -337,9 +331,6 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 	if changed("description") {
 		spec.Description = opts.description
 	}
-	if changed("label") {
-		spec.Labels = append([]string(nil), opts.labels...)
-	}
 	if changed("param") {
 		params, err := parseActionCreateKeyValues(opts.params, "param")
 		if err != nil {
@@ -359,17 +350,14 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 		spec.Quota.Profile = opts.quotaProfile
 	}
 
-	if !changed("job-name") && !changed("image") && !changed("command") && !changed("args") && !changed("env") {
+	if !changed("image") && !changed("command") && !changed("env") {
 		return nil
 	}
 	job, err := singleActionCreateJob(spec)
 	if err != nil {
 		return err
 	}
-	if changed("job-name") {
-		job.Name = opts.jobName
-	}
-	if changed("image") || changed("command") || changed("args") || changed("env") {
+	if changed("image") || changed("command") || changed("env") {
 		if job.Container == nil {
 			job.Container = &actionCreateContainerSpec{}
 		}
@@ -384,9 +372,6 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 			return errors.Wrap(err, "parse command")
 		}
 		job.Container.Command = words
-	}
-	if changed("args") {
-		job.Container.Args = append([]string(nil), opts.args...)
 	}
 	if changed("env") {
 		env, err := parseActionCreateKeyValues(opts.env, "env")
@@ -406,7 +391,7 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 func singleActionCreateJob(spec *actionCreateSpec) (*actionCreateJobSpec, error) {
 	switch len(spec.Jobs) {
 	case 0:
-		spec.Jobs = []actionCreateJobSpec{{Name: "job"}}
+		spec.Jobs = []actionCreateJobSpec{{Name: "main"}}
 	case 1:
 	default:
 		return nil, errors.New("inline job flags can only be used with zero or one job")
@@ -598,7 +583,7 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 		msgs = append(msgs, "jobs cannot be empty")
 	}
 	if len(spec.Jobs) == 1 && spec.Jobs[0].Name == "" {
-		spec.Jobs[0].Name = "job"
+		spec.Jobs[0].Name = "main"
 	}
 	for _, job := range spec.Jobs {
 		if job.Name == "" {
