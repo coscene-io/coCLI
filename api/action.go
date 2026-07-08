@@ -212,11 +212,18 @@ func (c *actionClient) ActionId2Name(ctx context.Context, actionIdOrName string,
 		return name.NewAction(act.Name)
 	}
 
-	if act, err := c.GetByName(ctx, &name.Action{
+	// Fall back to an org-level lookup. Keep this error: wrapping it with %w
+	// below preserves the underlying connect error chain (e.g. a NotFound code)
+	// so callers can inspect it via utils.IsConnectErrorWithCode / errors.As.
+	// Using %s here would flatten the error to a string and break that guard,
+	// degrading a clean not-found message into a fatal stack (mirror how
+	// RecordId2Name wraps its Get error with errors.Wrapf/%w in api/record.go).
+	act, err := c.GetByName(ctx, &name.Action{
 		ID: actionIdOrName,
-	}); err == nil {
+	})
+	if err == nil {
 		return name.NewAction(act.Name)
 	}
 
-	return nil, fmt.Errorf("failed to convert action id to name: %s", actionIdOrName)
+	return nil, fmt.Errorf("failed to convert action id to name %s: %w", actionIdOrName, err)
 }

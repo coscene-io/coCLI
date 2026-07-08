@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
@@ -25,6 +26,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/testutil"
+	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -259,5 +261,27 @@ func TestActionClient_ActionId2Name(t *testing.T) {
 		an, err := client.ActionId2Name(ctx, "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", proj)
 		require.NoError(t, err)
 		assert.Equal(t, "p1", an.ProjectID)
+	})
+
+	// Regression: a not-found UUID lookup must preserve the underlying connect
+	// error chain through %w so the resolve-first callers (get/delete/update)
+	// can detect NotFound via errors.As / utils.IsConnectErrorWithCode instead
+	// of degrading to a fatal stack. A %s wrap here would flatten the error and
+	// silently break that guard.
+	t.Run("not-found uuid preserves connect NotFound code", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			getActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("action not found"))
+			},
+		}
+		client := NewActionClient(mock, nil)
+		_, err := client.ActionId2Name(ctx, "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", proj)
+		require.Error(t, err)
+
+		var connErr *connect.Error
+		require.True(t, errors.As(err, &connErr), "expected the connect error to survive the wrap")
+		assert.Equal(t, connect.CodeNotFound, connErr.Code())
+		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodeNotFound))
 	})
 }
