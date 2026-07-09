@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
@@ -58,9 +59,10 @@ jobs:
       env:
         COS_KEY: "value"
 parameters:
-  X: "default"
+  x: "default"
 quota:
-  profile: small # small|medium|large|xlarge
+  cpu: CPU_QUOTA_1C     # CPU_QUOTA_1C|CPU_QUOTA_2C|CPU_QUOTA_4C|CPU_QUOTA_8C
+  memory: MEMORY_QUOTA_2G # MEMORY_QUOTA_1G|_2G|_4G|_8G|_16G|_32G|_64G
 output_options:
   save_mode: APPEND
 `
@@ -72,16 +74,15 @@ var (
 )
 
 type actionCreateOptions struct {
-	filePath     string
-	dryRun       bool
-	example      bool
-	name         string
-	description  string
-	image        string
-	command      string
-	env          []string
-	params       []string
-	quotaProfile string
+	filePath    string
+	dryRun      bool
+	example     bool
+	name        string
+	description string
+	image       string
+	command     string
+	env         []string
+	params      []string
 }
 
 type actionCreateSpec struct {
@@ -126,7 +127,8 @@ type actionCreateHTTPSpec struct {
 }
 
 type actionCreateQuota struct {
-	Profile string `yaml:"profile"`
+	Cpu    string `yaml:"cpu"`
+	Memory string `yaml:"memory"`
 }
 
 type actionCreateMountOptions struct {
@@ -267,7 +269,6 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd.Flags().StringVar(&opts.command, "command", "", "container command line (shell-split, quote-aware; e.g. 'python train.py --epochs 10')")
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
-	cmd.Flags().StringVar(&opts.quotaProfile, "quota", "", "quota profile: small|medium|large|xlarge")
 
 	cmd_utils.DisableAuthCheckForBoolFlags(cmd, "example", "dry-run")
 
@@ -345,13 +346,6 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 			spec.Parameters[k] = v
 		}
 	}
-	if changed("quota") {
-		if spec.Quota == nil {
-			spec.Quota = &actionCreateQuota{}
-		}
-		spec.Quota.Profile = opts.quotaProfile
-	}
-
 	if !changed("image") && !changed("command") && !changed("env") {
 		return nil
 	}
@@ -554,22 +548,47 @@ func lowerActionCreateJob(job *actionCreateJobSpec) (*openv1alpha1commons.JobSpe
 	return out, nil
 }
 
+// lowerActionCreateQuota parses the proto-native CPU/memory quota enum strings
+// (the same form `action get -o yaml`/`action update` use) into a proto Quota.
+// Empty cpu AND memory leaves the quota effectively unset (server-defaulted).
 func lowerActionCreateQuota(quota *actionCreateQuota) (*openv1alpha1commons.Quota, error) {
-	if quota.Profile == "" {
+	if quota.Cpu == "" && quota.Memory == "" {
 		return &openv1alpha1commons.Quota{}, nil
 	}
-	switch strings.ToLower(quota.Profile) {
-	case "small":
-		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_1C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_2G}, nil
-	case "medium":
-		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_2C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_4G}, nil
-	case "large":
-		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_4C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_8G}, nil
-	case "xlarge":
-		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_8C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_16G}, nil
-	default:
-		return nil, fmt.Errorf("unknown quota profile %q (valid: small, medium, large, xlarge)", quota.Profile)
+
+	out := &openv1alpha1commons.Quota{}
+	if quota.Cpu != "" {
+		key := strings.ToUpper(strings.TrimSpace(quota.Cpu))
+		v, ok := openv1alpha1commons.Quota_CPUQuota_value[key]
+		if !ok {
+			return nil, fmt.Errorf("unknown quota cpu %q (valid: %s)", quota.Cpu, quotaEnumNames(openv1alpha1commons.Quota_CPUQuota_name))
+		}
+		out.Cpu = openv1alpha1commons.Quota_CPUQuota(v)
 	}
+	if quota.Memory != "" {
+		key := strings.ToUpper(strings.TrimSpace(quota.Memory))
+		v, ok := openv1alpha1commons.Quota_MemoryQuota_value[key]
+		if !ok {
+			return nil, fmt.Errorf("unknown quota memory %q (valid: %s)", quota.Memory, quotaEnumNames(openv1alpha1commons.Quota_MemoryQuota_name))
+		}
+		out.Memory = openv1alpha1commons.Quota_MemoryQuota(v)
+	}
+	return out, nil
+}
+
+// quotaEnumNames renders the enum value names (ordered by number) for a clear
+// error message when an unknown cpu/memory value is supplied.
+func quotaEnumNames(names map[int32]string) string {
+	nums := make([]int32, 0, len(names))
+	for n := range names {
+		nums = append(nums, n)
+	}
+	sort.Slice(nums, func(i, j int) bool { return nums[i] < nums[j] })
+	out := make([]string, 0, len(nums))
+	for _, n := range nums {
+		out = append(out, names[n])
+	}
+	return strings.Join(out, ", ")
 }
 
 func validateActionForCreate(action *openv1alpha1resource.Action) error {

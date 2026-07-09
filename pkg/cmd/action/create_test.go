@@ -59,7 +59,11 @@ func TestCreateCommandExample(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, out.String(), "name: my-action")
 	assert.Contains(t, out.String(), "quota:")
-	assert.Contains(t, out.String(), "profile: small")
+	assert.Contains(t, out.String(), "cpu: CPU_QUOTA_1C")
+	assert.Contains(t, out.String(), "memory: MEMORY_QUOTA_2G")
+	// Example parameter key is lowercase (env vars stay uppercase; different namespace).
+	assert.Contains(t, out.String(), "x: \"default\"")
+	assert.NotContains(t, out.String(), "profile:")
 }
 
 func TestCreateCommandDryRunDoesNotRequireConfig(t *testing.T) {
@@ -94,8 +98,7 @@ func TestCreateCommandDryRunInlineJSON(t *testing.T) {
 		"--image", "ubuntu:22.04",
 		"--command", `python "run script.py"`,
 		"--env", "FOO=bar",
-		"--param", "X=default",
-		"--quota", "small",
+		"--param", "x=default",
 		"-o", "json",
 	})
 
@@ -106,8 +109,7 @@ func TestCreateCommandDryRunInlineJSON(t *testing.T) {
 	assert.Contains(t, got, `"image":"ubuntu:22.04"`)
 	assert.Contains(t, raw, `"run script.py"`)
 	assert.Contains(t, got, `"FOO":"bar"`)
-	assert.Contains(t, got, `"cpu":"CPU_QUOTA_1C"`)
-	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_2G"`)
+	assert.Contains(t, got, `"x":"default"`)
 }
 
 func TestCreateCommandDryRunTableOutput(t *testing.T) {
@@ -135,11 +137,12 @@ jobs:
   - name: step
     container:
       image: old-image
-      command: ["echo", "{{parameters.X}}"]
+      command: ["echo", "{{parameters.x}}"]
 parameters:
-  X: old
+  x: old
 quota:
-  profile: large
+  cpu: CPU_QUOTA_4C
+  memory: MEMORY_QUOTA_8G
 `
 	ioStreams := iostreams.Test(io.NopCloser(strings.NewReader(spec)), &out, &bytes.Buffer{})
 	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
@@ -158,8 +161,9 @@ quota:
 	assert.Contains(t, got, `"name":"flag-action"`)
 	assert.Contains(t, got, `"image":"new-image"`)
 	assert.Contains(t, got, `"A":"B"`)
-	assert.Contains(t, got, `"X":"old"`)
+	assert.Contains(t, got, `"x":"old"`)
 	assert.Contains(t, got, `"cpu":"CPU_QUOTA_4C"`)
+	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_8G"`)
 	assert.NotContains(t, got, "old-image")
 }
 
@@ -199,14 +203,59 @@ func TestLoadActionCreateSpecAcceptsProtoJSONWrapper(t *testing.T) {
 }
 
 func TestLowerActionCreateQuota(t *testing.T) {
-	quota, err := lowerActionCreateQuota(&actionCreateQuota{Profile: "xlarge"})
+	// Proto-native enum strings (the same form get -o yaml / update use).
+	quota, err := lowerActionCreateQuota(&actionCreateQuota{Cpu: "CPU_QUOTA_8C", Memory: "MEMORY_QUOTA_16G"})
 	require.NoError(t, err)
 	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_8C, quota.Cpu)
 	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_16G, quota.Memory)
 
-	_, err = lowerActionCreateQuota(&actionCreateQuota{Profile: "huge"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "valid: small, medium, large, xlarge")
+	// Empty cpu AND memory -> unset quota (server-defaulted).
+	empty, err := lowerActionCreateQuota(&actionCreateQuota{})
+	require.NoError(t, err)
+	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_UNSPECIFIED, empty.Cpu)
+	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_UNSPECIFIED, empty.Memory)
+
+	// Unknown cpu value -> error listing the valid cpu enum names.
+	_, err = lowerActionCreateQuota(&actionCreateQuota{Cpu: "small"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown quota cpu")
+	assert.Contains(t, err.Error(), "CPU_QUOTA_1C")
+
+	// Unknown memory value -> error listing the valid memory enum names.
+	_, err = lowerActionCreateQuota(&actionCreateQuota{Memory: "16G"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown quota memory")
+	assert.Contains(t, err.Error(), "MEMORY_QUOTA_16G")
+}
+
+// A get -o yaml-style dump (quota as proto enum strings, lowercase param) now
+// parses cleanly through create's strict -f loader (previously the unknown
+// cpu/memory keys hard-failed) and lowers to the matching proto quota.
+func TestLoadActionCreateSpecRoundTripsGetDumpQuota(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dump.yaml")
+	err := os.WriteFile(path, []byte(`name: dump-action
+jobs:
+  - name: main
+    container:
+      image: ubuntu:22.04
+      command: ["echo", "{{parameters.x}}"]
+parameters:
+  x: "default"
+quota:
+  cpu: CPU_QUOTA_1C
+  memory: MEMORY_QUOTA_2G
+`), 0644)
+	require.NoError(t, err)
+
+	spec, err := loadActionCreateSpec(path, nil)
+	require.NoError(t, err)
+	action, err := lowerActionCreateSpec(spec)
+	require.NoError(t, err)
+
+	assert.Equal(t, "dump-action", action.GetSpec().GetName())
+	assert.Equal(t, "default", action.GetSpec().GetParameters()["x"])
+	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_1C, action.GetSpec().GetQuota().GetCpu())
+	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_2G, action.GetSpec().GetQuota().GetMemory())
 }
 
 func TestLowerActionCreateRejectsBothJobKinds(t *testing.T) {
@@ -227,10 +276,10 @@ func TestValidateActionForCreate(t *testing.T) {
 		Jobs: []*openv1alpha1commons.JobSpec{{
 			JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{
 				Image:   "img",
-				Command: []string{"echo {{parameters.X}}"},
+				Command: []string{"echo {{parameters.x}}"},
 			}},
 		}},
-		Parameters: map[string]string{"X": "default"},
+		Parameters: map[string]string{"x": "default"},
 	}}
 	require.NoError(t, validateActionForCreate(action))
 	assert.Equal(t, "main", action.Spec.Jobs[0].Name)
@@ -238,7 +287,7 @@ func TestValidateActionForCreate(t *testing.T) {
 	action.Spec.Parameters = nil
 	err := validateActionForCreate(action)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), `parameter "X" is referenced but not defined`)
+	assert.Contains(t, err.Error(), `parameter "x" is referenced but not defined`)
 }
 
 func TestValidateActionForCreateRejectsInvalidEnvNames(t *testing.T) {
@@ -374,11 +423,11 @@ func TestCreateCommandParamShorthandAndCommandSplit(t *testing.T) {
 		"--name", "flag-action",
 		"--image", "ubuntu:22.04",
 		"--command", "echo hi --verbose",
-		"-P", "X=default",
+		"-P", "x=default",
 		"-o", "json",
 	})
 	require.NoError(t, cmd.Execute())
 	got := compactActionCreateJSON(out.String())
-	assert.Contains(t, got, `"X":"default"`)
+	assert.Contains(t, got, `"x":"default"`)
 	assert.Contains(t, got, `"--verbose"`)
 }

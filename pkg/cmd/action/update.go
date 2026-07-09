@@ -185,8 +185,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 // author, create/update times) are tolerated rather than rejected. This is the
 // exact format `action get` emits, so the get -> edit -> update loop round-trips
 // (plan D5/F1). It deliberately does NOT reuse create's strict
-// loadActionCreateSpec (KnownFields + profile-quota YAML), which hard-fails on a
-// get dump.
+// loadActionCreateSpec (KnownFields), which is a separate strict lowering path.
 func loadActionUpdateSpec(path string, stdin io.Reader) (*openv1alpha1commons.ActionSpec, error) {
 	var (
 		data []byte

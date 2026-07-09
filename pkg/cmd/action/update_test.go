@@ -94,7 +94,7 @@ func dumpActionAs(t *testing.T, format string, action *openv1alpha1resource.Acti
 // a full spec — must parse cleanly into update's loader and yield the same spec.
 // This proves the get -> edit -> update loop round-trips (plan D5/F1). It is the
 // central reason update uses a proto-native loader rather than create's strict
-// profile-quota YAML loader.
+// KnownFields YAML loader.
 func TestUpdateLoaderRoundTripsGetDump(t *testing.T) {
 	action := &openv1alpha1resource.Action{
 		Name:   "projects/p1/actions/a1",
@@ -103,7 +103,7 @@ func TestUpdateLoaderRoundTripsGetDump(t *testing.T) {
 			Name:        "my-action",
 			Description: "desc",
 			Labels:      []string{"labels/l1", "labels/l2"},
-			Parameters:  map[string]string{"X": "default"},
+			Parameters:  map[string]string{"x": "default"},
 			Jobs: []*openv1alpha1commons.JobSpec{{
 				Name: "main",
 				JobKind: &openv1alpha1commons.JobSpec_Container{
