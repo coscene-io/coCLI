@@ -15,6 +15,8 @@
 package printer
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 
 	"github.com/coscene-io/cocli/internal/printer/printable"
@@ -24,14 +26,23 @@ import (
 type JSONPrinter struct{}
 
 func (p *JSONPrinter) PrintObj(obj printable.Interface, w io.Writer) error {
-	bytes, err := protojson.MarshalOptions{
-		Indent: "  ",
-	}.Marshal(obj.ToProtoMessage())
+	// protojson deliberately introduces non-deterministic whitespace (1 or 2
+	// spaces after the colon, randomized per process) to discourage reliance on
+	// its exact output. Re-indent the raw bytes through encoding/json's
+	// json.Indent, which emits stable whitespace ("key": "value", single space)
+	// without reordering keys or altering protojson's escaping (it is a lexical
+	// re-indent, not a re-marshal through a map).
+	raw, err := protojson.Marshal(obj.ToProtoMessage())
 	if err != nil {
 		return err
 	}
 
-	bytes = append(bytes, '\n')
-	_, err = w.Write(bytes)
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, raw, "", "  "); err != nil {
+		return err
+	}
+	buf.WriteByte('\n')
+
+	_, err = w.Write(buf.Bytes())
 	return err
 }
