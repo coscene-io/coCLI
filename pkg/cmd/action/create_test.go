@@ -167,6 +167,9 @@ quota:
 	assert.NotContains(t, got, "old-image")
 }
 
+// The create -f loader is the shared proto-native loader: it accepts the full
+// protojson Action a `get -o yaml/json` dump emits (spec nested under `spec:`,
+// snake_case or camelCase keys) and returns the extracted *ActionSpec.
 func TestLoadActionCreateSpecAcceptsProtoJSONWrapper(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "spec.json")
 	err := os.WriteFile(path, []byte(`{
@@ -190,42 +193,36 @@ func TestLoadActionCreateSpecAcceptsProtoJSONWrapper(t *testing.T) {
 }`), 0644)
 	require.NoError(t, err)
 
-	spec, err := loadActionCreateSpec(path, nil)
-	require.NoError(t, err)
-	action, err := lowerActionCreateSpec(spec)
+	spec, err := loadActionSpecFromFile(path, nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, "json-action", action.GetSpec().GetName())
-	assert.Equal(t, openv1alpha1commons.OutputOptions_APPEND, action.GetSpec().GetOutputOptions().GetSaveMode())
-	assert.Equal(t, int64(123), action.GetSpec().GetStorageOptions().GetContainerStorageBytes())
-	assert.True(t, action.GetSpec().GetStorageOptions().GetSsdOptions().GetUseSsd())
-	assert.Equal(t, "/ssd", action.GetSpec().GetStorageOptions().GetSsdOptions().GetMountPath())
+	assert.Equal(t, "json-action", spec.GetName())
+	assert.Equal(t, openv1alpha1commons.OutputOptions_APPEND, spec.GetOutputOptions().GetSaveMode())
+	assert.Equal(t, int64(123), spec.GetStorageOptions().GetContainerStorageBytes())
+	assert.True(t, spec.GetStorageOptions().GetSsdOptions().GetUseSsd())
+	assert.Equal(t, "/ssd", spec.GetStorageOptions().GetSsdOptions().GetMountPath())
 }
 
-func TestLowerActionCreateQuota(t *testing.T) {
-	// Proto-native enum strings (the same form get -o yaml / update use).
-	quota, err := lowerActionCreateQuota(&actionCreateQuota{Cpu: "CPU_QUOTA_8C", Memory: "MEMORY_QUOTA_16G"})
+// A misspelled/unknown key in the create -f file is tolerated (ignored), not
+// rejected — the tolerant DiscardUnknown contract shared with `action update`.
+func TestLoadActionCreateSpecToleratesUnknownKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.yaml")
+	err := os.WriteFile(path, []byte(`name: typo-action
+descriptionn: oops   # misspelled key, must be ignored not rejected
+jobs:
+  - name: main
+    container:
+      image: ubuntu:22.04
+      command: ["echo", "ok"]
+`), 0644)
 	require.NoError(t, err)
-	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_8C, quota.Cpu)
-	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_16G, quota.Memory)
 
-	// Empty cpu AND memory -> unset quota (server-defaulted).
-	empty, err := lowerActionCreateQuota(&actionCreateQuota{})
+	spec, err := loadActionSpecFromFile(path, nil)
 	require.NoError(t, err)
-	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_UNSPECIFIED, empty.Cpu)
-	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_UNSPECIFIED, empty.Memory)
-
-	// Unknown cpu value -> error listing the valid cpu enum names.
-	_, err = lowerActionCreateQuota(&actionCreateQuota{Cpu: "small"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown quota cpu")
-	assert.Contains(t, err.Error(), "CPU_QUOTA_1C")
-
-	// Unknown memory value -> error listing the valid memory enum names.
-	_, err = lowerActionCreateQuota(&actionCreateQuota{Memory: "16G"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown quota memory")
-	assert.Contains(t, err.Error(), "MEMORY_QUOTA_16G")
+	assert.Equal(t, "typo-action", spec.GetName())
+	assert.Empty(t, spec.GetDescription())
+	require.Len(t, spec.GetJobs(), 1)
+	assert.Equal(t, "ubuntu:22.04", spec.GetJobs()[0].GetContainer().GetImage())
 }
 
 // The --quota preset (t-shirt size) is a convenience that maps to the proto
@@ -280,23 +277,24 @@ quota:
 	assert.NotContains(t, got, "MEMORY_QUOTA_2G")
 }
 
-// An invalid --quota preset fails with a clear error listing the valid sizes.
+// The --quota preset maps a t-shirt size to the proto CPU/memory quota enum
+// pair; an invalid preset fails with a clear error listing the valid sizes.
 func TestActionCreateQuotaPreset(t *testing.T) {
 	for _, tc := range []struct {
 		preset string
-		cpu    string
-		memory string
+		cpu    openv1alpha1commons.Quota_CPUQuota
+		memory openv1alpha1commons.Quota_MemoryQuota
 	}{
-		{"small", "CPU_QUOTA_1C", "MEMORY_QUOTA_2G"},
-		{"medium", "CPU_QUOTA_2C", "MEMORY_QUOTA_4G"},
-		{"large", "CPU_QUOTA_4C", "MEMORY_QUOTA_8G"},
-		{"xlarge", "CPU_QUOTA_8C", "MEMORY_QUOTA_16G"},
+		{"small", openv1alpha1commons.Quota_CPU_QUOTA_1C, openv1alpha1commons.Quota_MEMORY_QUOTA_2G},
+		{"medium", openv1alpha1commons.Quota_CPU_QUOTA_2C, openv1alpha1commons.Quota_MEMORY_QUOTA_4G},
+		{"large", openv1alpha1commons.Quota_CPU_QUOTA_4C, openv1alpha1commons.Quota_MEMORY_QUOTA_8G},
+		{"xlarge", openv1alpha1commons.Quota_CPU_QUOTA_8C, openv1alpha1commons.Quota_MEMORY_QUOTA_16G},
 	} {
 		t.Run(tc.preset, func(t *testing.T) {
 			q, err := actionCreateQuotaPreset(tc.preset)
 			require.NoError(t, err)
-			assert.Equal(t, tc.cpu, q.Cpu)
-			assert.Equal(t, tc.memory, q.Memory)
+			assert.Equal(t, tc.cpu, q.GetCpu())
+			assert.Equal(t, tc.memory, q.GetMemory())
 		})
 	}
 
@@ -306,46 +304,74 @@ func TestActionCreateQuotaPreset(t *testing.T) {
 	assert.Contains(t, err.Error(), "small, medium, large, xlarge")
 }
 
-// A get -o yaml-style dump (quota as proto enum strings, lowercase param) now
-// parses cleanly through create's strict -f loader (previously the unknown
-// cpu/memory keys hard-failed) and lowers to the matching proto quota.
-func TestLoadActionCreateSpecRoundTripsGetDumpQuota(t *testing.T) {
+// A realistic `get -o yaml` dump (full Action with output-only name/author/
+// timestamps, array command, quota as proto enum strings) round-trips through
+// the create -f loader: DiscardUnknown tolerates the output-only fields and the
+// spec fields survive.
+func TestLoadActionCreateSpecRoundTripsGetDump(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dump.yaml")
-	err := os.WriteFile(path, []byte(`name: dump-action
-jobs:
-  - name: main
-    container:
-      image: ubuntu:22.04
-      command: ["echo", "{{parameters.x}}"]
-parameters:
-  x: "default"
-quota:
-  cpu: CPU_QUOTA_1C
-  memory: MEMORY_QUOTA_2G
+	err := os.WriteFile(path, []byte(`name: organizations/o1/projects/p1/actions/a1
+author: users/u1
+createTime: "2026-01-02T03:04:05Z"
+updateTime: "2026-01-02T03:04:05Z"
+spec:
+  name: dump-action
+  jobs:
+    - name: main
+      container:
+        image: ubuntu:22.04
+        command: ["echo", "{{parameters.x}}"]
+  parameters:
+    x: "default"
+  quota:
+    cpu: CPU_QUOTA_1C
+    memory: MEMORY_QUOTA_2G
 `), 0644)
 	require.NoError(t, err)
 
-	spec, err := loadActionCreateSpec(path, nil)
-	require.NoError(t, err)
-	action, err := lowerActionCreateSpec(spec)
+	spec, err := loadActionSpecFromFile(path, nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, "dump-action", action.GetSpec().GetName())
-	assert.Equal(t, "default", action.GetSpec().GetParameters()["x"])
-	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_1C, action.GetSpec().GetQuota().GetCpu())
-	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_2G, action.GetSpec().GetQuota().GetMemory())
+	// Output-only Action fields were tolerated; only the nested spec survives.
+	assert.Equal(t, "dump-action", spec.GetName())
+	assert.Equal(t, "default", spec.GetParameters()["x"])
+	require.Len(t, spec.GetJobs(), 1)
+	assert.Equal(t, []string{"echo", "{{parameters.x}}"}, spec.GetJobs()[0].GetContainer().GetCommand())
+	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_1C, spec.GetQuota().GetCpu())
+	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_2G, spec.GetQuota().GetMemory())
 }
 
-func TestLowerActionCreateRejectsBothJobKinds(t *testing.T) {
-	_, err := lowerActionCreateSpec(&actionCreateSpec{
-		Name: "bad",
-		Jobs: []actionCreateJobSpec{{
-			Name:      "job",
-			Container: &actionCreateContainerSpec{Image: "img"},
-			HTTP:      &actionCreateHTTPSpec{Method: "GET", URL: "https://example.com"},
+// The --example skeleton is valid proto YAML: it parses through the shared
+// create -f loader and yields a spec that validateActionForCreate accepts.
+func TestCreateExampleParsesThroughLoader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "example.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(actionCreateExample), 0644))
+
+	spec, err := loadActionSpecFromFile(path, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "my-action", spec.GetName())
+	require.Len(t, spec.GetJobs(), 1)
+	assert.Equal(t, "main", spec.GetJobs()[0].GetName())
+	assert.Equal(t, []string{"python", "run.py"}, spec.GetJobs()[0].GetContainer().GetCommand())
+	assert.Equal(t, openv1alpha1commons.Quota_CPU_QUOTA_1C, spec.GetQuota().GetCpu())
+	assert.Equal(t, openv1alpha1commons.Quota_MEMORY_QUOTA_2G, spec.GetQuota().GetMemory())
+	assert.Equal(t, openv1alpha1commons.OutputOptions_APPEND, spec.GetOutputOptions().GetSaveMode())
+	// Validation passes (the sentinel image is not itself a validation error).
+	require.NoError(t, validateActionForCreate(&openv1alpha1resource.Action{Spec: spec}))
+}
+
+// A single unnamed job in the file defaults to "main" via validateActionForCreate.
+func TestCreateSingleUnnamedJobDefaultsToMain(t *testing.T) {
+	action := &openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{
+		Name: "unnamed-job",
+		Jobs: []*openv1alpha1commons.JobSpec{{
+			JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{
+				Image: "ubuntu:22.04",
+			}},
 		}},
-	})
-	assert.Error(t, err)
+	}}
+	require.NoError(t, validateActionForCreate(action))
+	assert.Equal(t, "main", action.Spec.Jobs[0].Name)
 }
 
 func TestValidateActionForCreate(t *testing.T) {
@@ -366,6 +392,21 @@ func TestValidateActionForCreate(t *testing.T) {
 	err := validateActionForCreate(action)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), `parameter "x" is referenced but not defined`)
+
+	// Empty name is rejected.
+	err = validateActionForCreate(&openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{
+		Jobs: []*openv1alpha1commons.JobSpec{{
+			Name:    "main",
+			JobKind: &openv1alpha1commons.JobSpec_Container{Container: &openv1alpha1commons.ContainerJobSpec{Image: "img"}},
+		}},
+	}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "name cannot be empty")
+
+	// No jobs is rejected.
+	err = validateActionForCreate(&openv1alpha1resource.Action{Spec: &openv1alpha1commons.ActionSpec{Name: "no-jobs"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "jobs cannot be empty")
 }
 
 func TestValidateActionForCreateRejectsInvalidEnvNames(t *testing.T) {

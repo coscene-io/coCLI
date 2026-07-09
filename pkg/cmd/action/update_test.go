@@ -124,7 +124,7 @@ func TestUpdateLoaderRoundTripsGetDump(t *testing.T) {
 	for _, format := range []string{"yaml", "json"} {
 		t.Run(format+" dump round-trips into loader", func(t *testing.T) {
 			dump := dumpActionAs(t, format, action)
-			spec, err := loadActionUpdateSpec("-", bytes.NewReader(dump))
+			spec, err := loadActionSpecFromFile("-", bytes.NewReader(dump))
 			require.NoError(t, err, "get -o %s output must parse cleanly into update's loader", format)
 
 			assert.Equal(t, "my-action", spec.GetName())
@@ -156,7 +156,7 @@ jobs:
     container:
       image: ubuntu:22.04
 `)
-	spec, err := loadActionUpdateSpec("-", bytes.NewReader(specDump))
+	spec, err := loadActionSpecFromFile("-", bytes.NewReader(specDump))
 	require.NoError(t, err)
 	assert.Equal(t, "my-action", spec.GetName())
 	require.Len(t, spec.GetJobs(), 1)
@@ -178,21 +178,21 @@ spec:
       container:
         image: ubuntu:22.04
 `)
-	spec, err := loadActionUpdateSpec("-", bytes.NewReader(dump))
+	spec, err := loadActionSpecFromFile("-", bytes.NewReader(dump))
 	require.NoError(t, err)
 	assert.Equal(t, "my-action", spec.GetName())
 }
 
 // Empty stdin / empty file is rejected client-side before any wire call.
 func TestUpdateLoaderRejectsEmptyInput(t *testing.T) {
-	_, err := loadActionUpdateSpec("-", bytes.NewReader([]byte("   \n")))
+	_, err := loadActionSpecFromFile("-", bytes.NewReader([]byte("   \n")))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
 
 // A spec with no jobs is rejected client-side (reuses create's validation).
 func TestUpdateInvalidSpecRejectedClientSide(t *testing.T) {
-	spec, err := loadActionUpdateSpec("-", bytes.NewReader([]byte("name: my-action\n")))
+	spec, err := loadActionSpecFromFile("-", bytes.NewReader([]byte("name: my-action\n")))
 	require.NoError(t, err)
 	err = validateActionForCreate(&openv1alpha1resource.Action{Spec: spec})
 	require.Error(t, err)

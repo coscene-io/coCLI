@@ -15,13 +15,11 @@
 package action
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
@@ -36,8 +34,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/types/known/structpb"
-	"gopkg.in/yaml.v3"
 )
 
 // actionCreateSentinelImage is an obvious placeholder used in the --example
@@ -84,106 +80,6 @@ type actionCreateOptions struct {
 	env         []string
 	params      []string
 	quota       string
-}
-
-type actionCreateSpec struct {
-	Name               string                      `yaml:"name"`
-	Description        string                      `yaml:"description"`
-	Labels             []string                    `yaml:"labels"`
-	Jobs               []actionCreateJobSpec       `yaml:"jobs"`
-	Parameters         map[string]string           `yaml:"parameters"`
-	MountOptions       *actionCreateMountOptions   `yaml:"mount_options"`
-	MountOptionsJSON   *actionCreateMountOptions   `yaml:"mountOptions"`
-	StorageOptions     *actionCreateStorageOptions `yaml:"storage_options"`
-	StorageOptionsJSON *actionCreateStorageOptions `yaml:"storageOptions"`
-	Quota              *actionCreateQuota          `yaml:"quota"`
-	OutputOptions      *actionCreateOutputOptions  `yaml:"output_options"`
-	OutputOptionsJSON  *actionCreateOutputOptions  `yaml:"outputOptions"`
-}
-
-type actionCreateSpecWrapper struct {
-	Spec *actionCreateSpec `yaml:"spec"`
-}
-
-type actionCreateJobSpec struct {
-	Name      string                     `yaml:"name"`
-	Depends   []string                   `yaml:"depends"`
-	Container *actionCreateContainerSpec `yaml:"container"`
-	HTTP      *actionCreateHTTPSpec      `yaml:"http"`
-}
-
-type actionCreateContainerSpec struct {
-	Image   string            `yaml:"image"`
-	Command actionCreateWords `yaml:"command"`
-	Args    actionCreateWords `yaml:"args"`
-	Env     map[string]string `yaml:"env"`
-}
-
-type actionCreateHTTPSpec struct {
-	Method  string                 `yaml:"method"`
-	URL     string                 `yaml:"url"`
-	Headers map[string]string      `yaml:"headers"`
-	Body    map[string]interface{} `yaml:"body"`
-	Timeout int32                  `yaml:"timeout"`
-}
-
-type actionCreateQuota struct {
-	Cpu    string `yaml:"cpu"`
-	Memory string `yaml:"memory"`
-}
-
-type actionCreateMountOptions struct {
-	ReadWrite                 bool  `yaml:"read_write"`
-	ReadWriteJSON             bool  `yaml:"readWrite"`
-	ContainerStorageBytes     int64 `yaml:"container_storage_bytes"`
-	ContainerStorageBytesJSON int64 `yaml:"containerStorageBytes"`
-}
-
-type actionCreateStorageOptions struct {
-	ContainerStorageBytes     int64                          `yaml:"container_storage_bytes"`
-	ContainerStorageBytesJSON int64                          `yaml:"containerStorageBytes"`
-	SSDOptions                *actionCreateStorageSSDOptions `yaml:"ssd_options"`
-	SSDOptionsJSON            *actionCreateStorageSSDOptions `yaml:"ssdOptions"`
-}
-
-type actionCreateStorageSSDOptions struct {
-	UseSSD        bool   `yaml:"use_ssd"`
-	UseSSDJSON    bool   `yaml:"useSsd"`
-	MountPath     string `yaml:"mount_path"`
-	MountPathJSON string `yaml:"mountPath"`
-}
-
-type actionCreateOutputOptions struct {
-	SaveMode     string `yaml:"save_mode"`
-	SaveModeJSON string `yaml:"saveMode"`
-}
-
-type actionCreateWords []string
-
-func (w *actionCreateWords) UnmarshalYAML(value *yaml.Node) error {
-	switch value.Kind {
-	case yaml.ScalarNode:
-		words, err := splitActionCreateWords(value.Value)
-		if err != nil {
-			return err
-		}
-		*w = words
-		return nil
-	case yaml.SequenceNode:
-		words := make([]string, 0, len(value.Content))
-		for _, item := range value.Content {
-			if item.Kind != yaml.ScalarNode {
-				return fmt.Errorf("command and args entries must be strings")
-			}
-			words = append(words, item.Value)
-		}
-		*w = words
-		return nil
-	case 0:
-		return nil
-	default:
-		return fmt.Errorf("command and args must be a string or string array")
-	}
 }
 
 func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
@@ -283,10 +179,14 @@ t-shirt size to that enum pair and overrides any file quota:.`,
 	return cmd
 }
 
+// buildActionForCreate loads the -f spec (if any) through the shared
+// proto-native loader used by `action update`, then applies inline flag
+// overrides directly on the parsed *ActionSpec. With no -f, it starts from an
+// empty ActionSpec so flags-only create still works.
 func buildActionForCreate(opts *actionCreateOptions, cmd *cobra.Command, stdin io.Reader) (*openv1alpha1resource.Action, error) {
-	spec := &actionCreateSpec{}
+	spec := &openv1alpha1commons.ActionSpec{}
 	if opts.filePath != "" {
-		loaded, err := loadActionCreateSpec(opts.filePath, stdin)
+		loaded, err := loadActionSpecFromFile(opts.filePath, stdin)
 		if err != nil {
 			return nil, err
 		}
@@ -296,46 +196,15 @@ func buildActionForCreate(opts *actionCreateOptions, cmd *cobra.Command, stdin i
 	if err := applyActionCreateOverrides(spec, opts, func(name string) bool { return cmd.Flags().Changed(name) }); err != nil {
 		return nil, err
 	}
-	return lowerActionCreateSpec(spec)
+	return &openv1alpha1resource.Action{Spec: spec}, nil
 }
 
-func loadActionCreateSpec(path string, stdin io.Reader) (*actionCreateSpec, error) {
-	var data []byte
-	var err error
-	if path == "-" {
-		if stdin == nil {
-			return nil, errors.New("stdin is not available")
-		}
-		data, err = io.ReadAll(stdin)
-	} else {
-		data, err = os.ReadFile(path)
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "read action spec")
-	}
-	if len(bytes.TrimSpace(data)) == 0 {
-		return nil, errors.New("action spec is empty")
-	}
-
-	var spec actionCreateSpec
-	if err = decodeActionCreateYAML(data, &spec); err != nil {
-		var wrapper actionCreateSpecWrapper
-		if wrapperErr := decodeActionCreateYAML(data, &wrapper); wrapperErr != nil || wrapper.Spec == nil {
-			return nil, errors.Wrap(err, "parse action spec")
-		}
-		spec = *wrapper.Spec
-	}
-	normalizeActionCreateAliases(&spec)
-	return &spec, nil
-}
-
-func decodeActionCreateYAML(data []byte, out interface{}) error {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	return dec.Decode(out)
-}
-
-func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOptions, changed func(string) bool) error {
+// applyActionCreateOverrides mutates the parsed *ActionSpec in place from the
+// inline flags. --name/--description/--param set top-level fields;
+// --image/--command/--env operate on the single job's container (creating a
+// "main" container job when the spec has none); --quota sets the proto Quota
+// enum pair and overrides any file quota:.
+func applyActionCreateOverrides(spec *openv1alpha1commons.ActionSpec, opts *actionCreateOptions, changed func(string) bool) error {
 	if changed("name") {
 		spec.Name = opts.name
 	}
@@ -366,265 +235,80 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 	if !changed("image") && !changed("command") && !changed("env") {
 		return nil
 	}
-	job, err := singleActionCreateJob(spec)
+
+	container, err := singleActionCreateContainer(spec)
 	if err != nil {
 		return err
 	}
-	if changed("image") || changed("command") || changed("env") {
-		if job.Container == nil {
-			job.Container = &actionCreateContainerSpec{}
-		}
-		job.HTTP = nil
-	}
 	if changed("image") {
-		job.Container.Image = opts.image
+		container.Image = opts.image
 	}
 	if changed("command") {
 		words, err := splitActionCreateWords(opts.command)
 		if err != nil {
 			return errors.Wrap(err, "parse command")
 		}
-		job.Container.Command = words
+		container.Command = words
 	}
 	if changed("env") {
 		env, err := parseActionCreateKeyValues(opts.env, "env")
 		if err != nil {
 			return err
 		}
-		if job.Container.Env == nil {
-			job.Container.Env = map[string]string{}
+		if container.Env == nil {
+			container.Env = map[string]string{}
 		}
 		for k, v := range env {
-			job.Container.Env[k] = v
+			container.Env[k] = v
 		}
 	}
 	return nil
 }
 
-func singleActionCreateJob(spec *actionCreateSpec) (*actionCreateJobSpec, error) {
+// singleActionCreateContainer returns the container of the spec's single job so
+// the inline --image/--command/--env flags can mutate it. Inline job flags are
+// only valid with zero or one job (preserving the original guard). With zero
+// jobs it creates a "main" container job; with one job it forces that job to be
+// a container job (dropping any http kind the file set).
+func singleActionCreateContainer(spec *openv1alpha1commons.ActionSpec) (*openv1alpha1commons.ContainerJobSpec, error) {
 	switch len(spec.Jobs) {
 	case 0:
-		spec.Jobs = []actionCreateJobSpec{{Name: "main"}}
+		container := &openv1alpha1commons.ContainerJobSpec{}
+		spec.Jobs = []*openv1alpha1commons.JobSpec{{
+			Name:    "main",
+			JobKind: &openv1alpha1commons.JobSpec_Container{Container: container},
+		}}
+		return container, nil
 	case 1:
+		job := spec.Jobs[0]
+		container := job.GetContainer()
+		if container == nil {
+			container = &openv1alpha1commons.ContainerJobSpec{}
+			job.JobKind = &openv1alpha1commons.JobSpec_Container{Container: container}
+		}
+		return container, nil
 	default:
 		return nil, errors.New("inline job flags can only be used with zero or one job")
 	}
-	return &spec.Jobs[0], nil
-}
-
-func normalizeActionCreateAliases(spec *actionCreateSpec) {
-	if spec.MountOptions == nil {
-		spec.MountOptions = spec.MountOptionsJSON
-	}
-	if spec.StorageOptions == nil {
-		spec.StorageOptions = spec.StorageOptionsJSON
-	}
-	if spec.OutputOptions == nil {
-		spec.OutputOptions = spec.OutputOptionsJSON
-	}
-	if spec.MountOptions != nil {
-		spec.MountOptions.normalizeAliases()
-	}
-	if spec.StorageOptions != nil {
-		spec.StorageOptions.normalizeAliases()
-	}
-	if spec.OutputOptions != nil {
-		spec.OutputOptions.normalizeAliases()
-	}
-}
-
-func (opts *actionCreateMountOptions) normalizeAliases() {
-	if opts.ReadWriteJSON {
-		opts.ReadWrite = true
-	}
-	if opts.ContainerStorageBytes == 0 {
-		opts.ContainerStorageBytes = opts.ContainerStorageBytesJSON
-	}
-}
-
-func (opts *actionCreateStorageOptions) normalizeAliases() {
-	if opts.ContainerStorageBytes == 0 {
-		opts.ContainerStorageBytes = opts.ContainerStorageBytesJSON
-	}
-	if opts.SSDOptions == nil {
-		opts.SSDOptions = opts.SSDOptionsJSON
-	}
-	if opts.SSDOptions != nil {
-		opts.SSDOptions.normalizeAliases()
-	}
-}
-
-func (opts *actionCreateStorageSSDOptions) normalizeAliases() {
-	if opts.UseSSDJSON {
-		opts.UseSSD = true
-	}
-	if opts.MountPath == "" {
-		opts.MountPath = opts.MountPathJSON
-	}
-}
-
-func (opts *actionCreateOutputOptions) normalizeAliases() {
-	if opts.SaveMode == "" {
-		opts.SaveMode = opts.SaveModeJSON
-	}
-}
-
-func lowerActionCreateSpec(spec *actionCreateSpec) (*openv1alpha1resource.Action, error) {
-	normalizeActionCreateAliases(spec)
-
-	actionSpec := &openv1alpha1commons.ActionSpec{
-		Name:        spec.Name,
-		Description: spec.Description,
-		Labels:      append([]string(nil), spec.Labels...),
-		Parameters:  copyStringMap(spec.Parameters),
-	}
-
-	for i := range spec.Jobs {
-		job, err := lowerActionCreateJob(&spec.Jobs[i])
-		if err != nil {
-			return nil, err
-		}
-		actionSpec.Jobs = append(actionSpec.Jobs, job)
-	}
-
-	if spec.MountOptions != nil {
-		actionSpec.MountOptions = &openv1alpha1commons.MountOptions{
-			ReadWrite:             spec.MountOptions.ReadWrite,
-			ContainerStorageBytes: spec.MountOptions.ContainerStorageBytes,
-		}
-	}
-	if spec.StorageOptions != nil {
-		actionSpec.StorageOptions = &openv1alpha1commons.StorageOptions{
-			ContainerStorageBytes: spec.StorageOptions.ContainerStorageBytes,
-		}
-		if spec.StorageOptions.SSDOptions != nil {
-			actionSpec.StorageOptions.SsdOptions = &openv1alpha1commons.StorageOptions_SSDOptions{
-				UseSsd:    spec.StorageOptions.SSDOptions.UseSSD,
-				MountPath: spec.StorageOptions.SSDOptions.MountPath,
-			}
-		}
-	}
-	if spec.Quota != nil {
-		quota, err := lowerActionCreateQuota(spec.Quota)
-		if err != nil {
-			return nil, err
-		}
-		actionSpec.Quota = quota
-	}
-	if spec.OutputOptions != nil {
-		saveMode, err := parseActionCreateSaveMode(spec.OutputOptions.SaveMode)
-		if err != nil {
-			return nil, err
-		}
-		actionSpec.OutputOptions = &openv1alpha1commons.OutputOptions{SaveMode: saveMode}
-	}
-
-	return &openv1alpha1resource.Action{Spec: actionSpec}, nil
-}
-
-func lowerActionCreateJob(job *actionCreateJobSpec) (*openv1alpha1commons.JobSpec, error) {
-	if job.Container != nil && job.HTTP != nil {
-		return nil, fmt.Errorf("job %q must set only one of container or http", job.Name)
-	}
-	out := &openv1alpha1commons.JobSpec{
-		Name:    job.Name,
-		Depends: append([]string(nil), job.Depends...),
-	}
-	if job.Container != nil {
-		out.JobKind = &openv1alpha1commons.JobSpec_Container{
-			Container: &openv1alpha1commons.ContainerJobSpec{
-				Image:   job.Container.Image,
-				Command: append([]string(nil), job.Container.Command...),
-				Args:    append([]string(nil), job.Container.Args...),
-				Env:     copyStringMap(job.Container.Env),
-			},
-		}
-	}
-	if job.HTTP != nil {
-		method, err := parseActionCreateHTTPMethod(job.HTTP.Method)
-		if err != nil {
-			return nil, err
-		}
-		httpSpec := &openv1alpha1commons.HttpJobSpec{
-			Method:  method,
-			Url:     job.HTTP.URL,
-			Headers: copyStringMap(job.HTTP.Headers),
-			Timeout: job.HTTP.Timeout,
-		}
-		if job.HTTP.Body != nil {
-			body, err := structpb.NewStruct(normalizeActionCreateStruct(job.HTTP.Body))
-			if err != nil {
-				return nil, errors.Wrapf(err, "invalid http body for job %q", job.Name)
-			}
-			httpSpec.Body = body
-		}
-		out.JobKind = &openv1alpha1commons.JobSpec_Http{
-			Http: httpSpec,
-		}
-	}
-	return out, nil
-}
-
-// lowerActionCreateQuota parses the proto-native CPU/memory quota enum strings
-// (the same form `action get -o yaml`/`action update` use) into a proto Quota.
-// Empty cpu AND memory leaves the quota effectively unset (server-defaulted).
-func lowerActionCreateQuota(quota *actionCreateQuota) (*openv1alpha1commons.Quota, error) {
-	if quota.Cpu == "" && quota.Memory == "" {
-		return &openv1alpha1commons.Quota{}, nil
-	}
-
-	out := &openv1alpha1commons.Quota{}
-	if quota.Cpu != "" {
-		key := strings.ToUpper(strings.TrimSpace(quota.Cpu))
-		v, ok := openv1alpha1commons.Quota_CPUQuota_value[key]
-		if !ok {
-			return nil, fmt.Errorf("unknown quota cpu %q (valid: %s)", quota.Cpu, quotaEnumNames(openv1alpha1commons.Quota_CPUQuota_name))
-		}
-		out.Cpu = openv1alpha1commons.Quota_CPUQuota(v)
-	}
-	if quota.Memory != "" {
-		key := strings.ToUpper(strings.TrimSpace(quota.Memory))
-		v, ok := openv1alpha1commons.Quota_MemoryQuota_value[key]
-		if !ok {
-			return nil, fmt.Errorf("unknown quota memory %q (valid: %s)", quota.Memory, quotaEnumNames(openv1alpha1commons.Quota_MemoryQuota_name))
-		}
-		out.Memory = openv1alpha1commons.Quota_MemoryQuota(v)
-	}
-	return out, nil
 }
 
 // actionCreateQuotaPreset maps a t-shirt resource preset (small|medium|large|
 // xlarge) to the proto CPU/memory quota enum pair. It backs the --quota
 // convenience flag, which is a shortcut for setting the spec's quota.cpu /
 // quota.memory enums (the flag overrides any file quota:).
-func actionCreateQuotaPreset(preset string) (*actionCreateQuota, error) {
+func actionCreateQuotaPreset(preset string) (*openv1alpha1commons.Quota, error) {
 	switch strings.ToLower(strings.TrimSpace(preset)) {
 	case "small":
-		return &actionCreateQuota{Cpu: "CPU_QUOTA_1C", Memory: "MEMORY_QUOTA_2G"}, nil
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_1C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_2G}, nil
 	case "medium":
-		return &actionCreateQuota{Cpu: "CPU_QUOTA_2C", Memory: "MEMORY_QUOTA_4G"}, nil
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_2C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_4G}, nil
 	case "large":
-		return &actionCreateQuota{Cpu: "CPU_QUOTA_4C", Memory: "MEMORY_QUOTA_8G"}, nil
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_4C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_8G}, nil
 	case "xlarge":
-		return &actionCreateQuota{Cpu: "CPU_QUOTA_8C", Memory: "MEMORY_QUOTA_16G"}, nil
+		return &openv1alpha1commons.Quota{Cpu: openv1alpha1commons.Quota_CPU_QUOTA_8C, Memory: openv1alpha1commons.Quota_MEMORY_QUOTA_16G}, nil
 	default:
 		return nil, fmt.Errorf("unknown quota preset %q (valid: small, medium, large, xlarge)", preset)
 	}
-}
-
-// quotaEnumNames renders the enum value names (ordered by number) for a clear
-// error message when an unknown cpu/memory value is supplied.
-func quotaEnumNames(names map[int32]string) string {
-	nums := make([]int32, 0, len(names))
-	for n := range names {
-		nums = append(nums, n)
-	}
-	sort.Slice(nums, func(i, j int) bool { return nums[i] < nums[j] })
-	out := make([]string, 0, len(nums))
-	for _, n := range nums {
-		out = append(out, names[n])
-	}
-	return strings.Join(out, ", ")
 }
 
 func validateActionForCreate(action *openv1alpha1resource.Action) error {
@@ -734,28 +418,6 @@ func parseActionCreateKeyValues(items []string, flagName string) (map[string]str
 	return values, nil
 }
 
-func parseActionCreateHTTPMethod(value string) (openv1alpha1commons.HttpJobSpec_HttpMethod, error) {
-	if value == "" {
-		return openv1alpha1commons.HttpJobSpec_HTTP_METHOD_UNSPECIFIED, nil
-	}
-	key := strings.ToUpper(strings.TrimSpace(value))
-	if v, ok := openv1alpha1commons.HttpJobSpec_HttpMethod_value[key]; ok {
-		return openv1alpha1commons.HttpJobSpec_HttpMethod(v), nil
-	}
-	return openv1alpha1commons.HttpJobSpec_HTTP_METHOD_UNSPECIFIED, fmt.Errorf("unknown HTTP method %q", value)
-}
-
-func parseActionCreateSaveMode(value string) (openv1alpha1commons.OutputOptions_SaveMode, error) {
-	if value == "" {
-		return openv1alpha1commons.OutputOptions_SAVE_MODE_UNSPECIFIED, nil
-	}
-	key := strings.ToUpper(strings.TrimSpace(value))
-	if v, ok := openv1alpha1commons.OutputOptions_SaveMode_value[key]; ok {
-		return openv1alpha1commons.OutputOptions_SaveMode(v), nil
-	}
-	return openv1alpha1commons.OutputOptions_SAVE_MODE_UNSPECIFIED, fmt.Errorf("unknown output save mode %q", value)
-}
-
 func splitActionCreateWords(input string) ([]string, error) {
 	var words []string
 	var current strings.Builder
@@ -803,41 +465,4 @@ func splitActionCreateWords(input string) ([]string, error) {
 		words = append(words, current.String())
 	}
 	return words, nil
-}
-
-func normalizeActionCreateStruct(in map[string]interface{}) map[string]interface{} {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]interface{}, len(in))
-	for k, v := range in {
-		out[k] = normalizeActionCreateValue(v)
-	}
-	return out
-}
-
-func normalizeActionCreateValue(v interface{}) interface{} {
-	switch typed := v.(type) {
-	case map[string]interface{}:
-		return normalizeActionCreateStruct(typed)
-	case []interface{}:
-		out := make([]interface{}, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, normalizeActionCreateValue(item))
-		}
-		return out
-	default:
-		return typed
-	}
-}
-
-func copyStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }

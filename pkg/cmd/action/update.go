@@ -81,9 +81,9 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 
 			// Load the spec with a proto-native loader that matches the format
 			// `action get -o yaml/json` emits, so the get -> edit -> update loop
-			// round-trips (plan D5/F1). Do NOT reuse create's strict
-			// loadActionCreateSpec — it hard-fails on a get dump.
-			spec, err := loadActionUpdateSpec(filePath, io.In)
+			// round-trips (plan D5/F1). The same loader backs `action create -f`,
+			// so both commands share one file schema.
+			spec, err := loadActionSpecFromFile(filePath, io.In)
 			if err != nil {
 				log.Fatalf("invalid action spec: %v", err)
 			}
@@ -178,15 +178,15 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	return cmd
 }
 
-// loadActionUpdateSpec reads a YAML/JSON action document (or stdin for `-`) and
-// extracts its ActionSpec via a proto-native path: parse to a generic value,
-// re-encode as JSON, then protojson.Unmarshal into an Action with
+// loadActionSpecFromFile reads a YAML/JSON action document (or stdin for `-`)
+// and extracts its ActionSpec via a proto-native path: parse to a generic
+// value, re-encode as JSON, then protojson.Unmarshal into an Action with
 // DiscardUnknown so output-only fields a `get -o yaml/json` dump carries (name,
-// author, create/update times) are tolerated rather than rejected. This is the
-// exact format `action get` emits, so the get -> edit -> update loop round-trips
-// (plan D5/F1). It deliberately does NOT reuse create's strict
-// loadActionCreateSpec (KnownFields), which is a separate strict lowering path.
-func loadActionUpdateSpec(path string, stdin io.Reader) (*openv1alpha1commons.ActionSpec, error) {
+// author, create/update times) — and any unknown keys — are tolerated rather
+// than rejected. This is the exact format `action get` emits, so the
+// get -> edit -> update loop round-trips (plan D5/F1). Both `action update` and
+// `action create` load their -f spec through this single tolerant loader.
+func loadActionSpecFromFile(path string, stdin io.Reader) (*openv1alpha1commons.ActionSpec, error) {
 	var (
 		data []byte
 		err  error
