@@ -80,7 +80,7 @@ of whether the run is in progress or already completed.
   cocli action logs <uuid> -p my-project -f
 
   # A specific job run and DAG node; output still includes the node prefix
-  cocli action logs <uuid> -p my-project -j 1 --node encode`,
+  cocli action logs <uuid> -p my-project -j 0 --node encode`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
