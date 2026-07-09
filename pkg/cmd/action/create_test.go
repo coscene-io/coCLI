@@ -228,6 +228,84 @@ func TestLowerActionCreateQuota(t *testing.T) {
 	assert.Contains(t, err.Error(), "MEMORY_QUOTA_16G")
 }
 
+// The --quota preset (t-shirt size) is a convenience that maps to the proto
+// CPU/memory quota enum pair and sets the spec's quota.
+func TestCreateCommandQuotaPresetFlag(t *testing.T) {
+	cfgPath := writeActionCreateTestConfig(t)
+	var out bytes.Buffer
+	ioStreams := iostreams.Test(nil, &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"--name", "preset-action",
+		"--image", "ubuntu:22.04",
+		"--quota", "small",
+		"-o", "json",
+	})
+
+	require.NoError(t, cmd.Execute())
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"cpu":"CPU_QUOTA_1C"`)
+	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_2G"`)
+}
+
+// --quota overrides any file quota: (cpu/memory) — the flag wins.
+func TestCreateCommandQuotaPresetOverridesFile(t *testing.T) {
+	cfgPath := writeActionCreateTestConfig(t)
+	var out bytes.Buffer
+	spec := `name: file-action
+jobs:
+  - name: main
+    container:
+      image: ubuntu:22.04
+      command: ["echo", "ok"]
+quota:
+  cpu: CPU_QUOTA_1C
+  memory: MEMORY_QUOTA_2G
+`
+	ioStreams := iostreams.Test(io.NopCloser(strings.NewReader(spec)), &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"-f", "-",
+		"--quota", "large",
+		"-o", "json",
+	})
+
+	require.NoError(t, cmd.Execute())
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"cpu":"CPU_QUOTA_4C"`)
+	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_8G"`)
+	assert.NotContains(t, got, "CPU_QUOTA_1C")
+	assert.NotContains(t, got, "MEMORY_QUOTA_2G")
+}
+
+// An invalid --quota preset fails with a clear error listing the valid sizes.
+func TestActionCreateQuotaPreset(t *testing.T) {
+	for _, tc := range []struct {
+		preset string
+		cpu    string
+		memory string
+	}{
+		{"small", "CPU_QUOTA_1C", "MEMORY_QUOTA_2G"},
+		{"medium", "CPU_QUOTA_2C", "MEMORY_QUOTA_4G"},
+		{"large", "CPU_QUOTA_4C", "MEMORY_QUOTA_8G"},
+		{"xlarge", "CPU_QUOTA_8C", "MEMORY_QUOTA_16G"},
+	} {
+		t.Run(tc.preset, func(t *testing.T) {
+			q, err := actionCreateQuotaPreset(tc.preset)
+			require.NoError(t, err)
+			assert.Equal(t, tc.cpu, q.Cpu)
+			assert.Equal(t, tc.memory, q.Memory)
+		})
+	}
+
+	_, err := actionCreateQuotaPreset("huge")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown quota preset")
+	assert.Contains(t, err.Error(), "small, medium, large, xlarge")
+}
+
 // A get -o yaml-style dump (quota as proto enum strings, lowercase param) now
 // parses cleanly through create's strict -f loader (previously the unknown
 // cpu/memory keys hard-failed) and lowers to the matching proto quota.

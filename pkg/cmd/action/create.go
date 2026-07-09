@@ -83,6 +83,7 @@ type actionCreateOptions struct {
 	command     string
 	env         []string
 	params      []string
+	quota       string
 }
 
 type actionCreateSpec struct {
@@ -193,8 +194,14 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "create --project <working-project-slug> (-f spec.yaml|json | --name <name> --image <image>)",
-		Short:                 "Create an action.",
+		Use:   "create --project <working-project-slug> (-f spec.yaml|json | --name <name> --image <image>)",
+		Short: "Create an action.",
+		Long: `Create an action from a spec file (-f) or inline flags.
+
+Resource quota can be set either in the spec file as proto enums
+(quota.cpu / quota.memory, e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G})
+or via the --quota small|medium|large|xlarge convenience preset, which maps a
+t-shirt size to that enum pair and overrides any file quota:.`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -269,6 +276,7 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd.Flags().StringVar(&opts.command, "command", "", "container command line (shell-split, quote-aware; e.g. 'python train.py --epochs 10')")
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
+	cmd.Flags().StringVar(&opts.quota, "quota", "", "resource preset: small|medium|large|xlarge (convenience; overrides quota.cpu/quota.memory)")
 
 	cmd_utils.DisableAuthCheckForBoolFlags(cmd, "example", "dry-run")
 
@@ -345,6 +353,15 @@ func applyActionCreateOverrides(spec *actionCreateSpec, opts *actionCreateOption
 		for k, v := range params {
 			spec.Parameters[k] = v
 		}
+	}
+	if changed("quota") {
+		quota, err := actionCreateQuotaPreset(opts.quota)
+		if err != nil {
+			return err
+		}
+		// The --quota preset is a convenience that overrides any file quota:
+		// (cpu/memory) — the flag wins.
+		spec.Quota = quota
 	}
 	if !changed("image") && !changed("command") && !changed("env") {
 		return nil
@@ -574,6 +591,25 @@ func lowerActionCreateQuota(quota *actionCreateQuota) (*openv1alpha1commons.Quot
 		out.Memory = openv1alpha1commons.Quota_MemoryQuota(v)
 	}
 	return out, nil
+}
+
+// actionCreateQuotaPreset maps a t-shirt resource preset (small|medium|large|
+// xlarge) to the proto CPU/memory quota enum pair. It backs the --quota
+// convenience flag, which is a shortcut for setting the spec's quota.cpu /
+// quota.memory enums (the flag overrides any file quota:).
+func actionCreateQuotaPreset(preset string) (*actionCreateQuota, error) {
+	switch strings.ToLower(strings.TrimSpace(preset)) {
+	case "small":
+		return &actionCreateQuota{Cpu: "CPU_QUOTA_1C", Memory: "MEMORY_QUOTA_2G"}, nil
+	case "medium":
+		return &actionCreateQuota{Cpu: "CPU_QUOTA_2C", Memory: "MEMORY_QUOTA_4G"}, nil
+	case "large":
+		return &actionCreateQuota{Cpu: "CPU_QUOTA_4C", Memory: "MEMORY_QUOTA_8G"}, nil
+	case "xlarge":
+		return &actionCreateQuota{Cpu: "CPU_QUOTA_8C", Memory: "MEMORY_QUOTA_16G"}, nil
+	default:
+		return nil, fmt.Errorf("unknown quota preset %q (valid: small, medium, large, xlarge)", preset)
+	}
 }
 
 // quotaEnumNames renders the enum value names (ordered by number) for a clear
