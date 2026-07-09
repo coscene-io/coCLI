@@ -48,7 +48,7 @@ const (
 func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug = ""
-		jobIndex    = 0
+		jobIndex    = 1
 		node        = ""
 		follow      = false
 	)
@@ -66,8 +66,8 @@ run has finished and its pod has been cleaned up, the archived log is
 downloaded and printed instead — so the command works the same regardless
 of whether the run is in progress or already completed.
 
-  -j  select which job run to read when an action run has several
-      (default 0 = the first).
+  -j  select which job run to read when an action run has several. The index
+      is 1-based (default 1 = the first).
   --node  only read this DAG node. When omitted, all DAG nodes are printed
       in dependency order.
   -f  follow: keep the stream open and reconnect on transient errors. If
@@ -80,7 +80,7 @@ of whether the run is in progress or already completed.
   cocli action logs <uuid> -p my-project -f
 
   # A specific job run and DAG node; output still includes the node prefix
-  cocli action logs <uuid> -p my-project -j 0 --node encode`,
+  cocli action logs <uuid> -p my-project -j 1 --node encode`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -97,7 +97,7 @@ of whether the run is in progress or already completed.
 				return
 			}
 
-			jobRun, err := selectJobRun(cmd.Context(), pm, actionRun, jobIndex, follow, io)
+			jobRun, err := selectJobRun(cmd.Context(), pm.JobRunCli(), actionRun, jobIndex, follow, io)
 			if err != nil {
 				exitf(io, "%v", err)
 				return
@@ -148,7 +148,7 @@ of whether the run is in progress or already completed.
 	}
 
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "working project slug")
-	cmd.Flags().IntVarP(&jobIndex, "job", "j", 0, "index of the job run to stream (default 0 = first)")
+	cmd.Flags().IntVarP(&jobIndex, "job", "j", 1, "1-based index of the job run to stream (default 1 = first)")
 	cmd.Flags().StringVar(&node, "node", "", "DAG node to stream (default: all nodes in dependency order)")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow the log stream (reconnect on transient errors)")
 
@@ -167,10 +167,11 @@ func resolveActionRun(arg string, proj *name.Project) (*name.ActionRun, error) {
 }
 
 // selectJobRun lists the action run's job runs and picks the requested index.
-// Returns (nil, nil) when there is nothing to stream and the situation has
-// already been reported to the user (e.g. no job runs without --follow).
-func selectJobRun(ctx context.Context, pm *config.ProfileManager, actionRun *name.ActionRun, jobIndex int, follow bool, io *iostreams.IOStreams) (*openv1alpha1resource.JobRun, error) {
-	jobRuns, err := listJobRunsWithWait(ctx, pm.JobRunCli(), actionRun, follow, io)
+// The index is 1-based (1 = first job run). Returns (nil, nil) when there is
+// nothing to stream and the situation has already been reported to the user
+// (e.g. no job runs without --follow).
+func selectJobRun(ctx context.Context, cli api.JobRunInterface, actionRun *name.ActionRun, jobIndex int, follow bool, io *iostreams.IOStreams) (*openv1alpha1resource.JobRun, error) {
+	jobRuns, err := listJobRunsWithWait(ctx, cli, actionRun, follow, io)
 	if err != nil {
 		return nil, err
 	}
@@ -178,10 +179,10 @@ func selectJobRun(ctx context.Context, pm *config.ProfileManager, actionRun *nam
 		io.Println("No job runs found")
 		return nil, nil
 	}
-	if jobIndex < 0 || jobIndex >= len(jobRuns) {
-		return nil, fmt.Errorf("job index %d out of range (%d job runs)", jobIndex, len(jobRuns))
+	if jobIndex < 1 || jobIndex > len(jobRuns) {
+		return nil, fmt.Errorf("job index %d out of range (valid 1..%d)", jobIndex, len(jobRuns))
 	}
-	return jobRuns[jobIndex], nil
+	return jobRuns[jobIndex-1], nil
 }
 
 // listJobRunsWithWait lists job runs, optionally polling while empty when
