@@ -15,6 +15,7 @@
 package action
 
 import (
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
@@ -67,7 +68,11 @@ func NewGetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 				log.Fatalf("failed to get action: %v", err)
 			}
 
-			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: &table.PrintOpts{Verbose: true}})
+			tableOpts := &table.PrintOpts{}
+			if outputFormat == "table" || outputFormat == "" {
+				convertActionUsers(cmd.Context(), []*openv1alpha1resource.Action{action}, pm)
+			}
+			p, err := printer.Printer(outputFormat, &printer.Options{TableOpts: tableOpts})
 			if err != nil {
 				log.Fatal(err)
 			}

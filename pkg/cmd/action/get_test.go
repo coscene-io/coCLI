@@ -99,6 +99,10 @@ func TestGetCommandOutputFormats(t *testing.T) {
 
 	t.Run("table renders the action title", func(t *testing.T) {
 		out := renderSingleAction(t, "table", action)
+		assert.Contains(t, out, "ID")
+		assert.NotContains(t, out, "RESOURCE NAME")
+		assert.NotContains(t, out, "projects/p1/actions/a1")
+		assert.Contains(t, out, "a1")
 		assert.Contains(t, out, "my-action")
 	})
 
@@ -112,7 +116,7 @@ func TestGetCommandOutputFormats(t *testing.T) {
 // pair the get command uses, returning the rendered string.
 func renderSingleAction(t *testing.T, format string, action *openv1alpha1resource.Action) string {
 	t.Helper()
-	p, err := printer.Printer(format, &printer.Options{TableOpts: &table.PrintOpts{Verbose: true}})
+	p, err := printer.Printer(format, &printer.Options{TableOpts: &table.PrintOpts{}})
 	require.NoError(t, err)
 	var out bytes.Buffer
 	require.NoError(t, p.PrintObj(printable.NewSingleAction(action), &out))
