@@ -16,6 +16,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	openv1alpha1connect "buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go/coscene/openapi/dataplatform/v1alpha1/services/servicesconnect"
@@ -25,9 +26,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/testutil"
+	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type mockActionServiceClient struct {
@@ -37,6 +40,8 @@ type mockActionServiceClient struct {
 	getActionFunc    func(context.Context, *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
 	listActionsFunc  func(context.Context, *connect.Request[openv1alpha1service.ListActionsRequest]) (*connect.Response[openv1alpha1service.ListActionsResponse], error)
 	createActionFunc func(context.Context, *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
+	updateActionFunc func(context.Context, *connect.Request[openv1alpha1service.UpdateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error)
+	deleteActionFunc func(context.Context, *connect.Request[openv1alpha1service.DeleteActionRequest]) (*connect.Response[emptypb.Empty], error)
 }
 
 func (m *mockActionServiceClient) GetAction(ctx context.Context, req *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
@@ -56,6 +61,20 @@ func (m *mockActionServiceClient) ListActions(ctx context.Context, req *connect.
 func (m *mockActionServiceClient) CreateAction(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
 	if m.createActionFunc != nil {
 		return m.createActionFunc(ctx, req)
+	}
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func (m *mockActionServiceClient) UpdateAction(ctx context.Context, req *connect.Request[openv1alpha1service.UpdateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+	if m.updateActionFunc != nil {
+		return m.updateActionFunc(ctx, req)
+	}
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func (m *mockActionServiceClient) DeleteAction(ctx context.Context, req *connect.Request[openv1alpha1service.DeleteActionRequest]) (*connect.Response[emptypb.Empty], error) {
+	if m.deleteActionFunc != nil {
+		return m.deleteActionFunc(ctx, req)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
@@ -171,6 +190,81 @@ func TestActionClient_CreateAction(t *testing.T) {
 	})
 }
 
+func TestActionClient_UpdateAction(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	actionName := &name.Action{ProjectID: "p1", ID: "a1"}
+	spec := &openv1alpha1commons.ActionSpec{Name: "diagnose", Jobs: []*openv1alpha1commons.JobSpec{{Name: "main"}}}
+
+	t.Run("success sends action name, spec and update_mask", func(t *testing.T) {
+		expected := &openv1alpha1resource.Action{Name: "projects/p1/actions/a1", Spec: spec}
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			updateActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.UpdateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				require.NotNil(t, req.Msg.Action)
+				assert.Equal(t, "projects/p1/actions/a1", req.Msg.Action.Name)
+				assert.Equal(t, spec, req.Msg.Action.Spec)
+				require.NotNil(t, req.Msg.UpdateMask)
+				assert.Equal(t, []string{"spec"}, req.Msg.UpdateMask.Paths)
+				return connect.NewResponse(expected), nil
+			},
+		}
+		client := NewActionClient(mock, nil)
+		got, err := client.UpdateAction(ctx, actionName, spec, []string{"spec"})
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("error is wrapped preserving connect code", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			updateActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.UpdateActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bad spec"))
+			},
+		}
+		client := NewActionClient(mock, nil)
+		_, err := client.UpdateAction(ctx, actionName, spec, []string{"spec"})
+		require.Error(t, err)
+		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodeInvalidArgument))
+	})
+}
+
+func TestActionClient_DeleteAction(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	actionName := &name.Action{ProjectID: "p1", ID: "a1"}
+
+	t.Run("success sends the resolved name", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			deleteActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.DeleteActionRequest]) (*connect.Response[emptypb.Empty], error) {
+				assert.Equal(t, "projects/p1/actions/a1", req.Msg.Name)
+				return connect.NewResponse(&emptypb.Empty{}), nil
+			},
+		}
+		client := NewActionClient(mock, nil)
+		err := client.DeleteAction(ctx, actionName)
+		require.NoError(t, err)
+	})
+
+	t.Run("error is wrapped preserving connect code", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			deleteActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.DeleteActionRequest]) (*connect.Response[emptypb.Empty], error) {
+				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied"))
+			},
+		}
+		client := NewActionClient(mock, nil)
+		err := client.DeleteAction(ctx, actionName)
+		require.Error(t, err)
+		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodePermissionDenied))
+	})
+}
+
 func TestActionClient_CreateActionRun(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
@@ -259,5 +353,27 @@ func TestActionClient_ActionId2Name(t *testing.T) {
 		an, err := client.ActionId2Name(ctx, "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", proj)
 		require.NoError(t, err)
 		assert.Equal(t, "p1", an.ProjectID)
+	})
+
+	// Regression: a not-found UUID lookup must preserve the underlying connect
+	// error chain through %w so the resolve-first callers (get/delete/update)
+	// can detect NotFound via errors.As / utils.IsConnectErrorWithCode instead
+	// of degrading to a fatal stack. A %s wrap here would flatten the error and
+	// silently break that guard.
+	t.Run("not-found uuid preserves connect NotFound code", func(t *testing.T) {
+		mock := &mockActionServiceClient{
+			ctrl: ctrl,
+			getActionFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.GetActionRequest]) (*connect.Response[openv1alpha1resource.Action], error) {
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("action not found"))
+			},
+		}
+		client := NewActionClient(mock, nil)
+		_, err := client.ActionId2Name(ctx, "d9b9d56b-0d43-4719-b7cc-0d7e6616bb8a", proj)
+		require.Error(t, err)
+
+		var connErr *connect.Error
+		require.True(t, errors.As(err, &connErr), "expected the connect error to survive the wrap")
+		assert.Equal(t, connect.CodeNotFound, connErr.Code())
+		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodeNotFound))
 	})
 }
