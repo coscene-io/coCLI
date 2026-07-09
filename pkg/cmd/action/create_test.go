@@ -443,6 +443,76 @@ func compactActionCreateJSON(input string) string {
 	return strings.Join(strings.Fields(input), "")
 }
 
+// A minimal flags-only create must default the three option messages to empty
+// (but non-nil) so the created spec is runnable — a nil MountOptions /
+// StorageOptions / OutputOptions panics the matrix backend at run time. Empty
+// means backend defaults; no field is set inside them.
+func TestBuildActionForCreateDefaultsOptions(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	ioStreams := iostreams.Test(nil, &bytes.Buffer{}, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	createCmd, _, err := cmd.Find([]string{"create"})
+	require.NoError(t, err)
+
+	opts := &actionCreateOptions{
+		name:    "minimal",
+		image:   "img",
+		command: "run",
+		quota:   "small",
+	}
+	for _, f := range []string{"name", "image", "command", "quota"} {
+		require.NoError(t, createCmd.Flags().Set(f, flagValueFor(opts, f)))
+	}
+
+	action, err := buildActionForCreate(opts, createCmd, nil)
+	require.NoError(t, err)
+	spec := action.GetSpec()
+	// All three option messages are defaulted to non-nil so the spec is runnable.
+	require.NotNil(t, spec.MountOptions, "MountOptions must be defaulted to non-nil")
+	require.NotNil(t, spec.StorageOptions, "StorageOptions must be defaulted to non-nil")
+	require.NotNil(t, spec.OutputOptions, "OutputOptions must be defaulted to non-nil")
+	// Empty means backend defaults — no field is set inside them.
+	assert.Equal(t, openv1alpha1commons.OutputOptions_SAVE_MODE_UNSPECIFIED, spec.OutputOptions.GetSaveMode())
+}
+
+func flagValueFor(opts *actionCreateOptions, flag string) string {
+	switch flag {
+	case "name":
+		return opts.name
+	case "image":
+		return opts.image
+	case "command":
+		return opts.command
+	case "quota":
+		return opts.quota
+	default:
+		return ""
+	}
+}
+
+// End-to-end: a minimal flags-only dry-run create emits the three empty option
+// objects in the JSON, so every cocli-created action carries them.
+func TestCreateCommandDryRunDefaultsOptionsInJSON(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	var out bytes.Buffer
+	ioStreams := iostreams.Test(nil, &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"--name", "minimal",
+		"--image", "img",
+		"--command", "run",
+		"--quota", "small",
+		"-o", "json",
+	})
+
+	require.NoError(t, cmd.Execute())
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"mountOptions":{}`)
+	assert.Contains(t, got, `"storageOptions":{}`)
+	assert.Contains(t, got, `"outputOptions":{}`)
+}
+
 // --- fix-wave (Worker E) tests --------------------------------------------
 
 // The --example skeleton must ship the obvious sentinel so an unedited example

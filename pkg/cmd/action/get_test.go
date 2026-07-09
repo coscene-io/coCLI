@@ -23,6 +23,7 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer"
 	"github.com/coscene-io/cocli/internal/printer/printable"
 	"github.com/coscene-io/cocli/internal/printer/table"
@@ -121,6 +122,29 @@ func renderSingleAction(t *testing.T, format string, action *openv1alpha1resourc
 	var out bytes.Buffer
 	require.NoError(t, p.PrintObj(printable.NewSingleAction(action), &out))
 	return out.String()
+}
+
+// When GetByName returns a connect NotFound (a deleted/absent action), the get
+// command prints the shared clean not-found message rather than the raw
+// `not_found` connect error. ActionId2Name resolves a plain `get <name>` with
+// no server call, so the final GetByName guard is the one that catches this —
+// and it prints via printActionNotFound, the exact helper delete/update use, so
+// the wording stays identical across all three commands.
+func TestPrintActionNotFoundMessage(t *testing.T) {
+	proj := &name.Project{ProjectID: "p1"}
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &bytes.Buffer{})
+
+	printActionNotFound(io, "my-action", proj)
+
+	got := out.String()
+	assert.Contains(t, got, "failed to find action")
+	assert.Contains(t, got, "my-action")
+	assert.Contains(t, got, proj.String())
+	// The message is not the raw connect NotFound error surfaced by log.Fatalf.
+	assert.NotContains(t, got, "not_found")
+	// Pin the exact format shared by get/delete/update so their wording matches.
+	assert.Equal(t, "failed to find action: my-action in project: "+proj.String()+"\n", got)
 }
 
 func setupGetTestConfigPath(t *testing.T) string {

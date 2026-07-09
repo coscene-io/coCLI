@@ -67,7 +67,7 @@ func NewDeleteCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 			// survives (api/action.go, plan D7/F2).
 			actionName, err := pm.ActionCli().ActionId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				io.Printf("failed to find action: %s in project: %s\n", args[0], proj)
+				printActionNotFound(io, args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("failed to convert action id to name: %v", err)

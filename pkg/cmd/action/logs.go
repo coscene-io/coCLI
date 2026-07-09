@@ -581,3 +581,11 @@ func exitf(io *iostreams.IOStreams, format string, a ...interface{}) {
 	io.Eprintln(fmt.Sprintf(format, a...))
 	os.Exit(1)
 }
+
+// printActionNotFound prints the clean client-side not-found message shared by
+// the get/delete/update commands so their wording stays identical. It is the
+// message emitted when ActionId2Name or a follow-up GetByName returns a connect
+// NotFound for a deleted/absent action, in place of the raw `not_found` error.
+func printActionNotFound(io *iostreams.IOStreams, actionRef string, proj *name.Project) {
+	io.Printf("failed to find action: %s in project: %s\n", actionRef, proj)
+}

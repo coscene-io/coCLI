@@ -196,6 +196,24 @@ func buildActionForCreate(opts *actionCreateOptions, cmd *cobra.Command, stdin i
 	if err := applyActionCreateOverrides(spec, opts, func(name string) bool { return cmd.Flags().Changed(name) }); err != nil {
 		return nil, err
 	}
+
+	// Default the three option messages to empty (but non-nil) so every
+	// cocli-created action carries them. A minimal create otherwise leaves
+	// spec.MountOptions/StorageOptions/OutputOptions nil, which panics the
+	// matrix backend at run time; the proper fix is in matrix (separate,
+	// needs a deploy), but this default gives immediate relief and matches
+	// the user's manual `action update` workaround of filling empty objects.
+	// Empty means backend defaults — no field is set inside them. Runs for
+	// both -f file and flags-only creates.
+	if spec.MountOptions == nil {
+		spec.MountOptions = &openv1alpha1commons.MountOptions{}
+	}
+	if spec.StorageOptions == nil {
+		spec.StorageOptions = &openv1alpha1commons.StorageOptions{}
+	}
+	if spec.OutputOptions == nil {
+		spec.OutputOptions = &openv1alpha1commons.OutputOptions{}
+	}
 	return &openv1alpha1resource.Action{Spec: spec}, nil
 }
 

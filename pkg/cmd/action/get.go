@@ -56,15 +56,22 @@ func NewGetCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			// its underlying error with %w so the NotFound code survives (api/action.go).
 			actionName, err := pm.ActionCli().ActionId2Name(cmd.Context(), args[0], proj)
 			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				io.Printf("failed to find action: %s in project: %s\n", args[0], proj)
+				printActionNotFound(io, args[0], proj)
 				return
 			} else if err != nil {
 				log.Fatalf("failed to convert action id to name: %v", err)
 			}
 
-			// Fetch the action.
+			// Fetch the action. ActionId2Name resolves the common `get <name>`
+			// case without a server round-trip, so the resolve-guard above never
+			// sees a NotFound for a deleted/absent action — guard here too so a
+			// missing action prints the same clean message delete/update use,
+			// not the raw connect `not_found` error (plan D7/F2).
 			action, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
-			if err != nil {
+			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
+				printActionNotFound(io, args[0], proj)
+				return
+			} else if err != nil {
 				log.Fatalf("failed to get action: %v", err)
 			}
 
