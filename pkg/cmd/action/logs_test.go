@@ -476,6 +476,85 @@ func TestListJobRunsWithWait(t *testing.T) {
 	})
 }
 
+func TestSelectJobRun(t *testing.T) {
+	actionRun := &name.ActionRun{ProjectID: "p", ID: "ar"}
+	threeRuns := []*openv1alpha1resource.JobRun{
+		{Name: "jr1"}, {Name: "jr2"}, {Name: "jr3"},
+	}
+
+	t.Run("index 1 selects the first job run", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		got, err := selectJobRun(context.Background(), cli, actionRun, 1, false, discardIO())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.GetName() != "jr1" {
+			t.Fatalf("got %q, want jr1", got.GetName())
+		}
+	})
+
+	t.Run("index 2 selects the second job run", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		got, err := selectJobRun(context.Background(), cli, actionRun, 2, false, discardIO())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.GetName() != "jr2" {
+			t.Fatalf("got %q, want jr2", got.GetName())
+		}
+	})
+
+	t.Run("index N (len) selects the last job run", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		got, err := selectJobRun(context.Background(), cli, actionRun, len(threeRuns), false, discardIO())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.GetName() != "jr3" {
+			t.Fatalf("got %q, want jr3", got.GetName())
+		}
+	})
+
+	t.Run("index 0 is out of range", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		_, err := selectJobRun(context.Background(), cli, actionRun, 0, false, discardIO())
+		if err == nil || !strings.Contains(err.Error(), "out of range (valid 1..3)") {
+			t.Fatalf("expected out-of-range error, got %v", err)
+		}
+	})
+
+	t.Run("index N+1 is out of range", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		_, err := selectJobRun(context.Background(), cli, actionRun, len(threeRuns)+1, false, discardIO())
+		if err == nil || !strings.Contains(err.Error(), "out of range (valid 1..3)") {
+			t.Fatalf("expected out-of-range error, got %v", err)
+		}
+	})
+
+	t.Run("default index (1) selects the first job run", func(t *testing.T) {
+		// Mirrors the flag default: -j is 1 when not supplied.
+		cli := &fakeJobRunClient{listResult: threeRuns}
+		got, err := selectJobRun(context.Background(), cli, actionRun, 1, false, discardIO())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.GetName() != "jr1" {
+			t.Fatalf("got %q, want jr1", got.GetName())
+		}
+	})
+
+	t.Run("no job runs reports and returns nil,nil", func(t *testing.T) {
+		cli := &fakeJobRunClient{listResult: nil}
+		got, err := selectJobRun(context.Background(), cli, actionRun, 1, false, discardIO())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != nil {
+			t.Fatalf("expected nil job run, got %+v", got)
+		}
+	})
+}
+
 func TestResolveActionRun(t *testing.T) {
 	proj := &name.Project{ProjectID: "11111111-1111-1111-1111-111111111111"}
 

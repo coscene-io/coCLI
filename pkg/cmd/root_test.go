@@ -28,6 +28,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type authFailingProvider struct{}
+
+func (authFailingProvider) GetProfileManager() (*config.ProfileManager, error) {
+	panic("auth path should be skipped")
+}
+
+func (authFailingProvider) Persist(*config.ProfileManager) error {
+	panic("auth path should be skipped")
+}
+
 func TestRootCommand(t *testing.T) {
 	t.Run("Version flag", func(t *testing.T) {
 		cmd := cmd.NewCommand(iostreams.System(), config.Provide)
@@ -166,6 +176,51 @@ func TestRootCommand(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestActionCreateLocalModesSkipRootAuth(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantOutput string
+	}{
+		{
+			name:       "example",
+			args:       []string{"action", "create", "--example"},
+			wantOutput: "name: my-action",
+		},
+		{
+			name: "dry run",
+			args: []string{
+				"action", "create",
+				"--dry-run",
+				"--name", "local-action",
+				"--image", "ubuntu:22.04",
+				"-o", "json",
+			},
+			wantOutput: `"name": "local-action"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			err := os.WriteFile(configPath, []byte{}, 0644)
+			require.NoError(t, err)
+
+			var out, errOut bytes.Buffer
+			rootCmd := cmd.NewCommand(
+				iostreams.Test(nil, &out, &errOut),
+				func(string) config.Provider { return authFailingProvider{} },
+			)
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&errOut)
+			rootCmd.SetArgs(append([]string{"--config", configPath}, tt.args...))
+
+			require.NoError(t, rootCmd.Execute())
+			assert.Contains(t, out.String(), tt.wantOutput)
+		})
+	}
 }
 
 // TestEnvironmentVariables tests environment variable configuration

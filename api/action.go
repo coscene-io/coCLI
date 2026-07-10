@@ -27,6 +27,7 @@ import (
 	"github.com/coscene-io/cocli/internal/constants"
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type ActionInterface interface {
@@ -35,6 +36,18 @@ type ActionInterface interface {
 
 	// ListAllActions lists all actions in the current organization.
 	ListAllActions(ctx context.Context, listOpts *ListActionsOptions) ([]*openv1alpha1resource.Action, error)
+
+	// CreateAction creates an action in a project.
+	CreateAction(ctx context.Context, parent string, action *openv1alpha1resource.Action) (*openv1alpha1resource.Action, error)
+
+	// UpdateAction updates an action's spec. The name selects the action; only
+	// the fields named in updateMask are written (cocli always sends ["spec"],
+	// which full-replaces the spec — see plan D2/D13).
+	UpdateAction(ctx context.Context, actionName *name.Action, spec *openv1alpha1commons.ActionSpec, updateMask []string) (*openv1alpha1resource.Action, error)
+
+	// DeleteAction deletes an action by name. Delete is a soft delete on the
+	// backend and idempotent (an unknown name still returns success).
+	DeleteAction(ctx context.Context, actionName *name.Action) error
 
 	// CreateActionRun creates an action run.
 	CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error
@@ -114,6 +127,49 @@ func (c *actionClient) ListAllActions(ctx context.Context, listOpts *ListActions
 
 func (c *actionClient) filter(opt *ListActionsOptions) string {
 	return ""
+}
+
+func (c *actionClient) CreateAction(ctx context.Context, parent string, action *openv1alpha1resource.Action) (*openv1alpha1resource.Action, error) {
+	req := connect.NewRequest(&openv1alpha1service.CreateActionRequest{
+		Parent: parent,
+		Action: action,
+	})
+	res, err := c.actionServiceClient.CreateAction(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create action: %w", err)
+	}
+
+	return res.Msg, nil
+}
+
+func (c *actionClient) UpdateAction(ctx context.Context, actionName *name.Action, spec *openv1alpha1commons.ActionSpec, updateMask []string) (*openv1alpha1resource.Action, error) {
+	req := connect.NewRequest(&openv1alpha1service.UpdateActionRequest{
+		Action: &openv1alpha1resource.Action{
+			Name: actionName.String(),
+			Spec: spec,
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{
+			Paths: updateMask,
+		},
+	})
+	res, err := c.actionServiceClient.UpdateAction(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update action: %w", err)
+	}
+
+	return res.Msg, nil
+}
+
+func (c *actionClient) DeleteAction(ctx context.Context, actionName *name.Action) error {
+	req := connect.NewRequest(&openv1alpha1service.DeleteActionRequest{
+		Name: actionName.String(),
+	})
+	_, err := c.actionServiceClient.DeleteAction(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to delete action: %w", err)
+	}
+
+	return nil
 }
 
 func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error {
@@ -196,11 +252,18 @@ func (c *actionClient) ActionId2Name(ctx context.Context, actionIdOrName string,
 		return name.NewAction(act.Name)
 	}
 
-	if act, err := c.GetByName(ctx, &name.Action{
+	// Fall back to an org-level lookup. Keep this error: wrapping it with %w
+	// below preserves the underlying connect error chain (e.g. a NotFound code)
+	// so callers can inspect it via utils.IsConnectErrorWithCode / errors.As.
+	// Using %s here would flatten the error to a string and break that guard,
+	// degrading a clean not-found message into a fatal stack (mirror how
+	// RecordId2Name wraps its Get error with errors.Wrapf/%w in api/record.go).
+	act, err := c.GetByName(ctx, &name.Action{
 		ID: actionIdOrName,
-	}); err == nil {
+	})
+	if err == nil {
 		return name.NewAction(act.Name)
 	}
 
-	return nil, fmt.Errorf("failed to convert action id to name: %s", actionIdOrName)
+	return nil, fmt.Errorf("failed to convert action id to name %s: %w", actionIdOrName, err)
 }

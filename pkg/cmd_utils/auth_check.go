@@ -14,14 +14,31 @@
 
 package cmd_utils
 
-import "github.com/spf13/cobra"
+import (
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+const (
+	skipAuthCheckAnnotation          = "skipAuthCheck"
+	skipAuthCheckBoolFlagsAnnotation = "skipAuthCheckBoolFlags"
+)
 
 func DisableAuthCheck(cmd *cobra.Command) {
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}
 
-	cmd.Annotations["skipAuthCheck"] = "true"
+	cmd.Annotations[skipAuthCheckAnnotation] = "true"
+}
+
+func DisableAuthCheckForBoolFlags(cmd *cobra.Command, flags ...string) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+
+	cmd.Annotations[skipAuthCheckBoolFlagsAnnotation] = strings.Join(flags, ",")
 }
 
 func IsAuthCheckEnabled(cmd *cobra.Command) bool {
@@ -31,8 +48,21 @@ func IsAuthCheckEnabled(cmd *cobra.Command) bool {
 	}
 
 	for c := cmd; c.Parent() != nil; c = c.Parent() {
-		if c.Annotations != nil && c.Annotations["skipAuthCheck"] == "true" {
+		if c.Annotations == nil {
+			continue
+		}
+		if c.Annotations[skipAuthCheckAnnotation] == "true" {
 			return false
+		}
+		for _, flag := range strings.Split(c.Annotations[skipAuthCheckBoolFlagsAnnotation], ",") {
+			flag = strings.TrimSpace(flag)
+			if flag == "" {
+				continue
+			}
+			enabled, err := c.Flags().GetBool(flag)
+			if err == nil && enabled {
+				return false
+			}
 		}
 	}
 
