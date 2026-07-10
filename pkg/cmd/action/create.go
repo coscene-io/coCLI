@@ -92,18 +92,31 @@ func NewCreateCommand(cfgPath *string, ioStreams *iostreams.IOStreams, getProvid
 	cmd := &cobra.Command{
 		Use:   "create --project <working-project-slug> (-f spec.yaml|json | --name <name> --image <image>)",
 		Short: "Create an action.",
-		Long: `Create an action from a spec file (-f) or inline flags.
+		Long: `Create an action from a spec file (-f) OR inline flags — not both.
 
-Resource quota can be set either in the spec file as proto enums
-(quota.cpu / quota.memory, e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G})
-or via the --quota small|medium|large|xlarge convenience preset, which maps a
-t-shirt size to that enum pair and overrides any file quota:.`,
+The -f file is the full, authoritative spec, so the spec-content flags
+(--name, --description, --image, --command, --env, --param/-P, --quota) cannot
+be combined with -f; use flags to scaffold a spec from scratch, or a file, not
+both. Operational flags (-p/--project, --dry-run, -o/--output) work either way.
+
+Resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
+e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G}) or, in the flags-only
+path, via the --quota small|medium|large|xlarge convenience preset that maps a
+t-shirt size to that enum pair.`,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
 			if opts.example {
 				ioStreams.Printf("%s", actionCreateExample)
 				return
+			}
+
+			// The -f file is the full, authoritative spec: reject any
+			// spec-content flag combined with it rather than silently ignoring
+			// it (operational flags like -p/--dry-run/-o stay allowed). Surface
+			// the offending flags in one clean line + non-zero exit.
+			if err := actionCreateFlagConflict(cmd); err != nil {
+				exitf(ioStreams, "%v", err)
 			}
 
 			action, err := buildActionForCreate(&opts, cmd, ioStreams.In)
@@ -172,11 +185,45 @@ t-shirt size to that enum pair and overrides any file quota:.`,
 	cmd.Flags().StringVar(&opts.command, "command", "", "container command line (shell-split, quote-aware; e.g. 'python train.py --epochs 10')")
 	cmd.Flags().StringArrayVar(&opts.env, "env", []string{}, "container environment variable in key=value format (repeatable)")
 	cmd.Flags().StringArrayVarP(&opts.params, "param", "P", []string{}, "action parameter default in key=value format (repeatable)")
-	cmd.Flags().StringVar(&opts.quota, "quota", "", "resource preset: small|medium|large|xlarge (convenience; overrides quota.cpu/quota.memory)")
+	cmd.Flags().StringVar(&opts.quota, "quota", "", "resource preset: small|medium|large|xlarge (convenience for quota.cpu/quota.memory; not usable with -f)")
 
 	cmd_utils.DisableAuthCheckForBoolFlags(cmd, "example", "dry-run")
 
 	return cmd
+}
+
+// actionCreateSpecContentFlags are the flags whose sole job is to build the
+// spec from scratch. When -f/--file supplies the whole spec, any of these is a
+// conflict — the file is authoritative, so we refuse rather than silently
+// dropping the flag. Operational flags (-p/--project, --dry-run, -o/--output)
+// are NOT here: they stay valid alongside -f. --example is already mutually
+// exclusive with -f elsewhere.
+var actionCreateSpecContentFlags = []string{
+	"name", "description", "image", "command", "env", "param", "quota",
+}
+
+// actionCreateFlagConflict returns a clean, one-line error when -f/--file is
+// combined with any spec-content flag. It only considers flags the user
+// actually set (Changed), and lists every offender so a user who set several
+// sees them all. Returns nil when -f is absent (flags scaffold a spec) or when
+// -f is used alone.
+func actionCreateFlagConflict(cmd *cobra.Command) error {
+	if !cmd.Flags().Changed("file") {
+		return nil
+	}
+	var offenders []string
+	for _, name := range actionCreateSpecContentFlags {
+		if cmd.Flags().Changed(name) {
+			offenders = append(offenders, "--"+name)
+		}
+	}
+	if len(offenders) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s cannot be combined with -f/--file (the spec file is authoritative); remove the flag(s) or drop -f",
+		strings.Join(offenders, ", "),
+	)
 }
 
 // buildActionForCreate loads the -f spec (if any) through the shared
@@ -217,11 +264,13 @@ func buildActionForCreate(opts *actionCreateOptions, cmd *cobra.Command, stdin i
 	return &openv1alpha1resource.Action{Spec: spec}, nil
 }
 
-// applyActionCreateOverrides mutates the parsed *ActionSpec in place from the
-// inline flags. --name/--description/--param set top-level fields;
+// applyActionCreateOverrides builds the *ActionSpec in place from the inline
+// flags on the flags-only (no -f) path — combining these flags with -f is
+// rejected before this runs (actionCreateFlagConflict), so the spec starts
+// empty here. --name/--description/--param set top-level fields;
 // --image/--command/--env operate on the single job's container (creating a
 // "main" container job when the spec has none); --quota sets the proto Quota
-// enum pair and overrides any file quota:.
+// enum pair.
 func applyActionCreateOverrides(spec *openv1alpha1commons.ActionSpec, opts *actionCreateOptions, changed func(string) bool) error {
 	if changed("name") {
 		spec.Name = opts.name
@@ -246,8 +295,9 @@ func applyActionCreateOverrides(spec *openv1alpha1commons.ActionSpec, opts *acti
 		if err != nil {
 			return err
 		}
-		// The --quota preset is a convenience that overrides any file quota:
-		// (cpu/memory) — the flag wins.
+		// --quota is a convenience for setting the spec's quota.cpu/quota.memory
+		// enums. It only reaches here on the flags-only (no -f) path — combining
+		// --quota with -f is rejected up front (actionCreateFlagConflict).
 		spec.Quota = quota
 	}
 	if !changed("image") && !changed("command") && !changed("env") {

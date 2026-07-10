@@ -29,6 +29,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -129,7 +130,9 @@ func TestCreateCommandDryRunTableOutput(t *testing.T) {
 	assert.Contains(t, out.String(), "table-action")
 }
 
-func TestCreateCommandDryRunStdinAndFlagOverrides(t *testing.T) {
+// A -f file passes through unchanged in a dry-run (no spec-content flags are
+// combined with it — those are rejected; see the flag-conflict tests).
+func TestCreateCommandDryRunStdinFilePassthrough(t *testing.T) {
 	cfgPath := writeActionCreateTestConfig(t)
 	var out bytes.Buffer
 	spec := `name: file-action
@@ -150,21 +153,16 @@ quota:
 		"create",
 		"--dry-run",
 		"-f", "-",
-		"--name", "flag-action",
-		"--image", "new-image",
-		"--env", "A=B",
 		"-o", "json",
 	})
 
 	require.NoError(t, cmd.Execute())
 	got := compactActionCreateJSON(out.String())
-	assert.Contains(t, got, `"name":"flag-action"`)
-	assert.Contains(t, got, `"image":"new-image"`)
-	assert.Contains(t, got, `"A":"B"`)
+	assert.Contains(t, got, `"name":"file-action"`)
+	assert.Contains(t, got, `"image":"old-image"`)
 	assert.Contains(t, got, `"x":"old"`)
 	assert.Contains(t, got, `"cpu":"CPU_QUOTA_4C"`)
 	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_8G"`)
-	assert.NotContains(t, got, "old-image")
 }
 
 // The create -f loader is the shared proto-native loader: it accepts the full
@@ -246,8 +244,10 @@ func TestCreateCommandQuotaPresetFlag(t *testing.T) {
 	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_2G"`)
 }
 
-// --quota overrides any file quota: (cpu/memory) — the flag wins.
-func TestCreateCommandQuotaPresetOverridesFile(t *testing.T) {
+// A quota: set in the -f file survives unchanged in a dry-run (the --quota
+// flag can no longer be combined with -f — that is rejected; see the
+// flag-conflict tests). A file spec is authoritative.
+func TestCreateCommandQuotaFromFilePreserved(t *testing.T) {
 	cfgPath := writeActionCreateTestConfig(t)
 	var out bytes.Buffer
 	spec := `name: file-action
@@ -265,16 +265,13 @@ quota:
 	cmd.SetArgs([]string{
 		"create", "--dry-run",
 		"-f", "-",
-		"--quota", "large",
 		"-o", "json",
 	})
 
 	require.NoError(t, cmd.Execute())
 	got := compactActionCreateJSON(out.String())
-	assert.Contains(t, got, `"cpu":"CPU_QUOTA_4C"`)
-	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_8G"`)
-	assert.NotContains(t, got, "CPU_QUOTA_1C")
-	assert.NotContains(t, got, "MEMORY_QUOTA_2G")
+	assert.Contains(t, got, `"cpu":"CPU_QUOTA_1C"`)
+	assert.Contains(t, got, `"memory":"MEMORY_QUOTA_2G"`)
 }
 
 // The --quota preset maps a t-shirt size to the proto CPU/memory quota enum
@@ -437,6 +434,125 @@ func TestSplitActionCreateWords(t *testing.T) {
 
 	_, err = splitActionCreateWords(`python "unterminated`)
 	assert.Error(t, err)
+}
+
+// --- -f is authoritative: spec-content flags conflict with -f ------------
+
+// findActionCreateCmd returns the parsed `create` subcommand so tests can flip
+// individual flags and exercise actionCreateFlagConflict directly. The conflict
+// check lives in the command's Run behind exitf (os.Exit), which a test can't
+// intercept via Execute(), so we test the extracted checker on the real flagset.
+func findActionCreateCmd(t *testing.T) *cobra.Command {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "missing-config.yaml")
+	ioStreams := iostreams.Test(nil, &bytes.Buffer{}, &bytes.Buffer{})
+	root := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	createCmd, _, err := root.Find([]string{"create"})
+	require.NoError(t, err)
+	return createCmd
+}
+
+// -f alone (no spec-content flag) is fine — the file is the whole spec.
+func TestActionCreateFlagConflictFileAlone(t *testing.T) {
+	cmd := findActionCreateCmd(t)
+	require.NoError(t, cmd.Flags().Set("file", "spec.yaml"))
+	require.NoError(t, actionCreateFlagConflict(cmd))
+}
+
+// Flags-only (no -f) still scaffolds a spec — no conflict.
+func TestActionCreateFlagConflictFlagsOnly(t *testing.T) {
+	cmd := findActionCreateCmd(t)
+	require.NoError(t, cmd.Flags().Set("name", "x"))
+	require.NoError(t, cmd.Flags().Set("image", "img"))
+	require.NoError(t, cmd.Flags().Set("command", "run"))
+	require.NoError(t, cmd.Flags().Set("quota", "small"))
+	require.NoError(t, actionCreateFlagConflict(cmd))
+}
+
+// -f with a single spec-content flag errors and names exactly that flag.
+func TestActionCreateFlagConflictSingleOffender(t *testing.T) {
+	for _, tc := range []struct {
+		flag, value, want string
+	}{
+		{"name", "x", "--name"},
+		{"description", "d", "--description"},
+		{"image", "img", "--image"},
+		{"command", "run", "--command"},
+		{"env", "A=B", "--env"},
+		{"param", "x=1", "--param"},
+		{"quota", "small", "--quota"},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			cmd := findActionCreateCmd(t)
+			require.NoError(t, cmd.Flags().Set("file", "spec.yaml"))
+			require.NoError(t, cmd.Flags().Set(tc.flag, tc.value))
+			err := actionCreateFlagConflict(cmd)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+			assert.Contains(t, err.Error(), "-f/--file")
+			assert.Contains(t, err.Error(), "authoritative")
+		})
+	}
+}
+
+// -P is the shorthand for --param and still conflicts, reported as --param.
+func TestActionCreateFlagConflictParamShorthand(t *testing.T) {
+	cmd := findActionCreateCmd(t)
+	require.NoError(t, cmd.Flags().Set("file", "spec.yaml"))
+	require.NoError(t, cmd.Flags().Set("param", "x=1")) // -P binds to the "param" flag
+	err := actionCreateFlagConflict(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--param")
+}
+
+// Multiple offenders are all listed, in the declared (stable) order.
+func TestActionCreateFlagConflictMultipleOffenders(t *testing.T) {
+	cmd := findActionCreateCmd(t)
+	require.NoError(t, cmd.Flags().Set("file", "spec.yaml"))
+	require.NoError(t, cmd.Flags().Set("name", "x"))
+	require.NoError(t, cmd.Flags().Set("quota", "small"))
+	err := actionCreateFlagConflict(cmd)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--name")
+	assert.Contains(t, err.Error(), "--quota")
+	// Deterministic order: --name is declared before --quota.
+	assert.Less(t, strings.Index(err.Error(), "--name"), strings.Index(err.Error(), "--quota"))
+}
+
+// Operational flags (-p/--project, --dry-run, -o/--output) stay allowed with -f.
+func TestActionCreateFlagConflictOperationalFlagsAllowed(t *testing.T) {
+	cmd := findActionCreateCmd(t)
+	require.NoError(t, cmd.Flags().Set("file", "spec.yaml"))
+	require.NoError(t, cmd.Flags().Set("project", "proj"))
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("output", "json"))
+	require.NoError(t, actionCreateFlagConflict(cmd))
+}
+
+// End-to-end OK path: -f from stdin combined with operational flags only
+// (--dry-run, -o json) succeeds and prints the file's spec unchanged.
+func TestCreateCommandFileWithOperationalFlagsSucceeds(t *testing.T) {
+	cfgPath := writeActionCreateTestConfig(t)
+	var out bytes.Buffer
+	spec := `name: file-only-action
+jobs:
+  - name: main
+    container:
+      image: ubuntu:22.04
+      command: ["echo", "ok"]
+`
+	ioStreams := iostreams.Test(io.NopCloser(strings.NewReader(spec)), &out, &bytes.Buffer{})
+	cmd := NewRootCommand(&cfgPath, ioStreams, config.Provide)
+	cmd.SetArgs([]string{
+		"create", "--dry-run",
+		"-f", "-",
+		"-o", "json",
+	})
+
+	require.NoError(t, cmd.Execute())
+	got := compactActionCreateJSON(out.String())
+	assert.Contains(t, got, `"name":"file-only-action"`)
+	assert.Contains(t, got, `"image":"ubuntu:22.04"`)
 }
 
 func compactActionCreateJSON(input string) string {
