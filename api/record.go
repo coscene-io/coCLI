@@ -29,7 +29,6 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/genproto/protobuf/field_mask"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -544,7 +543,10 @@ func (c *recordClient) applyQueryFilter(ctx context.Context, msg *openv1alpha1se
 		return nil
 	}
 
-	filter := c.buildSearchFilter(ctx, opts)
+	filter, err := c.buildSearchFilter(ctx, opts)
+	if err != nil {
+		return err
+	}
 	if filter != "" {
 		msg.QueryFilter = &openv1alpha1service.SearchRecordsRequest_Filter{
 			Filter: filter,
@@ -554,7 +556,7 @@ func (c *recordClient) applyQueryFilter(ctx context.Context, msg *openv1alpha1se
 }
 
 // buildSearchFilter builds the filter string for the SearchRecords API using AIP-160 syntax.
-func (c *recordClient) buildSearchFilter(ctx context.Context, opts *SearchRecordsOptions) string {
+func (c *recordClient) buildSearchFilter(ctx context.Context, opts *SearchRecordsOptions) (string, error) {
 	var filters []string
 	if !opts.IncludeArchive {
 		filters = append(filters, "isArchived = false")
@@ -568,16 +570,19 @@ func (c *recordClient) buildSearchFilter(ctx context.Context, opts *SearchRecord
 	if len(opts.Labels) > 0 {
 		labelIDs, err := c.transformLabelsToIDs(ctx, opts.Project.String(), opts.Labels)
 		if err != nil {
-			// Log warning using logrus, don't fail the entire request
-			log.Warnf("failed to lookup labels: %v", err)
-		} else if len(labelIDs) > 0 {
-			quotedIDs := lo.Map(labelIDs, func(id string, _ int) string {
-				return fmt.Sprintf(`"%s"`, id)
-			})
-			filters = append(filters, fmt.Sprintf("relatedLabels.id in [%s]", strings.Join(quotedIDs, ", ")))
+			// Fail the request: silently dropping the label filter would return
+			// unfiltered results and mislead the caller into thinking they match.
+			return "", err
 		}
+		if len(labelIDs) == 0 {
+			return "", fmt.Errorf("labels not found: %v", strings.Join(opts.Labels, ","))
+		}
+		quotedIDs := lo.Map(labelIDs, func(id string, _ int) string {
+			return fmt.Sprintf(`"%s"`, id)
+		})
+		filters = append(filters, fmt.Sprintf("relatedLabels.id in [%s]", strings.Join(quotedIDs, ", ")))
 	}
-	return strings.Join(filters, " AND ")
+	return strings.Join(filters, " AND "), nil
 }
 
 func (c *recordClient) GenerateRecordThumbnailUploadUrl(ctx context.Context, recordName *name.Record) (string, error) {

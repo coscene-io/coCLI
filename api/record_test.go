@@ -286,6 +286,53 @@ func TestRecordClient_SearchAll(t *testing.T) {
 	assert.Len(t, records, 2)
 }
 
+func TestRecordClient_Search_MissingLabelFailsWithoutFallback(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	project := &name.Project{ProjectID: "test-project"}
+	options := &SearchRecordsOptions{
+		Project: project,
+		// label2 is absent in the project; the request must fail instead of
+		// silently dropping the label filter and returning unfiltered records.
+		Labels:         []string{"label1", "label2"},
+		IncludeArchive: false,
+	}
+
+	// Label service resolves only label1, leaving label2 unmatched.
+	mockLabelService := &mockLabelServiceClient{
+		ctrl: ctrl,
+		listLabelsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.ListLabelsRequest]) (*connect.Response[openv1alpha1service.ListLabelsResponse], error) {
+			return connect.NewResponse(&openv1alpha1service.ListLabelsResponse{
+				Labels: []*openv1alpha1resource.Label{
+					{Name: "projects/test-project/labels/label-id-1", DisplayName: "label1"},
+				},
+			}), nil
+		},
+	}
+
+	// Record search must never be reached when a label cannot be resolved.
+	mockRecordService := &mockRecordServiceClient{
+		ctrl: ctrl,
+		searchRecordsFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.SearchRecordsRequest]) (*connect.Response[openv1alpha1service.SearchRecordsResponse], error) {
+			t.Fatal("SearchRecords must not be called when a label is missing")
+			return nil, nil
+		},
+	}
+
+	client := NewRecordClient(mockRecordService, nil, nil, mockLabelService)
+
+	_, err := client.SearchWithPageToken(ctx, options)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "labels not found")
+	assert.Contains(t, err.Error(), "label2")
+
+	_, err = client.SearchAll(ctx, options)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "labels not found")
+}
+
 func TestRecordClient_RecordId2Name(t *testing.T) {
 	ctx := testutil.TestContext(t)
 	ctrl := gomock.NewController(t)
