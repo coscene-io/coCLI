@@ -17,9 +17,12 @@ package action
 import (
 	"fmt"
 
+	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
@@ -60,32 +63,31 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 				log.Fatalf("failed to convert record id to name: %v", err)
 			}
 
-			// Fetch action
-			act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
-			if err != nil {
-				log.Fatalf("failed to get action by name %s: %v", actionName, err)
-			}
-
+			var runParams map[string]string
 			if !skipParams {
-				if act.Spec.Parameters == nil {
-					act.Spec.Parameters = make(map[string]string)
-				}
 				if cmd.Flags().Changed("param") {
-					for k, v := range params {
-						act.Spec.Parameters[k] = v
-					}
+					runParams = params
 				} else {
+					act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
+					if err != nil {
+						log.Fatalf("failed to get action by name %s: %v", actionName, err)
+					}
 					// prompt to ask for parameters
+					runParams = make(map[string]string, len(act.Spec.Parameters))
 					for k, v := range act.Spec.Parameters {
-						act.Spec.Parameters[k] = prompts.PromptString(fmt.Sprintf("Enter value for parameter %s", k), v)
+						runParams[k] = prompts.PromptString(fmt.Sprintf("Enter value for parameter %s", k), v)
 					}
 				}
 			}
 
 			// Print final parameters
 			io.Println("\nThe final parameters in the action run to be created:")
-			for k, v := range act.Spec.Parameters {
-				io.Printf("%s: %s\n", k, v)
+			if skipParams {
+				io.Println("Using default parameters configured on the server.")
+			} else {
+				for k, v := range runParams {
+					io.Printf("%s: %s\n", k, v)
+				}
 			}
 
 			// Prompt user for confirmation
@@ -97,7 +99,7 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			}
 
 			// Create action run
-			err = pm.ActionCli().CreateActionRun(cmd.Context(), act, recordName)
+			err = pm.ActionCli().CreateActionRun(cmd.Context(), newActionRunAction(actionName, runParams), recordName)
 			if err != nil {
 				log.Fatalf("failed to create action run: %v", err)
 			}
@@ -115,4 +117,13 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 	cmd.MarkFlagsMutuallyExclusive("skip-params", "param")
 
 	return cmd
+}
+
+func newActionRunAction(actionName *name.Action, parameters map[string]string) *openv1alpha1resource.Action {
+	return &openv1alpha1resource.Action{
+		Name: actionName.String(),
+		Spec: &openv1alpha1commons.ActionSpec{
+			Parameters: parameters,
+		},
+	}
 }
