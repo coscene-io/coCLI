@@ -22,12 +22,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
-	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
@@ -62,16 +62,16 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			} else if err != nil {
 				log.Fatalf("failed to convert record id to name: %v", err)
 			}
+			act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
+			if err != nil {
+				log.Fatalf("failed to get action by name %s: %v", actionName, err)
+			}
 
 			var runParams map[string]string
 			if !skipParams {
 				if cmd.Flags().Changed("param") {
 					runParams = params
 				} else {
-					act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
-					if err != nil {
-						log.Fatalf("failed to get action by name %s: %v", actionName, err)
-					}
 					// prompt to ask for parameters
 					runParams = make(map[string]string, len(act.Spec.Parameters))
 					for k, v := range act.Spec.Parameters {
@@ -99,7 +99,7 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			}
 
 			// Create action run
-			err = pm.ActionCli().CreateActionRun(cmd.Context(), newActionRunAction(actionName, runParams), recordName)
+			err = pm.ActionCli().CreateActionRun(cmd.Context(), newActionRunAction(act, runParams), recordName)
 			if err != nil {
 				log.Fatalf("failed to create action run: %v", err)
 			}
@@ -119,11 +119,11 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 	return cmd
 }
 
-func newActionRunAction(actionName *name.Action, parameters map[string]string) *openv1alpha1resource.Action {
-	return &openv1alpha1resource.Action{
-		Name: actionName.String(),
-		Spec: &openv1alpha1commons.ActionSpec{
-			Parameters: parameters,
-		},
+func newActionRunAction(action *openv1alpha1resource.Action, parameters map[string]string) *openv1alpha1resource.Action {
+	runAction := proto.Clone(action).(*openv1alpha1resource.Action)
+	if runAction.Spec == nil {
+		runAction.Spec = &openv1alpha1commons.ActionSpec{}
 	}
+	runAction.Spec.Parameters = parameters
+	return runAction
 }
