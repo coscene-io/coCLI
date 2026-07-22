@@ -9,6 +9,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNewRunCommandValidatesArgs(t *testing.T) {
+	cfgPath := ""
+	cmd := NewRunCommand(&cfgPath, nil, nil)
+	require.NotNil(t, cmd.Args)
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{name: "no arguments", wantErr: true},
+		{name: "only action", args: []string{"action"}, wantErr: true},
+		{name: "action and record", args: []string{"action", "record"}},
+		{name: "too many arguments", args: []string{"action", "record", "extra"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmd.Args(cmd, tt.args)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestNewActionRunAction(t *testing.T) {
 	action := &openv1alpha1resource.Action{
 		Name: "projects/p1/actions/a1",

@@ -41,6 +41,7 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 	cmd := &cobra.Command{
 		Use:                   "run <action-resource-name/id> <record-resource-name/id> [-p <working-project-slug>] [-P <key1=value1>...] [--skip-params] [-f]",
 		Short:                 "Create an action run.",
+		Args:                  cobra.ExactArgs(2),
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
