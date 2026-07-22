@@ -73,17 +73,13 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 				if cmd.Flags().Changed("param") {
 					runParams = params
 				} else {
-					// prompt to ask for parameters
-					runParams = make(map[string]string, len(act.Spec.Parameters))
-					for k, v := range act.Spec.Parameters {
-						runParams[k] = prompts.PromptString(fmt.Sprintf("Enter value for parameter %s", k), v)
-					}
+					runParams = promptActionRunParameters(act.Spec.Parameters, prompts.PromptString)
 				}
 			}
 
 			// Print final parameters
 			io.Println("\nThe final parameters in the action run to be created:")
-			if skipParams {
+			if skipParams || len(runParams) == 0 {
 				io.Println("Using default parameters configured on the server.")
 			} else {
 				for k, v := range runParams {
@@ -118,6 +114,17 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 	cmd.MarkFlagsMutuallyExclusive("skip-params", "param")
 
 	return cmd
+}
+
+func promptActionRunParameters(defaults map[string]string, prompt func(string, string) string) map[string]string {
+	overrides := make(map[string]string)
+	for key, defaultValue := range defaults {
+		value := prompt(fmt.Sprintf("Enter value for parameter %s", key), defaultValue)
+		if value != defaultValue {
+			overrides[key] = value
+		}
+	}
+	return overrides
 }
 
 func newActionRunAction(action *openv1alpha1resource.Action, parameters map[string]string) *openv1alpha1resource.Action {

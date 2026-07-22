@@ -37,6 +37,32 @@ func TestNewRunCommandValidatesArgs(t *testing.T) {
 	}
 }
 
+func TestPromptActionRunParameters(t *testing.T) {
+	defaults := map[string]string{
+		"accessKey": "********",
+		"region":    "cn",
+	}
+
+	t.Run("unchanged values are omitted", func(t *testing.T) {
+		overrides := promptActionRunParameters(defaults, func(_ string, defaultValue string) string {
+			return defaultValue
+		})
+
+		assert.Empty(t, overrides)
+	})
+
+	t.Run("changed values are submitted", func(t *testing.T) {
+		overrides := promptActionRunParameters(defaults, func(_ string, defaultValue string) string {
+			if defaultValue == "********" {
+				return "new-access-key"
+			}
+			return defaultValue
+		})
+
+		assert.Equal(t, map[string]string{"accessKey": "new-access-key"}, overrides)
+	})
+}
+
 func TestNewActionRunAction(t *testing.T) {
 	action := &openv1alpha1resource.Action{
 		Name: "projects/p1/actions/a1",
