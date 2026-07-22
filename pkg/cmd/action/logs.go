@@ -155,17 +155,6 @@ of whether the run is in progress or already completed.
 	return cmd
 }
 
-// resolveActionRun accepts a full action-run resource name or a bare UUID.
-func resolveActionRun(arg string, proj *name.Project) (*name.ActionRun, error) {
-	if actionRun, err := name.NewActionRun(arg); err == nil {
-		return actionRun, nil
-	}
-	if name.IsUUID(arg) {
-		return &name.ActionRun{ProjectID: proj.ProjectID, ID: arg}, nil
-	}
-	return nil, fmt.Errorf("invalid action run name or id: %s", arg)
-}
-
 // selectJobRun lists the action run's job runs and picks the requested index.
 // The index is 1-based (1 = first job run). Returns (nil, nil) when there is
 // nothing to stream and the situation has already been reported to the user

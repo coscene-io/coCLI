@@ -43,7 +43,7 @@ func TestActionCommand(t *testing.T) {
 		assert.Equal(t, "action", cmd.Use)
 		assert.NotEmpty(t, cmd.Short)
 
-		expectedSubcommands := []string{"create", "get", "update", "delete", "list", "list-run", "logs", "run"}
+		expectedSubcommands := []string{"create", "get", "update", "delete", "list", "list-run", "logs", "run", "cancel-run"}
 
 		for _, expected := range expectedSubcommands {
 			found := false
