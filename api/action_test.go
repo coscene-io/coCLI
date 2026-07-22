@@ -271,15 +271,17 @@ func TestActionClient_CreateActionRun(t *testing.T) {
 	defer ctrl.Finish()
 
 	t.Run("success", func(t *testing.T) {
+		action := &openv1alpha1resource.Action{Name: "projects/p1/actions/a1"}
 		mockRun := &mockActionRunServiceClient{
 			ctrl: ctrl,
 			createActionRunFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error) {
 				assert.Equal(t, "projects/p1", req.Msg.Parent)
+				assert.Same(t, action, req.Msg.ActionRun.Action)
 				return connect.NewResponse(&openv1alpha1resource.ActionRun{}), nil
 			},
 		}
 		client := NewActionClient(nil, mockRun)
-		err := client.CreateActionRun(ctx, &openv1alpha1resource.Action{Name: "projects/p1/actions/a1"}, &name.Record{ProjectID: "p1", RecordID: "r1"})
+		err := client.CreateActionRun(ctx, action, &name.Record{ProjectID: "p1", RecordID: "r1"})
 		assert.NoError(t, err)
 	})
 
