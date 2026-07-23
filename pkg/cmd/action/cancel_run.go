@@ -46,6 +46,9 @@ func NewCancelRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider f
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+
 			pm := cmd_utils.ProfileManager(cmd, getProvider, *cfgPath)
 			proj, err := pm.ProjectName(cmd.Context(), projectSlug)
 			if err != nil {

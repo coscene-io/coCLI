@@ -57,6 +57,40 @@ func TestCancelRunCommandRegistrationAndFlags(t *testing.T) {
 	assert.Error(t, cancelCmd.Args(cancelCmd, []string{"run", "extra"}))
 }
 
+func TestCancelRunRuntimeErrorDoesNotPrintUsage(t *testing.T) {
+	cfgPath := setupActionCmdTestConfigPath(t)
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &out)
+	cmd := NewCancelRunCommand(&cfgPath, io, nil)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(config.ContextWithProfileManager(context.Background(), &config.ProfileManager{
+		CurrentProfile: "test",
+		Profiles: []*config.Profile{{
+			Name: "test",
+		}},
+	}))
+	cmd.SetArgs([]string{"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "--force"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.NotContains(t, out.String(), "Usage:")
+	assert.NotContains(t, out.String(), "Error:")
+}
+
+func TestCancelRunArgumentErrorPrintsUsage(t *testing.T) {
+	cfgPath := setupActionCmdTestConfigPath(t)
+	var out bytes.Buffer
+	io := iostreams.Test(nil, &out, &out)
+	cmd := NewCancelRunCommand(&cfgPath, io, nil)
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, out.String(), "Usage:")
+}
+
 func TestCancelActionRunResolvesFullName(t *testing.T) {
 	cli := &fakeActionRunTerminator{}
 	io, out := cancelRunTestIO()
