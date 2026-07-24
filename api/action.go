@@ -52,6 +52,9 @@ type ActionInterface interface {
 	// CreateActionRun creates an action run.
 	CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error
 
+	// TerminateActionRun requests termination of an action run.
+	TerminateActionRun(ctx context.Context, actionRun *name.ActionRun) error
+
 	// ListAllActionRuns lists all action runs in the current organization.
 	ListAllActionRuns(ctx context.Context, listOpts *ListActionRunsOptions) ([]*openv1alpha1resource.ActionRun, error)
 
@@ -185,6 +188,18 @@ func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1
 	_, err := c.actionRunServiceClient.CreateActionRun(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed to create action run: %w", err)
+	}
+
+	return nil
+}
+
+func (c *actionClient) TerminateActionRun(ctx context.Context, actionRun *name.ActionRun) error {
+	req := connect.NewRequest(&openv1alpha1service.TerminateActionRunRequest{
+		Name: actionRun.String(),
+	})
+	_, err := c.actionRunServiceClient.TerminateActionRun(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to terminate action run: %w", err)
 	}
 
 	return nil

@@ -1,9 +1,9 @@
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20240508200655-46a4cf4ba109.1 h1:NXwdBG3BiC6xWH4iG3csbT+JHF9u1jl5ThDhumCnKnk=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20240508200655-46a4cf4ba109.1/go.mod h1:tvtbpgaVXZX4g6Pn+AnzFycuRK3MOz5HJfEGeEllXYM=
-buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260709002126-f5ec6f481038.1 h1:GcMHBF5E8rDLiOjEjGYKciBr/69WT5lJ23vc87lPe8I=
-buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260709002126-f5ec6f481038.1/go.mod h1:9k72p7X+thAVEAa+/B1+SwZAEp19tEBRDq2dJvs+zbw=
-buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260709002126-f5ec6f481038.1 h1:VuRd112Wc13WDGrKHVYnOguGnv3ajn0WCltTlk/9YOc=
-buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260709002126-f5ec6f481038.1/go.mod h1:ncUQjVNWzogYkhgQ1XinFjWE1h7HuPtKpimyf90abE0=
+buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260722064545-3ab95d97d4cc.1 h1:YWIBXMCkMVpUo741yX5FyhHR5xstii2eWqMxmkCFelg=
+buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260722064545-3ab95d97d4cc.1/go.mod h1:zjgaxHuXv3y4+qODmZUjh2N9GVfjcBb6xC8JakjuRDw=
+buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260722064545-3ab95d97d4cc.1 h1:dOOlDYQMv4FWTsSbgnIJo5hK7z9uEdWfOHoydHKVb58=
+buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260722064545-3ab95d97d4cc.1/go.mod h1:ncUQjVNWzogYkhgQ1XinFjWE1h7HuPtKpimyf90abE0=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1 h1:t8f+WWZ5WNrZaP5zrpWD8f1tKU7eelJMbIAT9FRX558=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1/go.mod h1:/t9AeRQQp2iNkiGHDLfHLW3SzNpYpNPGRZ+Ih8+SOUs=
 connectrpc.com/connect v1.20.0 h1:6TNDAB+WeNd2uolWNlYczB5E0KNNaVMNUEx8JEUsPmQ=

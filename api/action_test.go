@@ -83,8 +83,9 @@ type mockActionRunServiceClient struct {
 	openv1alpha1connect.ActionRunServiceClient
 	ctrl *gomock.Controller
 
-	createActionRunFunc func(context.Context, *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error)
-	listActionRunsFunc  func(context.Context, *connect.Request[openv1alpha1service.ListActionRunsRequest]) (*connect.Response[openv1alpha1service.ListActionRunsResponse], error)
+	createActionRunFunc    func(context.Context, *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error)
+	listActionRunsFunc     func(context.Context, *connect.Request[openv1alpha1service.ListActionRunsRequest]) (*connect.Response[openv1alpha1service.ListActionRunsResponse], error)
+	terminateActionRunFunc func(context.Context, *connect.Request[openv1alpha1service.TerminateActionRunRequest]) (*connect.Response[emptypb.Empty], error)
 }
 
 func (m *mockActionRunServiceClient) CreateActionRun(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error) {
@@ -97,6 +98,13 @@ func (m *mockActionRunServiceClient) CreateActionRun(ctx context.Context, req *c
 func (m *mockActionRunServiceClient) ListActionRuns(ctx context.Context, req *connect.Request[openv1alpha1service.ListActionRunsRequest]) (*connect.Response[openv1alpha1service.ListActionRunsResponse], error) {
 	if m.listActionRunsFunc != nil {
 		return m.listActionRunsFunc(ctx, req)
+	}
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
+func (m *mockActionRunServiceClient) TerminateActionRun(ctx context.Context, req *connect.Request[openv1alpha1service.TerminateActionRunRequest]) (*connect.Response[emptypb.Empty], error) {
+	if m.terminateActionRunFunc != nil {
+		return m.terminateActionRunFunc(ctx, req)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, nil)
 }
@@ -295,6 +303,39 @@ func TestActionClient_CreateActionRun(t *testing.T) {
 		client := NewActionClient(nil, mockRun)
 		err := client.CreateActionRun(ctx, &openv1alpha1resource.Action{}, &name.Record{ProjectID: "p1", RecordID: "r1"})
 		assert.Error(t, err)
+	})
+}
+
+func TestActionClient_TerminateActionRun(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	actionRun := &name.ActionRun{ProjectID: "p1", ID: "r1"}
+
+	t.Run("success sends the full action run name", func(t *testing.T) {
+		mockRun := &mockActionRunServiceClient{
+			ctrl: ctrl,
+			terminateActionRunFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.TerminateActionRunRequest]) (*connect.Response[emptypb.Empty], error) {
+				assert.Equal(t, "projects/p1/actionRuns/r1", req.Msg.Name)
+				return connect.NewResponse(&emptypb.Empty{}), nil
+			},
+		}
+		client := NewActionClient(nil, mockRun)
+		err := client.TerminateActionRun(ctx, actionRun)
+		require.NoError(t, err)
+	})
+
+	t.Run("error is wrapped preserving connect code", func(t *testing.T) {
+		mockRun := &mockActionRunServiceClient{
+			ctrl: ctrl,
+			terminateActionRunFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.TerminateActionRunRequest]) (*connect.Response[emptypb.Empty], error) {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("already finished"))
+			},
+		}
+		client := NewActionClient(nil, mockRun)
+		err := client.TerminateActionRun(ctx, actionRun)
+		require.Error(t, err)
+		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodeInvalidArgument))
 	})
 }
 
