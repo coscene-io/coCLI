@@ -18,6 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	openv1alpha1enums "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/enums"
+	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"github.com/coscene-io/cocli/api"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/name"
@@ -28,7 +31,8 @@ import (
 
 const cancelRunConfirmation = "Request cancellation for this action run? This cannot be undone."
 
-type actionRunTerminator interface {
+type actionRunCanceler interface {
+	ListAllActionRuns(context.Context, *api.ListActionRunsOptions) ([]*openv1alpha1resource.ActionRun, error)
 	TerminateActionRun(context.Context, *name.ActionRun) error
 }
 
@@ -65,7 +69,7 @@ func NewCancelRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider f
 	return cmd
 }
 
-func cancelActionRun(ctx context.Context, io *iostreams.IOStreams, cli actionRunTerminator, actionRunRef string, proj *name.Project, force bool, confirm confirmCancelRun) error {
+func cancelActionRun(ctx context.Context, io *iostreams.IOStreams, cli actionRunCanceler, actionRunRef string, proj *name.Project, force bool, confirm confirmCancelRun) error {
 	actionRun, err := resolveActionRun(actionRunRef, proj)
 	if err != nil {
 		return err
@@ -76,10 +80,46 @@ func cancelActionRun(ctx context.Context, io *iostreams.IOStreams, cli actionRun
 		return nil
 	}
 
+	runs, err := cli.ListAllActionRuns(ctx, &api.ListActionRunsOptions{
+		Parent: actionRun.Project().String(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to check action run state: %w", err)
+	}
+
+	run := findActionRun(runs, actionRun.String())
+	if run == nil {
+		return fmt.Errorf("action run not found: %s", actionRun)
+	}
+	if isFinishedActionRun(run.GetState()) {
+		io.Printf("Action run has already finished with state %s. No cancellation request was sent.\n", run.GetState())
+		return nil
+	}
+
 	if err = cli.TerminateActionRun(ctx, actionRun); err != nil {
 		return fmt.Errorf("failed to request action run cancellation: %w", err)
 	}
 
 	io.Println("Action run cancellation requested successfully.")
 	return nil
+}
+
+func findActionRun(runs []*openv1alpha1resource.ActionRun, target string) *openv1alpha1resource.ActionRun {
+	for _, run := range runs {
+		if run.GetName() == target {
+			return run
+		}
+	}
+	return nil
+}
+
+func isFinishedActionRun(state openv1alpha1enums.ActionRunStateEnum_ActionRunState) bool {
+	switch state {
+	case openv1alpha1enums.ActionRunStateEnum_SUCCEEDED,
+		openv1alpha1enums.ActionRunStateEnum_FAILED,
+		openv1alpha1enums.ActionRunStateEnum_ABORTED:
+		return true
+	default:
+		return false
+	}
 }
