@@ -30,7 +30,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type mockActionServiceClient struct {
@@ -285,6 +287,8 @@ func TestActionClient_CreateActionRun(t *testing.T) {
 			createActionRunFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error) {
 				assert.Equal(t, "projects/p1", req.Msg.Parent)
 				assert.Same(t, action, req.Msg.ActionRun.Action)
+				assert.Equal(t, []string{"projects/p1/records/r1"}, req.Msg.ActionRun.Match.Records)
+				assert.Nil(t, req.Msg.ActionRun.Match.RecordQuery)
 				return connect.NewResponse(&openv1alpha1resource.ActionRun{}), nil
 			},
 		}
@@ -336,6 +340,48 @@ func TestActionClient_TerminateActionRun(t *testing.T) {
 		err := client.TerminateActionRun(ctx, actionRun)
 		require.Error(t, err)
 		assert.True(t, utils.IsConnectErrorWithCode(err, connect.CodeInvalidArgument))
+	})
+}
+
+func TestActionClient_CreateActionRunWithRecordQuery(t *testing.T) {
+	ctx := testutil.TestContext(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	t.Run("success", func(t *testing.T) {
+		action := &openv1alpha1resource.Action{Name: "projects/p1/actions/a1"}
+		recordQuery, err := structpb.NewStruct(map[string]any{
+			"==": []any{map[string]any{"var": "isArchived"}, "false"},
+		})
+		require.NoError(t, err)
+		mockRun := &mockActionRunServiceClient{
+			ctrl: ctrl,
+			createActionRunFunc: func(ctx context.Context, req *connect.Request[openv1alpha1service.CreateActionRunRequest]) (*connect.Response[openv1alpha1resource.ActionRun], error) {
+				assert.Equal(t, "projects/p1", req.Msg.Parent)
+				assert.Same(t, action, req.Msg.ActionRun.Action)
+				assert.Empty(t, req.Msg.ActionRun.Match.Records)
+				assert.True(t, proto.Equal(recordQuery, req.Msg.ActionRun.Match.RecordQuery))
+				return connect.NewResponse(&openv1alpha1resource.ActionRun{}), nil
+			},
+		}
+		client := NewActionClient(nil, mockRun)
+
+		err = client.CreateActionRunWithRecordQuery(ctx, action, &name.Project{ProjectID: "p1"}, recordQuery)
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("rejects empty query", func(t *testing.T) {
+		client := NewActionClient(nil, &mockActionRunServiceClient{ctrl: ctrl})
+
+		err := client.CreateActionRunWithRecordQuery(
+			ctx,
+			&openv1alpha1resource.Action{},
+			&name.Project{ProjectID: "p1"},
+			&structpb.Struct{},
+		)
+
+		assert.EqualError(t, err, "record query must not be empty")
 	})
 }
 
