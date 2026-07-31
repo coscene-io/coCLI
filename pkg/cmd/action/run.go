@@ -16,32 +16,35 @@ package action
 
 import (
 	"fmt"
+	"strings"
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
-	"connectrpc.com/connect"
 	"github.com/coscene-io/cocli/internal/config"
 	"github.com/coscene-io/cocli/internal/iostreams"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/prompts"
-	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
-		params      = map[string]string{}
-		skipParams  = false
-		force       = false
-		projectSlug = ""
+		params       = map[string]string{}
+		skipParams   = false
+		force        = false
+		projectSlug  = ""
+		recordSearch = ""
 	)
 
 	cmd := &cobra.Command{
-		Use:                   "run <action-resource-name/id> <record-resource-name/id> [-p <working-project-slug>] [-P <key1=value1>...] [--skip-params] [-f]",
+		Use:                   "run <action-resource-name/id> [record-resource-name/id] [--search <json-logic>] [-p <working-project-slug>] [-P <key1=value1>...] [--skip-params] [-f]",
 		Short:                 "Create an action run.",
-		Args:                  cobra.ExactArgs(2),
+		Args:                  validateRunArgs,
 		DisableFlagsInUseLine: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Get current profile.
@@ -56,12 +59,15 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			if err != nil {
 				log.Fatalf("failed to convert action id to name: %v", err)
 			}
-			recordName, err := pm.RecordCli().RecordId2Name(cmd.Context(), args[1], proj)
-			if utils.IsConnectErrorWithCode(err, connect.CodeNotFound) {
-				io.Printf("failed to find record: %s in project: %s\n", args[1], proj)
-				return
-			} else if err != nil {
-				log.Fatalf("failed to convert record id to name: %v", err)
+			var recordName *name.Record
+			var recordQuery *structpb.Struct
+			if len(args) == 2 {
+				recordName = recordNameFromArg(args[1], proj)
+			} else {
+				recordQuery, err = parseRecordSearch(recordSearch)
+				if err != nil {
+					log.Fatalf("failed to parse record search: %v", err)
+				}
 			}
 			act, err := pm.ActionCli().GetByName(cmd.Context(), actionName)
 			if err != nil {
@@ -96,7 +102,12 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 			}
 
 			// Create action run
-			err = pm.ActionCli().CreateActionRun(cmd.Context(), newActionRunAction(act, runParams), recordName)
+			runAction := newActionRunAction(act, runParams)
+			if recordName != nil {
+				err = pm.ActionCli().CreateActionRun(cmd.Context(), runAction, recordName)
+			} else {
+				err = pm.ActionCli().CreateActionRunWithRecordQuery(cmd.Context(), runAction, proj, recordQuery)
+			}
 			if err != nil {
 				log.Fatalf("failed to create action run: %v", err)
 			}
@@ -109,11 +120,65 @@ func NewRunCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(st
 	cmd.Flags().BoolVar(&skipParams, "skip-params", false, "skip parameter input and use default values")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force create action run without confirmation")
 	cmd.Flags().StringVarP(&projectSlug, "project", "p", "", "the slug of the working project")
+	cmd.Flags().StringVarP(&recordSearch, "search", "s", "", "JSON Logic search query selecting records for the action run")
 
-	_ = cmd.MarkFlagRequired("record")
 	cmd.MarkFlagsMutuallyExclusive("skip-params", "param")
 
 	return cmd
+}
+
+func validateRunArgs(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("requires an action argument")
+	}
+	if len(args) > 2 {
+		return fmt.Errorf("accepts at most 2 arguments, received %d", len(args))
+	}
+
+	recordSearch, err := cmd.Flags().GetString("search")
+	if err != nil {
+		return err
+	}
+	searchSet := cmd.Flags().Changed("search")
+	if searchSet && strings.TrimSpace(recordSearch) == "" {
+		return fmt.Errorf("search query must not be empty")
+	}
+	if len(args) == 1 && !searchSet {
+		return fmt.Errorf("requires a record argument or --search")
+	}
+	if len(args) == 2 && searchSet {
+		return fmt.Errorf("record argument and --search are mutually exclusive")
+	}
+	if searchSet {
+		if _, err := parseRecordSearch(recordSearch); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func parseRecordSearch(search string) (*structpb.Struct, error) {
+	recordQuery := &structpb.Struct{}
+	if err := protojson.Unmarshal([]byte(search), recordQuery); err != nil {
+		return nil, fmt.Errorf("invalid search JSON: %w", err)
+	}
+	if len(recordQuery.GetFields()) == 0 {
+		return nil, fmt.Errorf("search query must not be empty")
+	}
+	return recordQuery, nil
+}
+
+func recordNameFromArg(recordIDOrName string, project *name.Project) *name.Record {
+	recordName, err := name.NewRecord(recordIDOrName)
+	if err == nil {
+		return recordName
+	}
+
+	return &name.Record{
+		ProjectID: project.ProjectID,
+		RecordID:  recordIDOrName,
+	}
 }
 
 func promptActionRunParameters(defaults map[string]string, prompt func(string, string) string) map[string]string {

@@ -99,6 +99,8 @@ func TestActionCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotNil(t, runCmd.Flag("project"), "Flag --project not found")
+		assert.NotNil(t, runCmd.Flag("search"), "Flag --search not found")
+		assert.Equal(t, "s", runCmd.Flag("search").Shorthand)
 	})
 
 	t.Run("List-run command flags", func(t *testing.T) {

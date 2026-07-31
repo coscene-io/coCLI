@@ -28,6 +28,7 @@ import (
 	"github.com/coscene-io/cocli/internal/name"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ActionInterface interface {
@@ -51,6 +52,10 @@ type ActionInterface interface {
 
 	// CreateActionRun creates an action run.
 	CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error
+
+	// CreateActionRunWithRecordQuery creates an action run for records selected
+	// by a structured query.
+	CreateActionRunWithRecordQuery(ctx context.Context, action *openv1alpha1resource.Action, project *name.Project, recordQuery *structpb.Struct) error
 
 	// TerminateActionRun requests termination of an action run.
 	TerminateActionRun(ctx context.Context, actionRun *name.ActionRun) error
@@ -176,13 +181,45 @@ func (c *actionClient) DeleteAction(ctx context.Context, actionName *name.Action
 }
 
 func (c *actionClient) CreateActionRun(ctx context.Context, action *openv1alpha1resource.Action, record *name.Record) error {
+	return c.createActionRun(
+		ctx,
+		action,
+		record.Project().String(),
+		&openv1alpha1commons.TriggerMatch{Records: []string{record.String()}},
+	)
+}
+
+func (c *actionClient) CreateActionRunWithRecordQuery(
+	ctx context.Context,
+	action *openv1alpha1resource.Action,
+	project *name.Project,
+	recordQuery *structpb.Struct,
+) error {
+	if recordQuery == nil || len(recordQuery.GetFields()) == 0 {
+		return fmt.Errorf("record query must not be empty")
+	}
+
+	return c.createActionRun(
+		ctx,
+		action,
+		project.String(),
+		&openv1alpha1commons.TriggerMatch{
+			RecordQuery: recordQuery,
+		},
+	)
+}
+
+func (c *actionClient) createActionRun(
+	ctx context.Context,
+	action *openv1alpha1resource.Action,
+	parent string,
+	match *openv1alpha1commons.TriggerMatch,
+) error {
 	req := connect.NewRequest(&openv1alpha1service.CreateActionRunRequest{
-		Parent: record.Project().String(),
+		Parent: parent,
 		ActionRun: &openv1alpha1resource.ActionRun{
 			Action: action,
-			Match: &openv1alpha1commons.TriggerMatch{
-				Records: []string{record.String()},
-			},
+			Match:  match,
 		},
 	})
 	_, err := c.actionRunServiceClient.CreateActionRun(ctx, req)

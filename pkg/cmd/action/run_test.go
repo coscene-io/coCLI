@@ -5,6 +5,7 @@ import (
 
 	openv1alpha1commons "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/commons"
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,26 +16,75 @@ func TestNewRunCommandValidatesArgs(t *testing.T) {
 	require.NotNil(t, cmd.Args)
 
 	tests := []struct {
-		name    string
-		args    []string
-		wantErr bool
+		name         string
+		args         []string
+		recordSearch string
+		setSearch    bool
+		wantErr      string
 	}{
-		{name: "no arguments", wantErr: true},
-		{name: "only action", args: []string{"action"}, wantErr: true},
+		{name: "no arguments", wantErr: "requires an action argument"},
+		{name: "only action", args: []string{"action"}, wantErr: "requires a record argument or --search"},
 		{name: "action and record", args: []string{"action", "record"}},
-		{name: "too many arguments", args: []string{"action", "record", "extra"}, wantErr: true},
+		{name: "action and search", args: []string{"action"}, recordSearch: `{"==":[{"var":"isArchived"},"false"]}`, setSearch: true},
+		{name: "record and search", args: []string{"action", "record"}, recordSearch: `{"==":[{"var":"isArchived"},"false"]}`, setSearch: true, wantErr: "mutually exclusive"},
+		{name: "blank search", args: []string{"action"}, recordSearch: "  ", setSearch: true, wantErr: "search query must not be empty"},
+		{name: "empty search with record", args: []string{"action", "record"}, setSearch: true, wantErr: "search query must not be empty"},
+		{name: "invalid search JSON", args: []string{"action"}, recordSearch: `{`, setSearch: true, wantErr: "invalid search JSON"},
+		{name: "empty search object", args: []string{"action"}, recordSearch: `{}`, setSearch: true, wantErr: "search query must not be empty"},
+		{name: "null search", args: []string{"action"}, recordSearch: `null`, setSearch: true, wantErr: "invalid search JSON"},
+		{name: "search array", args: []string{"action"}, recordSearch: `[]`, setSearch: true, wantErr: "invalid search JSON"},
+		{name: "too many arguments", args: []string{"action", "record", "extra"}, wantErr: "accepts at most 2 arguments"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewRunCommand(&cfgPath, nil, nil)
+			if tt.setSearch {
+				require.NoError(t, cmd.Flags().Set("search", tt.recordSearch))
+			}
 			err := cmd.Args(cmd, tt.args)
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestParseRecordSearch(t *testing.T) {
+	search := `{"and":[{"==":[{"var":"isArchived"},"false"]},{"and":[{"==":[{"var":"customFields.c68621ba-4f29-4da0-8108-d76f612d2dae"},"aede4062-7f1f-4ecf-b3b7-ab604579ff4a"]}]}]}`
+
+	recordQuery, err := parseRecordSearch(search)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{
+		"and": []any{
+			map[string]any{"==": []any{map[string]any{"var": "isArchived"}, "false"}},
+			map[string]any{"and": []any{
+				map[string]any{"==": []any{
+					map[string]any{"var": "customFields.c68621ba-4f29-4da0-8108-d76f612d2dae"},
+					"aede4062-7f1f-4ecf-b3b7-ab604579ff4a",
+				}},
+			}},
+		},
+	}, recordQuery.AsMap())
+}
+
+func TestRecordNameFromArg(t *testing.T) {
+	project := &name.Project{ProjectID: "project-1"}
+
+	t.Run("bare record ID uses the working project", func(t *testing.T) {
+		recordName := recordNameFromArg("record-1", project)
+
+		assert.Equal(t, "projects/project-1/records/record-1", recordName.String())
+	})
+
+	t.Run("full record name preserves its project", func(t *testing.T) {
+		recordName := recordNameFromArg("projects/project-2/records/record-2", project)
+
+		assert.Equal(t, "projects/project-2/records/record-2", recordName.String())
+	})
 }
 
 func TestPromptActionRunParameters(t *testing.T) {
