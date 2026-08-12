@@ -15,6 +15,9 @@
 package cmd
 
 import (
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 
 	"github.com/coscene-io/cocli"
@@ -26,6 +29,27 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+type updateRequester struct {
+	client *http.Client
+}
+
+func newUpdateRequester() *updateRequester {
+	return &updateRequester{client: cmd_utils.NewHTTPClient()}
+}
+
+func (r *updateRequester) Fetch(url string) (io.ReadCloser, error) {
+	resp, err := r.client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("bad http status from %s: %s", url, resp.Status)
+	}
+
+	return resp.Body, nil
+}
 
 func NewUpdateCommand(io *iostreams.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,6 +68,7 @@ func NewUpdateCommand(io *iostreams.IOStreams) *cobra.Command {
 				BinURL:         constants.DownloadBaseUrl,
 				CmdName:        constants.CLIName,
 				ForceCheck:     true,
+				Requester:      newUpdateRequester(),
 				OnSuccessfulUpdate: func() {
 					io.Println("Successfully updated to the latest version")
 				},

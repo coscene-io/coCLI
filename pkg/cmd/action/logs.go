@@ -45,6 +45,8 @@ const (
 	reconnectMaxDelay    = 30 * time.Second
 )
 
+var archivedLogHTTPClient = cmd_utils.NewHTTPClient()
+
 func NewLogsCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func(string) config.Provider) *cobra.Command {
 	var (
 		projectSlug = ""
@@ -351,7 +353,7 @@ func printArchivedLog(ctx context.Context, downloadURL string, io *iostreams.IOS
 	if err != nil {
 		return fmt.Errorf("build archived log request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := archivedLogHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download archived log: %w", err)
 	}
