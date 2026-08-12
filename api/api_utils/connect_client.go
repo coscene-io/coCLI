@@ -19,12 +19,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/internal/tlsconfig"
 	"golang.org/x/net/http2"
 )
 
 func NewConnectClient() connect.HTTPClient {
 	return &http.Client{
 		Transport: &http2.Transport{
+			TLSClientConfig:  tlsconfig.NewOpenAPI(),
 			PingTimeout:      3 * time.Second,
 			ReadIdleTimeout:  3 * time.Second,
 			WriteByteTimeout: 3 * time.Second,

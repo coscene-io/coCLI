@@ -16,7 +16,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"net/http"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -37,6 +40,22 @@ func TestNewSentryClientOptions(t *testing.T) {
 	}
 	if !opts.AttachStacktrace {
 		t.Fatalf("expected AttachStacktrace to be true")
+	}
+	transport, ok := opts.HTTPTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Sentry transport type = %T, want *http.Transport", opts.HTTPTransport)
+	}
+	wantCipherSuites := []uint16{
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	}
+	if transport.TLSClientConfig.MinVersion != tls.VersionTLS12 || transport.TLSClientConfig.MaxVersion != tls.VersionTLS12 {
+		t.Fatalf("Sentry transport must allow TLS 1.2 only")
+	}
+	if !reflect.DeepEqual(transport.TLSClientConfig.CipherSuites, wantCipherSuites) {
+		t.Fatalf("Sentry cipher suites = %#v, want %#v", transport.TLSClientConfig.CipherSuites, wantCipherSuites)
 	}
 }
 

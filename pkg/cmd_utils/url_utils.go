@@ -35,6 +35,8 @@ const (
 	retryWaitMax = 5 * time.Second
 )
 
+var downloadHTTPClient = NewHTTPClient()
+
 // Progress is a simple struct to keep track of the progress of a file upload/download
 type Progress struct {
 	PrintPrefix string
@@ -128,7 +130,7 @@ func downloadFileThroughUrl(file string, downloadUrl string, maxRetries int, ini
 func downloadWithFileWriter(fileWriter *os.File, downloadUrl string, retry int) error {
 	defer fmt.Print("\r\033[K")
 
-	resp, err := http.Get(downloadUrl)
+	resp, err := downloadHTTPClient.Get(downloadUrl)
 	if err != nil {
 		return errors.Wrapf(err, "unable to get file from url %v", downloadUrl)
 	}

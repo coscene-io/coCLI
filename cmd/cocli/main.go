@@ -26,6 +26,7 @@ import (
 	"github.com/coscene-io/cocli/internal/iostreams"
 	"github.com/coscene-io/cocli/internal/utils"
 	"github.com/coscene-io/cocli/pkg/cmd"
+	"github.com/coscene-io/cocli/pkg/cmd_utils"
 	"github.com/getsentry/sentry-go"
 	log "github.com/sirupsen/logrus"
 )
@@ -91,8 +92,9 @@ func watchForceQuit(ctx context.Context, quit <-chan os.Signal, onForceQuit func
 
 func newSentryClientOptions() sentry.ClientOptions {
 	return sentry.ClientOptions{
-		Dsn:     "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
-		Release: cocli.GetVersion(),
+		Dsn:           "https://b3bcd9e4d101f927b5f1f7ac67d9b115@sentry.coscene.site/23",
+		Release:       cocli.GetVersion(),
+		HTTPTransport: cmd_utils.NewTransport(30 * time.Second),
 		// Set TracesSampleRate to 1.0 to capture 100%
 		// of transactions for tracing.
 		// We recommend adjusting this value in production,

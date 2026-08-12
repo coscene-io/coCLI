@@ -1,10 +1,11 @@
 package cmd_utils
 
 import (
-	"crypto/tls"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/coscene-io/cocli/internal/tlsconfig"
 )
 
 func NewTransport(timeout time.Duration) *http.Transport {
@@ -27,12 +28,12 @@ func NewTransport(timeout time.Duration) *http.Transport {
 		// Refer:
 		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
 		DisableCompression: true,
-		TLSClientConfig: &tls.Config{
-			// Can't use SSLv3 because of POODLE and BEAST
-			// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
-			// Can't use TLSv1.1 because of RC4 cipher usage
-			MinVersion: tls.VersionTLS12,
-		},
+		TLSClientConfig:    tlsconfig.NewGeneral(),
 	}
 
+}
+
+// NewHTTPClient returns an HTTP client using the general outbound TLS policy.
+func NewHTTPClient() *http.Client {
+	return &http.Client{Transport: NewTransport(0)}
 }
