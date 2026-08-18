@@ -19,13 +19,15 @@ import (
 
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/coscene-io/cocli/internal/printer/table"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	eventNameTrimSize = 20
-	eventTimeTrimSize = len(time.RFC3339)
+	eventIDTrimSize          = 36
+	eventDisplayNameTrimSize = 20
+	eventTimeTrimSize        = len(time.RFC3339)
 )
 
 type Event struct {
@@ -48,11 +50,22 @@ func (p *Event) ToProtoMessage() proto.Message {
 func (p *Event) ToTable(opts *table.PrintOpts) table.Table {
 	fullColumnDefs := []table.ColumnDefinitionFull[*openv1alpha1resource.Event]{
 		{
-			FieldName: "NAME",
+			FieldName: "ID",
+			FieldValueFunc: func(e *openv1alpha1resource.Event, opts *table.PrintOpts) string {
+				eventName, err := name.NewEvent(e.Name)
+				if err != nil {
+					return e.Name
+				}
+				return eventName.ID
+			},
+			TrimSize: eventIDTrimSize,
+		},
+		{
+			FieldName: "DISPLAY NAME",
 			FieldValueFunc: func(e *openv1alpha1resource.Event, opts *table.PrintOpts) string {
 				return e.DisplayName
 			},
-			TrimSize: eventNameTrimSize,
+			TrimSize: eventDisplayNameTrimSize,
 		},
 		{
 			FieldName: "TRIGGER TIME",

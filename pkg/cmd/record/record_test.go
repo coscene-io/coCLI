@@ -189,7 +189,7 @@ func TestRecordCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check moment has subcommands
-		expectedMomentSubcommands := []string{"create", "list"}
+		expectedMomentSubcommands := []string{"create", "delete", "download", "list"}
 		for _, expected := range expectedMomentSubcommands {
 			found := false
 			for _, sub := range momentCmd.Commands() {
