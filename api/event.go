@@ -21,12 +21,19 @@ import (
 	openv1alpha1resource "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/resources"
 	openv1alpha1service "buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go/coscene/openapi/dataplatform/v1alpha1/services"
 	"connectrpc.com/connect"
+	"github.com/coscene-io/cocli/internal/name"
 	"github.com/pkg/errors"
 )
 
 type EventInterface interface {
 	// ObtainEvent creates an event if not found, fetches otherwise.
 	ObtainEvent(ctx context.Context, parent string, event *openv1alpha1resource.Event) (*openv1alpha1service.ObtainEventResponse, error)
+
+	// GetEvent gets an event by name.
+	GetEvent(ctx context.Context, eventName *name.Event) (*openv1alpha1resource.Event, error)
+
+	// DeleteEvent deletes an event by name.
+	DeleteEvent(ctx context.Context, eventName *name.Event) error
 }
 
 type eventClient struct {
@@ -50,4 +57,26 @@ func (c *eventClient) ObtainEvent(ctx context.Context, parent string, event *ope
 	}
 
 	return createEventRes.Msg, nil
+}
+
+func (c *eventClient) GetEvent(ctx context.Context, eventName *name.Event) (*openv1alpha1resource.Event, error) {
+	res, err := c.eventClient.GetEvent(ctx, connect.NewRequest(&openv1alpha1service.GetEventRequest{
+		Name: eventName.String(),
+	}))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get event %s", eventName)
+	}
+
+	return res.Msg, nil
+}
+
+func (c *eventClient) DeleteEvent(ctx context.Context, eventName *name.Event) error {
+	_, err := c.eventClient.DeleteEvent(ctx, connect.NewRequest(&openv1alpha1service.DeleteEventRequest{
+		Name: eventName.String(),
+	}))
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete event %s", eventName)
+	}
+
+	return nil
 }

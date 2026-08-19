@@ -45,6 +45,7 @@ func NewMomentCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	}
 
 	cmd.AddCommand(NewMomentCreateCommand(cfgPath, io, getProvider))
+	cmd.AddCommand(NewMomentDeleteCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewMomentListCommand(cfgPath, io, getProvider))
 	cmd.AddCommand(NewMomentDownloadCommand(cfgPath, io, getProvider))
 
