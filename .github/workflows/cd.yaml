@@ -17,7 +17,7 @@ jobs:
         channel: [cn, io]
         os: [linux, darwin]
         arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+    runs-on: cos-m
     permissions:
       contents: write
     env:
@@ -60,12 +60,11 @@ jobs:
           files: ${{ env.RELEASE_ARTIFACT_PATH }}
   
       # Upload release payloads
-      - name: Install gzip
-        run: sudo apt-get update && sudo apt-get install -y gzip
+      # (gzip is preinstalled on the cos-m runner — no apt-get needed)
       - name: Build release metadata files
         if: env.IS_RELEASE == 'true'
         run: |
-          SHA256SUM=$(sha256sum cocli | awk '{print $1}' | xxd -r -p | base64) 
+          SHA256SUM=$(sha256sum cocli | awk '{printf "%s", $1}' | basenc --base16 -d | base64)
           echo "{\"Version\": \"${{ github.ref_name }}\", \"Sha256\": \"$SHA256SUM\"}" > "${METADATA_NAME}"
       - name: gzip cocli
         run: gzip cocli

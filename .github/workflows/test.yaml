@@ -8,7 +8,8 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    # linux leg on the cos-m self-hosted pool; macos stays GitHub-hosted
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'cos-m' || matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
