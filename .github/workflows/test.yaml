@@ -8,7 +8,8 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    # linux leg on the cos-m self-hosted pool; macos stays GitHub-hosted
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'cos-m' || matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -36,5 +37,8 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.txt
+          # cos-m (NixOS-based) has no gpg; skips codecov CLI signature check.
+          # Revert once gnupg lands in the runner image (osfiles ci-guest.nix).
+          skip_validation: true
           flags: unittests
           name: codecov-${{ matrix.os }}-${{ matrix.go }}
