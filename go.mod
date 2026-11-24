@@ -85,3 +85,5 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251103181224-f26f9409b101 // indirect
 )
+
+replace buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go => github.com/coscene-io/coscene-openapi/go v0.0.0-20261124164213-5c05ad8d0528

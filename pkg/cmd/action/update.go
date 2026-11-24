@@ -256,6 +256,8 @@ func isEmptyActionSpec(spec *openv1alpha1commons.ActionSpec) bool {
 		len(spec.GetLabels()) == 0 &&
 		len(spec.GetJobs()) == 0 &&
 		len(spec.GetParameters()) == 0 &&
+		spec.Ray == nil &&
+		spec.Concurrency == nil &&
 		spec.GetQuota() == nil &&
 		spec.GetMountOptions() == nil &&
 		spec.GetStorageOptions() == nil &&

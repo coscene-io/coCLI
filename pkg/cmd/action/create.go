@@ -64,6 +64,7 @@ output_options:
 `
 
 var (
+	actionPythonTargetRe  = regexp.MustCompile(`^([\pL_][\pL\pN_]*\.)+[\pL_][\pL\pN_]*$`)
 	actionCreateJobNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	actionCreateEnvRe     = regexp.MustCompile(`^[-._a-zA-Z][-._a-zA-Z0-9]*$`)
 	actionCreateParamRe   = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
@@ -99,7 +100,10 @@ The -f file is the full, authoritative spec, so the spec-content flags
 be combined with -f; use flags to scaffold a spec from scratch, or a file, not
 both. Operational flags (-p/--project, --dry-run, -o/--output) work either way.
 
-Resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
+For a Ray action, use -f with ray.image, concurrency and jobs[].python.target.
+Each step can specify resources.cpu and resources.memory.
+
+Container action resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
 e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G}) or, in the flags-only
 path, via the --quota small|medium|large|xlarge convenience preset that maps a
 t-shirt size to that enum pair.`,
@@ -388,6 +392,22 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 	if spec.Name == "" {
 		msgs = append(msgs, "name cannot be empty")
 	}
+	if spec.Ray != nil {
+		if strings.TrimSpace(spec.Ray.Image) == "" {
+			msgs = append(msgs, "ray.image is required")
+		}
+		if spec.GetConcurrency() <= 0 {
+			msgs = append(msgs, "concurrency must be positive for Ray")
+		}
+		if spec.Quota != nil {
+			msgs = append(msgs, "use jobs[].resources for Ray actions")
+		}
+		if spec.GetStorageOptions().GetSsdOptions().GetUseSsd() {
+			msgs = append(msgs, "SSD storage is unsupported for Ray actions")
+		}
+	} else if spec.Concurrency != nil {
+		msgs = append(msgs, "concurrency requires ray")
+	}
 	if len(spec.Jobs) == 0 {
 		msgs = append(msgs, "jobs cannot be empty")
 	}
@@ -400,6 +420,15 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 		}
 		if !actionCreateJobNameRe.MatchString(job.Name) {
 			msgs = append(msgs, fmt.Sprintf("job name %q must match %s", job.Name, actionCreateJobNameRe.String()))
+		}
+		if spec.Ray != nil {
+			if !actionPythonTargetRe.MatchString(job.GetPython().GetTarget()) {
+				msgs = append(msgs, fmt.Sprintf("job %q requires a qualified python.target for Ray", job.Name))
+			}
+			continue
+		}
+		if job.GetPython() != nil || job.Bindings != nil || job.Resources != nil {
+			msgs = append(msgs, fmt.Sprintf("job %q requires ray for python, bindings or resources", job.Name))
 		}
 		if job.JobKind == nil {
 			msgs = append(msgs, fmt.Sprintf("job %q must define container or http", job.Name))

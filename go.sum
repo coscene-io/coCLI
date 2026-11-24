@@ -2,8 +2,6 @@ buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-202405082006
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20240508200655-46a4cf4ba109.1/go.mod h1:tvtbpgaVXZX4g6Pn+AnzFycuRK3MOz5HJfEGeEllXYM=
 buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260729110633-6566fd75c241.1 h1:a/I+FzWeHel1a7tYYY5GzIArY8uYAVq773u3j8YBZlM=
 buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260729110633-6566fd75c241.1/go.mod h1:S4d9iSYLwvSjwGO4MJEM+cW9Jz9wKDj8+ILsAB+okj8=
-buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260729110633-6566fd75c241.1 h1:F5L5mt3YMSbVER5JNnSfKGbsKKBUJtiQFRNTcBN9q+A=
-buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260729110633-6566fd75c241.1/go.mod h1:ncUQjVNWzogYkhgQ1XinFjWE1h7HuPtKpimyf90abE0=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1 h1:t8f+WWZ5WNrZaP5zrpWD8f1tKU7eelJMbIAT9FRX558=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1/go.mod h1:/t9AeRQQp2iNkiGHDLfHLW3SzNpYpNPGRZ+Ih8+SOUs=
 connectrpc.com/connect v1.20.0 h1:6TNDAB+WeNd2uolWNlYczB5E0KNNaVMNUEx8JEUsPmQ=
@@ -28,6 +26,8 @@ github.com/charmbracelet/x/windows v0.1.0 h1:gTaxdvzDM5oMa/I2ZNF7wN78X/atWemG9Wp
 github.com/charmbracelet/x/windows v0.1.0/go.mod h1:GLEO/l+lizvFDBPLIOk+49gdX49L9YWMB5t+DZd0jkQ=
 github.com/clipperhouse/uax29/v2 v2.2.0 h1:ChwIKnQN3kcZteTXMgb1wztSgaU+ZemkgWdohwgs8tY=
 github.com/clipperhouse/uax29/v2 v2.2.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
+github.com/coscene-io/coscene-openapi/go v0.0.0-20261124164213-5c05ad8d0528 h1:MaQkQrt/EyTAIzgING9/oYPHrjg5TMl1QvUA4Nu3MWc=
+github.com/coscene-io/coscene-openapi/go v0.0.0-20261124164213-5c05ad8d0528/go.mod h1:mGCSqnZhu8ZLdfKdelSS4XC7Ith0SkrSvVNk3S4lD8w=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
