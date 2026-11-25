@@ -743,10 +743,10 @@ func TestRayActionFile(t *testing.T) {
 	action := &openv1alpha1resource.Action{Spec: spec}
 	require.NoError(t, validateActionForCreate(action))
 	run := newActionRunAction(action, nil)
-	require.Equal(t, int32(20), run.Spec.GetConcurrency())
+	require.Equal(t, int32(20), run.Spec.GetRay().GetConcurrency())
 	require.Equal(t, "checksums.files.sha256", run.Spec.Jobs[0].GetPython().GetTarget())
-	require.Equal(t, "checksum", run.Spec.Jobs[1].GetBindings().GetFields()["hashes"].GetStringValue())
-	spec.Concurrency = nil
+	require.Equal(t, "checksum", run.Spec.Jobs[1].GetPython().GetBindings()["hashes"])
+	spec.Ray.Concurrency = 0
 	require.ErrorContains(t, validateActionForCreate(action), "concurrency")
 	spec.Ray = nil
 	require.ErrorContains(t, validateActionForCreate(action), "requires ray")

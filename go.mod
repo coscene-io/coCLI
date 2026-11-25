@@ -3,8 +3,8 @@ module github.com/coscene-io/cocli
 go 1.25.0
 
 require (
-	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-20260729110633-6566fd75c241.1
-	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-20260729110633-6566fd75c241.1
+	buf.build/gen/go/coscene-io/coscene-openapi/connectrpc/go v1.20.0-00000000000000-5893f38dc692.1
+	buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go v1.36.11-00000000000000-5893f38dc692.1
 	connectrpc.com/connect v1.20.0
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -85,5 +85,3 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251103181224-f26f9409b101 // indirect
 )
-
-replace buf.build/gen/go/coscene-io/coscene-openapi/protocolbuffers/go => github.com/coscene-io/coscene-openapi/go v0.0.0-20261124164213-5c05ad8d0528

@@ -100,8 +100,8 @@ The -f file is the full, authoritative spec, so the spec-content flags
 be combined with -f; use flags to scaffold a spec from scratch, or a file, not
 both. Operational flags (-p/--project, --dry-run, -o/--output) work either way.
 
-For a Ray action, use -f with ray.image, concurrency and jobs[].python.target.
-Each step can specify resources.cpu and resources.memory.
+For a Ray action, use -f with ray.image, ray.concurrency and jobs[].python.target.
+Each step can specify python.resources.cpu and python.resources.memory.
 
 Container action resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
 e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G}) or, in the flags-only
@@ -396,17 +396,15 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 		if strings.TrimSpace(spec.Ray.Image) == "" {
 			msgs = append(msgs, "ray.image is required")
 		}
-		if spec.GetConcurrency() <= 0 {
+		if spec.Ray.GetConcurrency() <= 0 {
 			msgs = append(msgs, "concurrency must be positive for Ray")
 		}
 		if spec.Quota != nil {
-			msgs = append(msgs, "use jobs[].resources for Ray actions")
+			msgs = append(msgs, "use jobs[].python.resources for Ray actions")
 		}
 		if spec.GetStorageOptions().GetSsdOptions().GetUseSsd() {
 			msgs = append(msgs, "SSD storage is unsupported for Ray actions")
 		}
-	} else if spec.Concurrency != nil {
-		msgs = append(msgs, "concurrency requires ray")
 	}
 	if len(spec.Jobs) == 0 {
 		msgs = append(msgs, "jobs cannot be empty")
@@ -427,8 +425,8 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 			}
 			continue
 		}
-		if job.GetPython() != nil || job.Bindings != nil || job.Resources != nil {
-			msgs = append(msgs, fmt.Sprintf("job %q requires ray for python, bindings or resources", job.Name))
+		if job.GetPython() != nil {
+			msgs = append(msgs, fmt.Sprintf("job %q requires ray for python", job.Name))
 		}
 		if job.JobKind == nil {
 			msgs = append(msgs, fmt.Sprintf("job %q must define container or http", job.Name))

@@ -2,17 +2,17 @@ name: checksum
 ray:
   # Supply a worker image that contains the targets below.
   image: registry.example.com/actions/checksum:1.0
-concurrency: 20
+  concurrency: 20
 jobs:
   - name: checksum
     python:
       target: checksums.files.sha256
-    resources:
-      cpu: CPU_QUOTA_1C
-      memory: MEMORY_QUOTA_2G
+      resources:
+        cpu: CPU_QUOTA_1C
+        memory: MEMORY_QUOTA_2G
   - name: report
     depends: [checksum]
     python:
       target: checksums.report.write
-    bindings:
-      hashes: checksum
+      bindings:
+        hashes: checksum
