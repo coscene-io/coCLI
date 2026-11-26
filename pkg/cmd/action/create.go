@@ -461,6 +461,54 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 	if len(msgs) > 0 {
 		return errors.New(strings.Join(msgs, "; "))
 	}
+	if spec.Ray != nil {
+		return validateRayDependencies(spec.Jobs)
+	}
+	return nil
+}
+
+func validateRayDependencies(jobs []*openv1alpha1commons.JobSpec) error {
+	dependencies := make(map[string][]string, len(jobs))
+	for _, job := range jobs {
+		if _, exists := dependencies[job.Name]; exists {
+			return fmt.Errorf("duplicate job name %q", job.Name)
+		}
+		dependencies[job.Name] = job.Depends
+	}
+	for _, job := range jobs {
+		for _, dep := range job.Depends {
+			if _, exists := dependencies[dep]; !exists {
+				return fmt.Errorf("job %q depends on unknown job %q", job.Name, dep)
+			}
+		}
+	}
+	if _, err := sortDagNodes(dependencies); err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		bindings := job.GetPython().GetBindings()
+		if len(bindings) == 0 {
+			continue
+		}
+		ancestors := make(map[string]bool)
+		pending := append([]string(nil), job.Depends...)
+		for len(pending) > 0 {
+			name := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if !ancestors[name] {
+				ancestors[name] = true
+				pending = append(pending, dependencies[name]...)
+			}
+		}
+		for param, source := range bindings {
+			if param == "" || source == "" {
+				return fmt.Errorf("job %q python.bindings requires a nonempty parameter and source", job.Name)
+			}
+			if !ancestors[source] {
+				return fmt.Errorf("job %q python.bindings[%q] refers to %q, which is not an ancestor", job.Name, param, source)
+			}
+		}
+	}
 	return nil
 }
 

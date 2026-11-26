@@ -398,7 +398,11 @@ func resolveLogNodes(ctx context.Context, cli api.JobRunInterface, jobRunName st
 		}
 		return nil, fmt.Errorf("job run node %q not found. Available: %v", requestedNode, nodeNames(nodes))
 	}
-	return sortDagNodes(nodes)
+	dependencies := make(map[string][]string, len(nodes))
+	for name, node := range nodes {
+		dependencies[name] = node.GetDependentNodes()
+	}
+	return sortDagNodes(dependencies)
 }
 
 func nodeNames(nodes map[string]*openv1alpha1resource.JobRunNode) []string {
@@ -410,7 +414,7 @@ func nodeNames(nodes map[string]*openv1alpha1resource.JobRunNode) []string {
 	return names
 }
 
-func sortDagNodes(nodes map[string]*openv1alpha1resource.JobRunNode) ([]string, error) {
+func sortDagNodes(nodes map[string][]string) ([]string, error) {
 	nodeNames := make([]string, 0, len(nodes))
 	indegree := make(map[string]int, len(nodes))
 	dependents := make(map[string][]string, len(nodes))
@@ -422,7 +426,7 @@ func sortDagNodes(nodes map[string]*openv1alpha1resource.JobRunNode) ([]string, 
 	sort.Strings(nodeNames)
 
 	for _, nodeName := range nodeNames {
-		for _, dep := range nodes[nodeName].GetDependentNodes() {
+		for _, dep := range nodes[nodeName] {
 			if _, ok := nodes[dep]; !ok {
 				continue
 			}

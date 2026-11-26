@@ -178,14 +178,7 @@ func NewUpdateCommand(cfgPath *string, io *iostreams.IOStreams, getProvider func
 	return cmd
 }
 
-// loadActionSpecFromFile reads a YAML/JSON action document (or stdin for `-`)
-// and extracts its ActionSpec via a proto-native path: parse to a generic
-// value, re-encode as JSON, then protojson.Unmarshal into an Action with
-// DiscardUnknown so output-only fields a `get -o yaml/json` dump carries (name,
-// author, create/update times) — and any unknown keys — are tolerated rather
-// than rejected. This is the exact format `action get` emits, so the
-// get -> edit -> update loop round-trips (plan D5/F1). Both `action update` and
-// `action create` load their -f spec through this single tolerant loader.
+// loadActionSpecFromFile accepts a bare spec or a full Action exported by action get.
 func loadActionSpecFromFile(path string, stdin io.Reader) (*openv1alpha1commons.ActionSpec, error) {
 	var (
 		data []byte
@@ -219,6 +212,9 @@ func loadActionSpecFromFile(path string, stdin io.Reader) (*openv1alpha1commons.
 	if err != nil {
 		return nil, errors.Wrap(err, "parse action spec")
 	}
+	if err := checkRayJobFieldPlacement(normalized); err != nil {
+		return nil, err
+	}
 
 	jsonBytes, err := json.Marshal(normalized)
 	if err != nil {
@@ -245,6 +241,27 @@ func loadActionSpecFromFile(path string, stdin io.Reader) (*openv1alpha1commons.
 		return nil, errors.New("action spec must not be empty")
 	}
 	return spec, nil
+}
+
+// Check these fields before DiscardUnknown drops them during protobuf decoding.
+func checkRayJobFieldPlacement(document any) error {
+	spec, _ := document.(map[string]any)
+	if wrapped, ok := spec["spec"].(map[string]any); ok {
+		spec = wrapped
+	}
+	if spec["ray"] == nil {
+		return nil
+	}
+	jobs, _ := spec["jobs"].([]any)
+	for i, item := range jobs {
+		job, _ := item.(map[string]any)
+		for _, field := range []string{"resources", "bindings"} {
+			if _, exists := job[field]; exists {
+				return errors.Errorf("jobs[%d].%s is misplaced: use jobs[%d].python.%s", i, field, i, field)
+			}
+		}
+	}
+	return nil
 }
 
 // isEmptyActionSpec reports whether an ActionSpec has no meaningful content —
