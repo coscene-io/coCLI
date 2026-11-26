@@ -736,3 +736,70 @@ func TestCreateCommandParamShorthandAndCommandSplit(t *testing.T) {
 	assert.Contains(t, got, `"x":"default"`)
 	assert.Contains(t, got, `"--verbose"`)
 }
+
+func TestRayActionFile(t *testing.T) {
+	spec, err := loadActionSpecFromFile("../../../examples/ray-action.yaml", nil)
+	require.NoError(t, err)
+	action := &openv1alpha1resource.Action{Spec: spec}
+	require.NoError(t, validateActionForCreate(action))
+	run := newActionRunAction(action, nil)
+	require.Equal(t, int32(20), run.Spec.GetRay().GetConcurrency())
+	require.Equal(t, "checksums.files.sha256", run.Spec.Jobs[0].GetPython().GetTarget())
+	require.Equal(t, "checksum", run.Spec.Jobs[1].GetPython().GetBindings()["hashes"])
+	spec.Ray.Concurrency = 0
+	require.ErrorContains(t, validateActionForCreate(action), "concurrency")
+	spec.Ray = nil
+	require.ErrorContains(t, validateActionForCreate(action), "requires ray")
+}
+
+func TestRayJobFieldPlacement(t *testing.T) {
+	for _, field := range []string{"resources", "bindings"} {
+		bare := fmt.Sprintf(`{"ray":{},"jobs":[{"python":{"target":"steps.process"},"%s":{}}]}`, field)
+		for _, doc := range []string{bare, `{"extraMetadata":true,"spec":` + bare + `}`} {
+			_, err := loadActionSpecFromFile("-", strings.NewReader(doc))
+			require.ErrorContains(t, err, "use jobs[0].python."+field)
+		}
+	}
+	const exported = `{"extraMetadata":true,"spec":{"ray":{},"jobs":[{"python":{"target":"steps.process","bindings":{"input":"prepare"}}}]}}`
+	spec, err := loadActionSpecFromFile("-", strings.NewReader(exported))
+	require.NoError(t, err)
+	require.Equal(t, "prepare", spec.Jobs[0].GetPython().GetBindings()["input"])
+}
+
+func TestRayDependencyValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name, prepareName, prepareDep, reportDep, source, wantErr string
+	}{
+		{name: "indirect ancestor", prepareName: "prepare", reportDep: "middle", source: "prepare"},
+		{name: "dependency cycle", prepareName: "prepare", prepareDep: "report", reportDep: "middle", source: "prepare", wantErr: "dependency cycle"},
+		{name: "missing dependency", prepareName: "prepare", reportDep: "absent", source: "prepare", wantErr: "depends on unknown job"},
+		{name: "missing binding source", prepareName: "prepare", reportDep: "middle", source: "absent", wantErr: "not an ancestor"},
+		{name: "sibling source", prepareName: "prepare", reportDep: "prepare", source: "middle", wantErr: "not an ancestor"},
+		{name: "self binding", prepareName: "prepare", reportDep: "middle", source: "report", wantErr: "not an ancestor"},
+		{name: "duplicate job", prepareName: "middle", reportDep: "middle", source: "middle", wantErr: "duplicate job name"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := fmt.Sprintf(`name: pipeline
+ray: {image: example/worker, concurrency: 1}
+jobs:
+  - name: report
+    depends: [%s]
+    python: {target: steps.report, bindings: {input: %s}}
+  - name: middle
+    depends: [prepare]
+    python: {target: steps.middle}
+  - name: %s
+    depends: [%s]
+    python: {target: steps.prepare}
+`, tc.reportDep, tc.source, tc.prepareName, tc.prepareDep)
+			spec, err := loadActionSpecFromFile("-", strings.NewReader(doc))
+			require.NoError(t, err)
+			err = validateActionForCreate(&openv1alpha1resource.Action{Spec: spec})
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.wantErr)
+			}
+		})
+	}
+}

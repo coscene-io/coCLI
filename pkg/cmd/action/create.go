@@ -64,6 +64,7 @@ output_options:
 `
 
 var (
+	actionPythonTargetRe  = regexp.MustCompile(`^([\pL_][\pL\pN_]*\.)+[\pL_][\pL\pN_]*$`)
 	actionCreateJobNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	actionCreateEnvRe     = regexp.MustCompile(`^[-._a-zA-Z][-._a-zA-Z0-9]*$`)
 	actionCreateParamRe   = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
@@ -99,7 +100,10 @@ The -f file is the full, authoritative spec, so the spec-content flags
 be combined with -f; use flags to scaffold a spec from scratch, or a file, not
 both. Operational flags (-p/--project, --dry-run, -o/--output) work either way.
 
-Resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
+For a Ray action, use -f with ray.image, ray.concurrency and jobs[].python.target.
+Each step can specify python.resources.cpu and python.resources.memory.
+
+Container action resource quota is set in the spec file as proto enums (quota.cpu / quota.memory,
 e.g. quota: {cpu: CPU_QUOTA_1C, memory: MEMORY_QUOTA_2G}) or, in the flags-only
 path, via the --quota small|medium|large|xlarge convenience preset that maps a
 t-shirt size to that enum pair.`,
@@ -388,6 +392,20 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 	if spec.Name == "" {
 		msgs = append(msgs, "name cannot be empty")
 	}
+	if spec.Ray != nil {
+		if strings.TrimSpace(spec.Ray.Image) == "" {
+			msgs = append(msgs, "ray.image is required")
+		}
+		if spec.Ray.GetConcurrency() <= 0 {
+			msgs = append(msgs, "concurrency must be positive for Ray")
+		}
+		if spec.Quota != nil {
+			msgs = append(msgs, "use jobs[].python.resources for Ray actions")
+		}
+		if spec.GetStorageOptions().GetSsdOptions().GetUseSsd() {
+			msgs = append(msgs, "SSD storage is unsupported for Ray actions")
+		}
+	}
 	if len(spec.Jobs) == 0 {
 		msgs = append(msgs, "jobs cannot be empty")
 	}
@@ -400,6 +418,15 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 		}
 		if !actionCreateJobNameRe.MatchString(job.Name) {
 			msgs = append(msgs, fmt.Sprintf("job name %q must match %s", job.Name, actionCreateJobNameRe.String()))
+		}
+		if spec.Ray != nil {
+			if !actionPythonTargetRe.MatchString(job.GetPython().GetTarget()) {
+				msgs = append(msgs, fmt.Sprintf("job %q requires a qualified python.target for Ray", job.Name))
+			}
+			continue
+		}
+		if job.GetPython() != nil {
+			msgs = append(msgs, fmt.Sprintf("job %q requires ray for python", job.Name))
 		}
 		if job.JobKind == nil {
 			msgs = append(msgs, fmt.Sprintf("job %q must define container or http", job.Name))
@@ -433,6 +460,54 @@ func validateActionForCreate(action *openv1alpha1resource.Action) error {
 	}
 	if len(msgs) > 0 {
 		return errors.New(strings.Join(msgs, "; "))
+	}
+	if spec.Ray != nil {
+		return validateRayDependencies(spec.Jobs)
+	}
+	return nil
+}
+
+func validateRayDependencies(jobs []*openv1alpha1commons.JobSpec) error {
+	dependencies := make(map[string][]string, len(jobs))
+	for _, job := range jobs {
+		if _, exists := dependencies[job.Name]; exists {
+			return fmt.Errorf("duplicate job name %q", job.Name)
+		}
+		dependencies[job.Name] = job.Depends
+	}
+	for _, job := range jobs {
+		for _, dep := range job.Depends {
+			if _, exists := dependencies[dep]; !exists {
+				return fmt.Errorf("job %q depends on unknown job %q", job.Name, dep)
+			}
+		}
+	}
+	if _, err := sortDagNodes(dependencies); err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		bindings := job.GetPython().GetBindings()
+		if len(bindings) == 0 {
+			continue
+		}
+		ancestors := make(map[string]bool)
+		pending := append([]string(nil), job.Depends...)
+		for len(pending) > 0 {
+			name := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if !ancestors[name] {
+				ancestors[name] = true
+				pending = append(pending, dependencies[name]...)
+			}
+		}
+		for param, source := range bindings {
+			if param == "" || source == "" {
+				return fmt.Errorf("job %q python.bindings requires a nonempty parameter and source", job.Name)
+			}
+			if !ancestors[source] {
+				return fmt.Errorf("job %q python.bindings[%q] refers to %q, which is not an ancestor", job.Name, param, source)
+			}
+		}
 	}
 	return nil
 }
